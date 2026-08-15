@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Harper Family Hub</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#2C4A63">
+<style>
+:root {
+  --color-background-primary: #ffffff;
+  --color-background-secondary: #f5f4f0;
+  --color-background-tertiary: #eeece6;
+  --color-text-primary: #1a1a18;
+  --color-text-secondary: #5f5e5a;
+  --color-text-tertiary: #888780;
+  --color-border-tertiary: rgba(26,26,24,0.15);
+  --color-border-secondary: rgba(26,26,24,0.3);
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+  /* Harper family palette — companion to the huddle & check-in one-pagers */
+  --navy: #2C4A63;
+  --navy-soft: #E4EBF1;
+  --gold: #B98A2E;
+  --gold-soft: #F6EEDA;
+  --green: #6B8F71;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background-primary: #1e1e1c;
+    --color-background-secondary: #2a2a27;
+    --color-background-tertiary: #171715;
+    --color-text-primary: #f0ede6;
+    --color-text-secondary: #b4b2a9;
+    --color-text-tertiary: #85837b;
+    --color-border-tertiary: rgba(240,237,230,0.15);
+    --color-border-secondary: rgba(240,237,230,0.3);
+    --navy: #7FA3C0;
+    --navy-soft: #2b3a47;
+    --gold: #D2A94E;
+    --gold-soft: #423a24;
+    --green: #8FB596;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  background: var(--color-background-tertiary);
+  color: var(--color-text-primary);
+  line-height: 1.45;
+  padding: 16px 12px calc(84px + env(safe-area-inset-bottom));
+}
+.page {
+  max-width: 780px;
+  margin: 0 auto;
+  background: var(--color-background-primary);
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 22px 20px 26px;
+  min-height: 70vh;
+}
+@media (min-width: 600px) { .page { padding: 28px 32px 32px; } }
+
+/* ---------- header ---------- */
+header { text-align: center; margin-bottom: 16px; }
+.eyebrow {
+  display: inline-block;
+  font-size: 11px; font-weight: 700; letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--navy);
+  background: var(--navy-soft);
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.4px; margin-top: 8px; }
+.subtitle { color: var(--color-text-secondary); font-size: 13px; margin-top: 2px; }
+.header-row { display: flex; justify-content: space-between; align-items: center; }
+.icon-btn {
+  border: 1px solid var(--color-border-tertiary);
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary);
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+}
+.sync-note { text-align: center; font-size: 11px; color: var(--color-text-tertiary); margin-top: 4px; min-height: 14px; }
+
+/* ---------- shared pieces ---------- */
+h2 {
+  font-size: 12px; font-weight: 700; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--gold);
+  display: flex; align-items: center; gap: 10px;
+  margin: 20px 0 10px;
+}
+h2::after { content: ""; flex: 1; height: 1px; background: var(--color-border-tertiary); }
+.card {
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-background-primary);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.card.gold  { background: var(--gold-soft); border-left: 3px solid var(--gold); }
+.card.navy  { background: var(--navy-soft); border-left: 3px solid var(--navy); }
+.muted { color: var(--color-text-secondary); font-size: 13px; }
+.tiny  { color: var(--color-text-tertiary); font-size: 11.5px; }
+.empty { color: var(--color-text-tertiary); font-size: 13px; font-style: italic; padding: 6px 2px; }
+button.primary {
+  font: inherit; font-weight: 700; font-size: 14px;
+  background: var(--navy); color: #fff;
+  border: none; border-radius: var(--border-radius-md);
+  padding: 10px 18px; cursor: pointer;
+}
+@media (prefers-color-scheme: dark) { button.primary { color: #14202b; } }
+button.ghost {
+  font: inherit; font-size: 13px;
+  background: none; border: 1px solid var(--color-border-secondary);
+  color: var(--color-text-secondary);
+  border-radius: var(--border-radius-md);
+  padding: 8px 14px; cursor: pointer;
+}
+input[type=text], input[type=password], input[type=url], select, textarea {
+  font: inherit; font-size: 14px;
+  color: var(--color-text-primary);
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-md);
+  padding: 9px 11px;
+  width: 100%;
+}
+textarea { resize: vertical; min-height: 54px; }
+label.f { display: block; font-size: 12px; font-weight: 700; color: var(--color-text-secondary); margin: 12px 0 4px; }
+
+/* ---------- person chips ---------- */
+.chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  font-size: 10.5px; font-weight: 800; color: #fff;
+  flex: 0 0 22px;
+}
+.chip.Jon     { background: #2C4A63; }
+.chip.Maggie  { background: #B98A2E; }
+.chip.Clayton { background: #6B8F71; }
+.chip.Heidi   { background: #A2678A; }
+.chip.Family  { background: var(--color-text-tertiary); }
+
+/* ---------- events ---------- */
+.ev { display: flex; gap: 10px; align-items: baseline; padding: 7px 2px; border-top: 1px solid var(--color-border-tertiary); }
+.ev:first-child { border-top: none; }
+.ev .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 9px; align-self: center; }
+.ev .time { font-size: 12px; font-weight: 700; color: var(--color-text-secondary); flex: 0 0 72px; }
+.ev .etitle { font-size: 14px; }
+.ev .cal { font-size: 11px; color: var(--color-text-tertiary); margin-left: 6px; }
+.dayhead {
+  font-size: 13px; font-weight: 800; margin: 14px 0 4px;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.dayhead .today-pill {
+  font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--gold); background: var(--gold-soft);
+  padding: 2px 8px; border-radius: 999px;
+}
+
+/* ---------- tasks ---------- */
+.task { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-top: 1px solid var(--color-border-tertiary); }
+.task:first-child { border-top: none; }
+.task input[type=checkbox] { width: 19px; height: 19px; accent-color: var(--navy); flex: 0 0 19px; cursor: pointer; }
+.task .ttl { flex: 1; font-size: 14px; }
+.task.done .ttl { text-decoration: line-through; color: var(--color-text-tertiary); }
+.task .del { background: none; border: none; color: var(--color-text-tertiary); font-size: 16px; cursor: pointer; padding: 2px 6px; }
+.addbar { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 6px; }
+@media (min-width: 600px) { .addbar { grid-template-columns: 1fr 130px 110px auto; } }
+
+/* ---------- meals ---------- */
+.meal { display: flex; gap: 12px; align-items: center; padding: 9px 2px; border-top: 1px solid var(--color-border-tertiary); }
+.meal:first-child { border-top: none; }
+.meal .d { flex: 0 0 44px; font-weight: 800; font-size: 13px; }
+.meal.today .d { color: var(--gold); }
+.meal input { flex: 1; }
+
+/* ---------- check-ins ---------- */
+.q { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--color-border-tertiary); }
+.q:first-child { border-top: none; }
+.q .num {
+  flex: 0 0 24px; height: 24px; width: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--gold-soft); color: var(--gold);
+  border-radius: 50%; font-size: 12px; font-weight: 800; margin-top: 1px;
+}
+.q .body { flex: 1; }
+.q .body p { font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
+.hist { border-top: 1px solid var(--color-border-tertiary); padding: 9px 2px; }
+.hist summary { cursor: pointer; font-size: 13.5px; font-weight: 600; list-style: none; display: flex; gap: 8px; align-items: baseline; }
+.hist summary::before { content: "▸"; color: var(--color-text-tertiary); font-size: 11px; }
+.hist[open] summary::before { content: "▾"; }
+.hist .ans { margin: 8px 0 4px 18px; font-size: 13px; }
+.hist .ans b { display: block; font-size: 11.5px; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 1px; margin-top: 8px; }
+
+/* ---------- bottom nav ---------- */
+nav {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  background: var(--color-background-primary);
+  border-top: 1px solid var(--color-border-tertiary);
+  display: flex; justify-content: center; gap: 2px;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  z-index: 20;
+}
+nav button {
+  background: none; border: none; cursor: pointer;
+  font: inherit; font-size: 10.5px; font-weight: 700;
+  color: var(--color-text-tertiary);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 5px 10px; border-radius: var(--border-radius-md);
+  width: 68px;
+}
+nav button .glyph { font-size: 19px; line-height: 1; }
+nav button.active { color: var(--navy); background: var(--navy-soft); }
+
+/* ---------- setup / settings overlay ---------- */
+.overlay {
+  position: fixed; inset: 0; z-index: 30;
+  background: var(--color-background-tertiary);
+  overflow-y: auto; padding: 24px 12px;
+}
+.overlay .page { min-height: 0; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="page" id="app">
+  <header>
+    <div class="header-row">
+      <span style="width:34px"></span>
+      <span class="eyebrow" id="todayEyebrow">Harper Family Hub</span>
+      <button class="icon-btn" onclick="openSettings()" aria-label="Settings">⚙</button>
+    </div>
+    <h1 id="viewTitle">Today</h1>
+    <div class="sync-note" id="syncNote"></div>
+  </header>
+  <main id="main"></main>
+</div>
+
+<nav id="nav"></nav>
+
+<div class="overlay hidden" id="overlay">
+  <div class="page" id="overlayPage"></div>
+</div>
+
+<script>
+"use strict";
+
+/* ============ state ============ */
+const FAMILY = ["Jon", "Maggie", "Clayton", "Heidi", "Family"];
+const RECURS = ["once", "daily", "weekly", "monthly", "quarterly", "yearly"];
+const RECUR_LABEL = { once: "One-off", daily: "Daily", weekly: "Weekly", monthly: "Monthly", quarterly: "Quarterly", yearly: "Yearly" };
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+const HUDDLE_FIELDS = [
+  ["rose",  "Rose / Thorn / Bud", "Everyone shares a high, a low, and something they're looking forward to"],
+  ["week",  "Week ahead", "Calendar Captain walks the week — practices, events, lunch menu peek"],
+  ["chores","Home team check", "How did chores go? Any trades for this week?"],
+  ["fun",   "Fun pick", "Fun Picker chooses one family thing for the week"],
+  ["grat",  "Gratitude & prayer", "Close with one gratitude each"]
+];
+const COUPLES_QUESTIONS = [
+  "What are you grateful for and appreciate about me this week?",
+  "What brought you joy this week?",
+  "What is something that was hard this week?",
+  "What is one thing I can do for you this week?",
+  "Is there any unconfessed sin, conflict, or hurt that we need to resolve and/or seek forgiveness for?",
+  "What is a dream, craving, or desire that has been on the forefront of your mind?",
+  "How can I pray for you this week?"
+];
+
+let DATA = { tasks: [], meals: {}, events: [], checkins: [] };
+let VIEW = "today";
+let POLL = null;
+
+const cfg = {
+  get api()  { return localStorage.getItem("fd_api") || ""; },
+  get pin()  { return localStorage.getItem("fd_pin") || ""; },
+  get user() { return localStorage.getItem("fd_user") || "Jon"; },
+};
+
+/* ============ networking ============ */
+async function apiGet() {
+  const r = await fetch(cfg.api + "?action=all&pin=" + encodeURIComponent(cfg.pin));
+  return r.json();
+}
+async function apiPost(body) {
+  body.pin = cfg.pin;
+  const r = await fetch(cfg.api, { method: "POST", body: JSON.stringify(body) });
+  return r.json();
+}
+
+async function refresh(quiet) {
+  if (!cfg.api || !cfg.pin) { showSetup(); return; }
+  if (!quiet) note("Syncing…");
+  try {
+    const d = await apiGet();
+    if (!d.ok) { note(d.error === "bad_pin" ? "Wrong PIN — check Settings" : "Sync error"); return; }
+    DATA = { tasks: d.tasks || [], meals: d.meals || {}, events: d.events || [], checkins: d.checkins || [] };
+    localStorage.setItem("fd_cache", JSON.stringify(DATA));
+    note("Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+    render();
+  } catch (e) {
+    note("Offline — showing last saved");
+  }
+}
+
+async function send(body) {
+  note("Saving…");
+  try {
+    const d = await apiPost(body);
+    if (d.ok) {
+      DATA.tasks = d.tasks || DATA.tasks;
+      DATA.meals = d.meals || DATA.meals;
+      DATA.checkins = d.checkins || DATA.checkins;
+      localStorage.setItem("fd_cache", JSON.stringify(DATA));
+      note("Saved ✓");
+    } else { note("Save failed"); }
+  } catch (e) { note("Save failed — offline?"); }
+  render();
+}
+
+function note(t) { document.getElementById("syncNote").textContent = t; }
+
+/* ============ helpers ============ */
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function dayLabel(iso) {
+  const d = new Date(iso + "T12:00:00");
+  return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+}
+function chip(name) {
+  const initial = name === "Family" ? "★" : (name || "?").slice(0, 1);
+  return name ? `<span class="chip ${esc(name)}" title="${esc(name)}">${initial}</span>` : "";
+}
+function eventRow(e) {
+  const time = e.allDay ? "All day" : e.start;
+  return `<div class="ev"><span class="dot" style="background:${esc(e.color)}"></span>
+    <span class="time">${esc(time)}</span>
+    <span class="etitle">${esc(e.title)}<span class="cal">${esc(e.cal)}</span></span></div>`;
+}
+function taskRow(t) {
+  return `<div class="task ${t.completed ? "done" : ""}">
+    <input type="checkbox" ${t.completed ? "checked" : ""} onchange="toggleTask('${esc(t.id)}')">
+    ${chip(t.assignee)}
+    <span class="ttl">${esc(t.title)}${t.completed && t.completedBy ? ` <span class="tiny">by ${esc(t.completedBy)}</span>` : ""}</span>
+    <button class="del" onclick="deleteTask('${esc(t.id)}')" aria-label="Delete">×</button>
+  </div>`;
+}
+
+/* ============ views ============ */
+const VIEWS = {
+  today: { label: "Today", glyph: "☀", title: () => "Today", render: renderToday },
+  calendar: { label: "Calendar", glyph: "▦", title: () => "Calendar", render: renderCalendar },
+  meals: { label: "Dinner", glyph: "◍", title: () => "This Week's Dinners", render: renderMeals },
+  tasks: { label: "Tasks", glyph: "✓", title: () => "Tasks", render: renderTasks },
+  checkins: { label: "Check-In", glyph: "❤", title: () => "Check-Ins", render: renderCheckins },
+};
+
+function render() {
+  const v = VIEWS[VIEW];
+  document.getElementById("viewTitle").textContent = v.title();
+  document.getElementById("todayEyebrow").textContent =
+    new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+  document.getElementById("main").innerHTML = v.render();
+  document.getElementById("nav").innerHTML = Object.keys(VIEWS).map(k =>
+    `<button class="${k === VIEW ? "active" : ""}" onclick="go('${k}')">
+      <span class="glyph">${VIEWS[k].glyph}</span>${VIEWS[k].label}</button>`).join("");
+}
+function go(v) { VIEW = v; render(); window.scrollTo(0, 0); }
+
+/* ----- Today ----- */
+function renderToday() {
+  const t = todayStr();
+  const dayIdx = (new Date().getDay() + 6) % 7;
+  const dinner = (DATA.meals[DAYS[dayIdx]] || {}).meal;
+  const todaysEvents = DATA.events.filter(e => e.date === t);
+  const daily = DATA.tasks.filter(x => x.recurrence === "daily");
+  const oneOff = DATA.tasks.filter(x => x.recurrence === "once" && !x.completed);
+  const onDeck = DATA.tasks.filter(x => ["weekly", "monthly", "quarterly", "yearly"].includes(x.recurrence) && !x.completed);
+
+  let h = `<div class="card gold"><div class="tiny" style="letter-spacing:1.5px;text-transform:uppercase;font-weight:800">Tonight's dinner</div>
+    <div style="font-size:17px;font-weight:800;margin-top:2px">${dinner ? esc(dinner) : "Not planned yet — tap Dinner below"}</div></div>`;
+
+  h += `<h2>Today's schedule</h2>`;
+  h += todaysEvents.length ? `<div class="card">${todaysEvents.map(eventRow).join("")}</div>`
+                           : `<div class="empty">Nothing on the calendar today.</div>`;
+
+  h += `<h2>Daily rhythm</h2>`;
+  h += daily.length ? `<div class="card">${daily.map(taskRow).join("")}</div>`
+                    : `<div class="empty">No daily tasks yet — add some in Tasks.</div>`;
+
+  if (oneOff.length) h += `<h2>To-dos</h2><div class="card">${oneOff.map(taskRow).join("")}</div>`;
+  if (onDeck.length) h += `<h2>On deck this period</h2><div class="card">${onDeck.map(taskRow).join("")}</div>`;
+  return h;
+}
+
+/* ----- Calendar ----- */
+function renderCalendar() {
+  if (!DATA.events.length) return `<div class="empty">No events in the next two weeks (or calendars not set up yet).</div>`;
+  const byDay = {};
+  DATA.events.forEach(e => { (byDay[e.date] = byDay[e.date] || []).push(e); });
+  const t = todayStr();
+  return Object.keys(byDay).sort().map(d =>
+    `<div class="dayhead">${dayLabel(d)}${d === t ? '<span class="today-pill">Today</span>' : ""}</div>
+     <div class="card">${byDay[d].map(eventRow).join("")}</div>`).join("");
+}
+
+/* ----- Meals ----- */
+function renderMeals() {
+  const dayIdx = (new Date().getDay() + 6) % 7;
+  const rows = DAYS.map((d, i) => {
+    const m = DATA.meals[d] || {};
+    return `<div class="meal ${i === dayIdx ? "today" : ""}">
+      <span class="d">${d}</span>
+      <input type="text" id="meal-${d}" value="${esc(m.meal)}" placeholder="Dinner…">
+    </div>`;
+  }).join("");
+  return `<div class="card">${rows}</div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <button class="primary" onclick="saveMeals()">Save week</button>
+      <span class="tiny">Also editable straight from the Google Sheet.</span>
+    </div>`;
+}
+function saveMeals() {
+  const meals = {};
+  DAYS.forEach(d => { meals[d] = { meal: document.getElementById("meal-" + d).value.trim(), note: "" }; });
+  DATA.meals = meals;
+  send({ action: "saveMeals", meals });
+}
+
+/* ----- Tasks ----- */
+function renderTasks() {
+  const options = FAMILY.map(f => `<option>${f}</option>`).join("");
+  const recOpts = RECURS.map(r => `<option value="${r}">${RECUR_LABEL[r]}</option>`).join("");
+  let h = `<div class="addbar">
+    <input type="text" id="newTitle" placeholder="New task…">
+    <select id="newRecur">${recOpts}</select>
+    <select id="newWho">${options}</select>
+    <button class="primary" onclick="addTask()">Add</button>
+  </div>`;
+  RECURS.forEach(r => {
+    const group = DATA.tasks.filter(t => t.recurrence === r);
+    if (!group.length) return;
+    const hint = { once: "", daily: " · resets every day", weekly: " · resets Mondays", monthly: " · resets on the 1st", quarterly: " · resets each quarter", yearly: " · resets Jan 1" }[r];
+    h += `<h2>${RECUR_LABEL[r]}${hint ? `<span style="letter-spacing:0;text-transform:none;font-weight:400;color:var(--color-text-tertiary)">${hint}</span>` : ""}</h2>
+      <div class="card">${group.map(taskRow).join("")}</div>`;
+  });
+  if (!DATA.tasks.length) h += `<div class="empty">No tasks yet. Add the first one above.</div>`;
+  return h;
+}
+function addTask() {
+  const title = document.getElementById("newTitle").value.trim();
+  if (!title) return;
+  const body = { action: "addTask", title, recurrence: document.getElementById("newRecur").value, assignee: document.getElementById("newWho").value };
+  DATA.tasks.push({ id: "tmp", title, recurrence: body.recurrence, assignee: body.assignee, completed: false });
+  send(body);
+}
+function toggleTask(id) {
+  const t = DATA.tasks.find(x => x.id === id);
+  if (t) { t.completed = !t.completed; t.completedBy = t.completed ? cfg.user : null; }
+  send({ action: "toggleTask", id, by: cfg.user });
+}
+function deleteTask(id) {
+  if (!confirm("Delete this task?")) { render(); return; }
+  DATA.tasks = DATA.tasks.filter(x => x.id !== id);
+  send({ action: "deleteTask", id });
+}
+
+/* ----- Check-ins ----- */
+let CHECKIN_OPEN = null; // "huddle" | "couples" | null
+
+function renderCheckins() {
+  if (CHECKIN_OPEN === "huddle") return renderHuddleForm();
+  if (CHECKIN_OPEN === "couples") return renderCouplesForm();
+
+  let h = `<div class="card navy" style="cursor:pointer" onclick="openCheckin('huddle')">
+      <div style="font-weight:800;font-size:16px">Family Huddle</div>
+      <div class="muted">Sundays 6:30 PM · 20 min · everyone — Rose/Thorn/Bud, week ahead, chores, fun pick, gratitude</div>
+    </div>
+    <div class="card gold" style="cursor:pointer" onclick="openCheckin('couples')">
+      <div style="font-weight:800;font-size:16px">Jon &amp; Maggie Check-In</div>
+      <div class="muted">Sundays 8:00 PM · 30 min · the seven questions, then the week's logistics</div>
+    </div>`;
+
+  h += `<h2>Past check-ins</h2>`;
+  if (!DATA.checkins.length) {
+    h += `<div class="empty">History appears here after your first saved check-in.</div>`;
+  } else {
+    h += `<div class="card">` + DATA.checkins.map(c => {
+      const label = c.type === "couples" ? "Jon & Maggie" : "Family Huddle";
+      const parts = Object.entries(c.answers || {}).filter(([, v]) => v).map(([k, v]) => {
+        const name = c.type === "couples"
+          ? "Q" + (parseInt(k.replace("q", ""), 10) + 1) + " — " + COUPLES_QUESTIONS[parseInt(k.replace("q", ""), 10)]
+          : (HUDDLE_FIELDS.find(f => f[0] === k) || [,""])[1];
+        return `<b>${esc(name)}</b>${esc(v)}`;
+      }).join("");
+      const nice = /^\d{4}-\d{2}-\d{2}$/.test(c.date)
+        ? new Date(c.date + "T12:00:00").toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })
+        : c.date;
+      return `<details class="hist"><summary>${esc(nice)} · ${label}</summary>
+        <div class="ans">${parts || '<span class="tiny">Completed — no notes saved.</span>'}</div></details>`;
+    }).join("") + `</div>`;
+  }
+  return h;
+}
+function openCheckin(type) { CHECKIN_OPEN = type; render(); }
+function closeCheckin() { CHECKIN_OPEN = null; render(); }
+
+function renderHuddleForm() {
+  const rows = HUDDLE_FIELDS.map(([key, title, hint], i) =>
+    `<div class="q"><span class="num">${i + 1}</span><div class="body">
+      <p>${title}</p><div class="tiny" style="margin:-4px 0 6px">${hint}</div>
+      <textarea id="hud-${key}" placeholder="Notes (optional)"></textarea></div></div>`).join("");
+  return `<div class="card navy"><b>Family Huddle</b><div class="tiny">Clayton is Calendar Captain · Heidi is Fun Picker · notes are optional — saving marks this week done</div></div>
+    <div class="card">${rows}</div>
+    <div style="display:flex;gap:10px">
+      <button class="primary" onclick="saveCheckin('huddle')">Save huddle</button>
+      <button class="ghost" onclick="closeCheckin()">Cancel</button>
+    </div>`;
+}
+function renderCouplesForm() {
+  const rows = COUPLES_QUESTIONS.map((q, i) =>
+    `<div class="q"><span class="num">${i + 1}</span><div class="body">
+      <p>${q}</p><textarea id="cpl-q${i}" placeholder="Notes (optional)"></textarea></div></div>`).join("");
+  return `<div class="card gold"><b>Jon &amp; Maggie — Weekly Check-In</b><div class="tiny">Part one: the seven questions. Big topics get their own time. Hard stop at 30.</div></div>
+    <div class="card">${rows}</div>
+    <div style="display:flex;gap:10px">
+      <button class="primary" onclick="saveCheckin('couples')">Save check-in</button>
+      <button class="ghost" onclick="closeCheckin()">Cancel</button>
+    </div>`;
+}
+function saveCheckin(type) {
+  const answers = {};
+  if (type === "huddle") HUDDLE_FIELDS.forEach(([k]) => { answers[k] = document.getElementById("hud-" + k).value.trim(); });
+  else COUPLES_QUESTIONS.forEach((_, i) => { answers["q" + i] = document.getElementById("cpl-q" + i).value.trim(); });
+  CHECKIN_OPEN = null;
+  send({ action: "saveCheckin", type, answers });
+}
+
+/* ============ setup & settings ============ */
+function overlayHtml(inner) {
+  document.getElementById("overlayPage").innerHTML = inner;
+  document.getElementById("overlay").classList.remove("hidden");
+}
+function closeOverlay() { document.getElementById("overlay").classList.add("hidden"); }
+
+function showSetup() {
+  overlayHtml(`
+    <header><span class="eyebrow">Harper Family Hub</span><h1>One-time setup</h1>
+      <div class="subtitle">Do this once per device — it's remembered after that.</div></header>
+    <label class="f">Apps Script web app URL</label>
+    <input type="url" id="setApi" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(cfg.api)}">
+    <label class="f">Family PIN</label>
+    <input type="password" id="setPin" inputmode="numeric" value="${esc(cfg.pin)}">
+    <label class="f">This device belongs to</label>
+    <select id="setUser">${FAMILY.slice(0, 4).map(f => `<option ${f === cfg.user ? "selected" : ""}>${f}</option>`).join("")}</select>
+    <div style="margin-top:18px"><button class="primary" onclick="saveSetup()">Connect</button></div>`);
+}
+function saveSetup() {
+  localStorage.setItem("fd_api", document.getElementById("setApi").value.trim());
+  localStorage.setItem("fd_pin", document.getElementById("setPin").value.trim());
+  localStorage.setItem("fd_user", document.getElementById("setUser").value);
+  closeOverlay();
+  refresh();
+}
+function openSettings() {
+  overlayHtml(`
+    <header><span class="eyebrow">Settings</span></header>
+    <label class="f">Apps Script web app URL</label>
+    <input type="url" id="setApi" value="${esc(cfg.api)}">
+    <label class="f">Family PIN</label>
+    <input type="password" id="setPin" value="${esc(cfg.pin)}">
+    <label class="f">This device belongs to</label>
+    <select id="setUser">${FAMILY.slice(0, 4).map(f => `<option ${f === cfg.user ? "selected" : ""}>${f}</option>`).join("")}</select>
+    <div style="margin-top:18px;display:flex;gap:10px">
+      <button class="primary" onclick="saveSetup()">Save</button>
+      <button class="ghost" onclick="closeOverlay()">Cancel</button>
+    </div>
+    <div class="tiny" style="margin-top:14px">Data refreshes every 60 seconds and whenever the app is reopened.</div>`);
+}
+
+/* ============ boot ============ */
+(function boot() {
+  const cached = localStorage.getItem("fd_cache");
+  if (cached) { try { DATA = JSON.parse(cached); } catch (e) {} }
+  render();
+  refresh(true);
+  POLL = setInterval(() => { if (document.visibilityState === "visible") refresh(true); }, 60000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refresh(true);
+  });
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+})();
+</script>
+</body>
+</html>
