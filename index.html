@@ -309,6 +309,7 @@ async function refresh(quiet) {
     DATA = { tasks: d.tasks || [], meals: d.meals || {}, events: d.events || [], checkins: d.checkins || [] };
     localStorage.setItem("fd_cache", JSON.stringify(DATA));
     note("Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+    if (hasUnsavedEdits()) { note("Synced — your unsaved edits are kept"); return; }
     render();
   } catch (e) {
     note("Offline — showing last saved");
@@ -331,6 +332,34 @@ async function send(body) {
 }
 
 function note(t) { document.getElementById("syncNote").textContent = t; }
+
+/* ============ drafts (survive refreshes & app switches) ============ */
+function draftKey() {
+  if (VIEW === "meals") return "fd_draft_meals";
+  if (VIEW === "checkins" && CHECKIN_OPEN) return "fd_draft_" + CHECKIN_OPEN;
+  if (VIEW === "tasks") return "fd_draft_task";
+  return null;
+}
+function saveDraft() {
+  const key = draftKey(); if (!key) return;
+  const d = {};
+  document.querySelectorAll("#main input[type=text], #main textarea, #main select").forEach(el => { if (el.id) d[el.id] = el.value; });
+  if (Object.values(d).some(v => v && v.trim && v.trim())) localStorage.setItem(key, JSON.stringify(d));
+  else localStorage.removeItem(key);
+}
+function restoreDraft() {
+  const key = draftKey(); if (!key) return;
+  let d = {}; try { d = JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) {}
+  Object.entries(d).forEach(([id, v]) => { const el = document.getElementById(id); if (el && v) el.value = v; });
+}
+function clearDraft(key) { localStorage.removeItem(key); }
+function hasUnsavedEdits() {
+  const key = draftKey();
+  if (!key) return false;
+  if (document.activeElement && document.activeElement.closest && document.activeElement.closest("#main") &&
+      /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return true;
+  return !!localStorage.getItem(key);
+}
 
 /* ============ helpers ============ */
 function esc(s) {
@@ -379,6 +408,8 @@ function render() {
   document.getElementById("todayEyebrow").textContent =
     new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
   document.getElementById("main").innerHTML = v.render();
+  restoreDraft();
+  document.getElementById("main").addEventListener("input", saveDraft);
   document.getElementById("nav").innerHTML = Object.keys(VIEWS).map(k =>
     `<button class="${k === VIEW ? "active" : ""}" onclick="go('${k}')">
       <span class="glyph">${VIEWS[k].glyph}</span>${VIEWS[k].label}</button>`).join("");
@@ -432,7 +463,8 @@ function renderMeals() {
       <input type="text" id="meal-${d}" value="${esc(m.meal)}" placeholder="Dinner…">
     </div>`;
   }).join("");
-  return `<div class="card">${rows}</div>
+  const hint = localStorage.getItem("fd_draft_meals") ? `<div class="tiny" style="margin:-4px 0 10px;color:var(--gold)">Unsaved edits restored — tap Save week when ready.</div>` : "";
+  return `${hint}<div class="card">${rows}</div>
     <div style="display:flex;gap:10px;align-items:center">
       <button class="primary" onclick="saveMeals()">Save week</button>
       <span class="tiny">Also editable straight from the Google Sheet.</span>
@@ -442,6 +474,7 @@ function saveMeals() {
   const meals = {};
   DAYS.forEach(d => { meals[d] = { meal: document.getElementById("meal-" + d).value.trim(), note: "" }; });
   DATA.meals = meals;
+  clearDraft("fd_draft_meals");
   send({ action: "saveMeals", meals });
 }
 
@@ -470,6 +503,7 @@ function addTask() {
   if (!title) return;
   const body = { action: "addTask", title, recurrence: document.getElementById("newRecur").value, assignee: document.getElementById("newWho").value };
   DATA.tasks.push({ id: "tmp", title, recurrence: body.recurrence, assignee: body.assignee, completed: false });
+  clearDraft("fd_draft_task");
   send(body);
 }
 function toggleTask(id) {
@@ -521,7 +555,10 @@ function renderCheckins() {
   return h;
 }
 function openCheckin(type) { CHECKIN_OPEN = type; render(); }
-function closeCheckin() { CHECKIN_OPEN = null; render(); }
+function closeCheckin() {
+  if (localStorage.getItem("fd_draft_" + CHECKIN_OPEN) && !confirm("Discard your notes for this check-in?")) return;
+  clearDraft("fd_draft_" + CHECKIN_OPEN); CHECKIN_OPEN = null; render();
+}
 
 function renderHuddleForm() {
   const rows = HUDDLE_FIELDS.map(([key, title, hint], i) =>
@@ -550,6 +587,7 @@ function saveCheckin(type) {
   const answers = {};
   if (type === "huddle") HUDDLE_FIELDS.forEach(([k]) => { answers[k] = document.getElementById("hud-" + k).value.trim(); });
   else COUPLES_QUESTIONS.forEach((_, i) => { answers["q" + i] = document.getElementById("cpl-q" + i).value.trim(); });
+  clearDraft("fd_draft_" + type);
   CHECKIN_OPEN = null;
   send({ action: "saveCheckin", type, answers });
 }
