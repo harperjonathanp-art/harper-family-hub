@@ -9,226 +9,313 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#2C4A63">
+<meta name="theme-color" content="#2f5d46">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Literata:ital,wght@0,400;0,500;1,400&family=Spline+Sans+Mono:wght@400;500&display=swap">
 <style>
+/* ============================================================
+   Harper Family Hub — design tokens
+   Ported from the "scorer's book" design system.
+   Rules that matter: separate with `rule`, not shadow; one
+   `--signal` per screen; one `--shadow-raise` per screen;
+   grotesk to operate, serif to talk, mono to measure.
+   ============================================================ */
 :root {
-  --color-background-primary: #ffffff;
-  --color-background-secondary: #f5f4f0;
-  --color-background-tertiary: #eeece6;
-  --color-text-primary: #1a1a18;
-  --color-text-secondary: #5f5e5a;
-  --color-text-tertiary: #888780;
-  --color-border-tertiary: rgba(26,26,24,0.15);
-  --color-border-secondary: rgba(26,26,24,0.3);
-  --border-radius-md: 8px;
-  --border-radius-lg: 12px;
-  /* Harper family palette — companion to the huddle & check-in one-pagers */
-  --navy: #2C4A63;
-  --navy-soft: #E4EBF1;
-  --gold: #B98A2E;
-  --gold-soft: #F6EEDA;
-  --green: #6B8F71;
+  /* surfaces */
+  --paper: #e7eae0;
+  --paper-sheet: #f5f6f0;
+  --paper-sunk: #dde1d6;
+  /* ink */
+  --ink: #1a231e;
+  --ink-muted: #4a544b;
+  --ink-faint: #5d665e;
+  --rule: rgba(26,35,30,0.15);
+  --rule-strong: rgba(26,35,30,0.35);
+  /* identity */
+  --field: #2f5d46;
+  --field-tint: #d9e4da;
+  --signal: #b0452a;
+  --signal-tint: #f3ddd3;
+  --chalk: #46647b;
+  --chalk-tint: #d7e2ea;
+  --brass: #856224;
+  --brass-tint: #ece0c4;
+  /* state — never accents */
+  --ok: #2f6b43;
+  --warn: #8a6310;
+  --crit: #9c3320;
+  --focus: #b0452a;
+  --on-field: #f5f6f0;
+  /* type */
+  --font-grotesk: "Familjen Grotesk", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-serif: Literata, Georgia, "Times New Roman", serif;
+  --font-mono: "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* scale */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px;
+  --radius-sm: 3px; --radius-md: 6px; --radius-lg: 10px; --radius-pill: 999px;
+  --shadow-raise: 0 1px 2px rgba(26,35,30,0.08), 0 8px 20px rgba(26,35,30,0.08);
+  --shadow-bar: 0 -1px 0 rgba(26,35,30,0.15);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-background-primary: #1e1e1c;
-    --color-background-secondary: #2a2a27;
-    --color-background-tertiary: #171715;
-    --color-text-primary: #f0ede6;
-    --color-text-secondary: #b4b2a9;
-    --color-text-tertiary: #85837b;
-    --color-border-tertiary: rgba(240,237,230,0.15);
-    --color-border-secondary: rgba(240,237,230,0.3);
-    --navy: #7FA3C0;
-    --navy-soft: #2b3a47;
-    --gold: #D2A94E;
-    --gold-soft: #423a24;
-    --green: #8FB596;
+    --paper: #151916;
+    --paper-sheet: #1d231f;
+    --paper-sunk: #0f1311;
+    --ink: #eef0e8;
+    --ink-muted: #a3aca4;
+    --ink-faint: #7b857d;
+    --rule: rgba(238,240,232,0.16);
+    --rule-strong: rgba(238,240,232,0.40);
+    --field: #6fa583;
+    --field-tint: #22332a;
+    --signal: #e0785a;
+    --signal-tint: #3a241c;
+    --chalk: #86aac4;
+    --chalk-tint: #1f2c36;
+    --brass: #d0a552;
+    --brass-tint: #322916;
+    --ok: #77b98c;
+    --warn: #dcae4e;
+    --crit: #ef8a6c;
+    --focus: #e0785a;
+    --on-field: #121a15;
+    --shadow-raise: 0 1px 2px rgba(0,0,0,0.35), 0 8px 20px rgba(0,0,0,0.42);
+    --shadow-bar: 0 -1px 0 rgba(238,240,232,0.16);
   }
 }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { -webkit-text-size-adjust: 100%; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-  background: var(--color-background-tertiary);
-  color: var(--color-text-primary);
+  font-family: var(--font-grotesk);
+  background: var(--paper);
+  color: var(--ink);
   line-height: 1.45;
-  padding: 16px 12px calc(84px + env(safe-area-inset-bottom));
+  padding: var(--space-4) var(--space-4) calc(76px + env(safe-area-inset-bottom));
 }
-.page {
-  max-width: 780px;
-  margin: 0 auto;
-  background: var(--color-background-primary);
-  border: 1px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-lg);
-  padding: 22px 20px 26px;
-  min-height: 70vh;
-}
-@media (min-width: 600px) { .page { padding: 28px 32px 32px; } }
+.page { max-width: 640px; margin: 0 auto; }
+
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
 
 /* ---------- header ---------- */
-header { text-align: center; margin-bottom: 16px; }
+header { margin-bottom: var(--space-5); }
+.header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); }
 .eyebrow {
   display: inline-block;
-  font-size: 11px; font-weight: 700; letter-spacing: 2.5px;
+  font-size: 11px; line-height: 12px; font-weight: 700; letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: var(--navy);
-  background: var(--navy-soft);
-  padding: 4px 12px;
-  border-radius: 999px;
+  color: var(--field); background: var(--field-tint);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
 }
-h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.4px; margin-top: 8px; }
-.subtitle { color: var(--color-text-secondary); font-size: 13px; margin-top: 2px; }
-.header-row { display: flex; justify-content: space-between; align-items: center; }
+h1 { font-size: 34px; line-height: 34px; font-weight: 700; letter-spacing: -0.02em; margin-top: var(--space-3); text-wrap: balance; }
+.subtitle { color: var(--ink-muted); font-size: 12.5px; line-height: 17px; margin-top: var(--space-2); }
 .icon-btn {
-  border: 1px solid var(--color-border-tertiary);
-  background: var(--color-background-secondary);
-  color: var(--color-text-secondary);
-  width: 34px; height: 34px;
-  border-radius: 50%;
-  font-size: 16px;
-  cursor: pointer;
+  border: 1px solid var(--rule-strong); background: none; color: var(--ink-muted);
+  min-width: 44px; min-height: 44px;
+  border-radius: var(--radius-md); font-size: 16px; cursor: pointer;
 }
-.sync-note { text-align: center; font-size: 11px; color: var(--color-text-tertiary); margin-top: 4px; min-height: 14px; }
+.sync-note {
+  font-family: var(--font-mono);
+  font-size: 11px; line-height: 14px; letter-spacing: 0.04em;
+  color: var(--ink-faint); margin-top: var(--space-2); min-height: 14px;
+  font-variant-numeric: tabular-nums;
+}
 
-/* ---------- shared pieces ---------- */
+/* ---------- section heads ---------- */
 h2 {
-  font-size: 12px; font-weight: 700; letter-spacing: 2px;
-  text-transform: uppercase; color: var(--gold);
-  display: flex; align-items: center; gap: 10px;
-  margin: 20px 0 10px;
+  font-size: 11px; line-height: 12px; font-weight: 700; letter-spacing: 0.11em;
+  text-transform: uppercase; color: var(--ink-faint);
+  display: flex; align-items: center; gap: var(--space-3);
+  margin: var(--space-6) 0 var(--space-3);
 }
-h2::after { content: ""; flex: 1; height: 1px; background: var(--color-border-tertiary); }
-.card {
-  border: 1px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-background-primary);
-  padding: 14px 16px;
-  margin-bottom: 10px;
-}
-.card.gold  { background: var(--gold-soft); border-left: 3px solid var(--gold); }
-.card.navy  { background: var(--navy-soft); border-left: 3px solid var(--navy); }
-.muted { color: var(--color-text-secondary); font-size: 13px; }
-.tiny  { color: var(--color-text-tertiary); font-size: 11.5px; }
-.empty { color: var(--color-text-tertiary); font-size: 13px; font-style: italic; padding: 6px 2px; }
-button.primary {
-  font: inherit; font-weight: 700; font-size: 14px;
-  background: var(--navy); color: #fff;
-  border: none; border-radius: var(--border-radius-md);
-  padding: 10px 18px; cursor: pointer;
-}
-@media (prefers-color-scheme: dark) { button.primary { color: #14202b; } }
-button.ghost {
-  font: inherit; font-size: 13px;
-  background: none; border: 1px solid var(--color-border-secondary);
-  color: var(--color-text-secondary);
-  border-radius: var(--border-radius-md);
-  padding: 8px 14px; cursor: pointer;
-}
-input[type=text], input[type=password], input[type=url], select, textarea {
-  font: inherit; font-size: 14px;
-  color: var(--color-text-primary);
-  background: var(--color-background-secondary);
-  border: 1px solid var(--color-border-tertiary);
-  border-radius: var(--border-radius-md);
-  padding: 9px 11px;
-  width: 100%;
-}
-textarea { resize: vertical; min-height: 54px; }
-label.f { display: block; font-size: 12px; font-weight: 700; color: var(--color-text-secondary); margin: 12px 0 4px; }
+h2::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+h2 .hint { letter-spacing: 0; text-transform: none; font-weight: 400; color: var(--ink-faint); }
 
-/* ---------- person chips ---------- */
+/* ---------- ledger blocks: rules, not cards ---------- */
+.block { border-top: 1px solid var(--rule); }
+h2 + .block { border-top: 0; }
+.block > *:last-child { border-bottom-color: var(--rule-strong); }
+
+/* the ONE lifted surface per screen */
+.lineup {
+  background: var(--paper-sheet);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raise);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.lineup h3, .ttl-lg { font-size: 18px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em; margin-top: var(--space-2); display: block; }
+.tappable .muted { display: block; }
+.lineup .muted { margin-top: var(--space-1); }
+.tappable { cursor: pointer; width: 100%; text-align: left; border: 0; font: inherit; color: inherit; display: block; }
+
+.muted { color: var(--ink-muted); font-size: 12.5px; line-height: 17px; }
+.tiny  { color: var(--ink-faint); font-size: 11.5px; line-height: 16px; }
+.empty { color: var(--ink-muted); font-size: 14px; line-height: 20px; padding: var(--space-3) 0; border-bottom: 1px solid var(--rule); }
+.empty.good { color: var(--ok); font-weight: 500; }
+
+/* ---------- markers ---------- */
+.marker {
+  display: inline-block;
+  font-size: 11px; line-height: 12px; font-weight: 700; letter-spacing: 0.11em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.marker.now { background: var(--signal-tint); color: var(--signal); }
+.marker.scheduled { background: var(--chalk-tint); color: var(--chalk); }
+.marker.team { background: var(--field-tint); color: var(--field); }
+.marker.ceremony { background: var(--brass-tint); color: var(--brass); }
+
+/* ---------- buttons ---------- */
+button.primary, button.ghost, button.danger {
+  font-family: var(--font-grotesk); font-size: 14px; line-height: 20px; font-weight: 500;
+  border-radius: var(--radius-md); padding: 11px 18px; min-height: 44px;
+  cursor: pointer; border: 1px solid transparent; background: none;
+}
+button.primary { background: var(--field); color: var(--on-field); }
+button.ghost { border-color: var(--rule-strong); color: var(--ink); }
+button.danger { border-color: var(--crit); color: var(--crit); }
+button[disabled] { opacity: .45; cursor: default; }
+.actions { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-top: var(--space-4); }
+
+/* ---------- form controls ---------- */
+input[type=text], input[type=password], input[type=url], select, textarea {
+  font-family: var(--font-grotesk); font-size: 16px; /* 16px: stops iOS zooming on focus */
+  color: var(--ink);
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  width: 100%;
+  min-height: 44px;
+}
+textarea { resize: vertical; min-height: 64px; font-family: var(--font-serif); font-size: 16px; line-height: 25px; }
+label.f {
+  display: block;
+  font-size: 11px; line-height: 12px; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase;
+  color: var(--ink-muted); margin: var(--space-4) 0 var(--space-2);
+}
+
+/* ---------- the initial dot ---------- */
 .chip {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; border-radius: 50%;
-  font-size: 10.5px; font-weight: 800; color: #fff;
-  flex: 0 0 22px;
+  width: 26px; height: 26px; border-radius: var(--radius-pill);
+  font-size: 12px; font-weight: 600;
+  background: var(--paper-sunk); color: var(--ink-muted);
+  flex: 0 0 26px;
 }
-.chip.Jon     { background: #2C4A63; }
-.chip.Maggie  { background: #B98A2E; }
-.chip.Clayton { background: #6B8F71; }
-.chip.Heidi   { background: #A2678A; }
-.chip.Family  { background: var(--color-text-tertiary); }
+.chip.Family { background: var(--field-tint); color: var(--field); }
 
-/* ---------- events ---------- */
-.ev { display: flex; gap: 10px; align-items: baseline; padding: 7px 2px; border-top: 1px solid var(--color-border-tertiary); }
-.ev:first-child { border-top: none; }
-.ev .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 9px; align-self: center; }
-.ev .time { font-size: 12px; font-weight: 700; color: var(--color-text-secondary); flex: 0 0 72px; }
-.ev .etitle { font-size: 14px; }
-.ev .cal { font-size: 11px; color: var(--color-text-tertiary); margin-left: 6px; }
+/* ---------- ruled rows: events, tasks, meals ---------- */
+.ev, .task, .meal {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--rule);
+  min-height: 44px;
+}
+.ev .dot { width: 8px; height: 8px; border-radius: var(--radius-pill); flex: 0 0 8px; }
+.ev .time {
+  font-family: var(--font-mono); font-size: 13px; line-height: 18px; font-weight: 500;
+  color: var(--ink-muted); flex: 0 0 66px; font-variant-numeric: tabular-nums;
+}
+.ev .etitle { font-size: 16px; line-height: 22px; font-weight: 500; flex: 1; min-width: 0; }
+.ev .cal { display: block; font-size: 12.5px; line-height: 17px; font-weight: 400; color: var(--ink-muted); }
+
 .dayhead {
-  font-size: 13px; font-weight: 800; margin: 14px 0 4px;
-  display: flex; align-items: baseline; gap: 8px;
-}
-.dayhead .today-pill {
-  font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
-  color: var(--gold); background: var(--gold-soft);
-  padding: 2px 8px; border-radius: 999px;
+  font-size: 18px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em;
+  margin: var(--space-6) 0 var(--space-2);
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
 }
 
-/* ---------- tasks ---------- */
-.task { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-top: 1px solid var(--color-border-tertiary); }
-.task:first-child { border-top: none; }
-.task input[type=checkbox] { width: 19px; height: 19px; accent-color: var(--navy); flex: 0 0 19px; cursor: pointer; }
-.task .ttl { flex: 1; font-size: 14px; }
-.task.done .ttl { text-decoration: line-through; color: var(--color-text-tertiary); }
-.task .del { background: none; border: none; color: var(--color-text-tertiary); font-size: 16px; cursor: pointer; padding: 2px 6px; }
-.addbar { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 6px; }
+.task input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--field); flex: 0 0 20px; cursor: pointer; }
+.task .ttl { flex: 1; min-width: 0; font-size: 16px; line-height: 22px; font-weight: 500; }
+.task.done .ttl { text-decoration: line-through; color: var(--ink-faint); }
+.task.done .ttl .tiny { text-decoration: none; }
+.task .del {
+  background: none; border: none; color: var(--ink-faint);
+  font-size: 18px; cursor: pointer; padding: var(--space-2); min-width: 44px; min-height: 44px;
+  border-radius: var(--radius-md);
+}
+.addbar { display: grid; grid-template-columns: 1fr; gap: var(--space-2); margin-bottom: var(--space-5); }
 @media (min-width: 600px) { .addbar { grid-template-columns: 1fr 130px 110px auto; } }
 
-/* ---------- meals ---------- */
-.meal { display: flex; gap: 12px; align-items: center; padding: 9px 2px; border-top: 1px solid var(--color-border-tertiary); }
-.meal:first-child { border-top: none; }
-.meal .d { flex: 0 0 44px; font-weight: 800; font-size: 13px; }
-.meal.today .d { color: var(--gold); }
+.meal .d {
+  flex: 0 0 44px;
+  font-family: var(--font-mono); font-size: 11px; line-height: 14px; font-weight: 500;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-faint);
+}
+.meal.today { background: var(--signal-tint); margin-inline: calc(var(--space-2) * -1); padding-inline: var(--space-2); border-radius: var(--radius-sm); }
+.meal.today .d { color: var(--signal); }
 .meal input { flex: 1; }
 
-/* ---------- check-ins ---------- */
-.q { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--color-border-tertiary); }
-.q:first-child { border-top: none; }
+/* ---------- prompts: the serif marks the shift to talking ---------- */
+.q { display: flex; gap: var(--space-3); padding: var(--space-4) 0; border-bottom: 1px solid var(--rule); }
 .q .num {
-  flex: 0 0 24px; height: 24px; width: 24px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--gold-soft); color: var(--gold);
-  border-radius: 50%; font-size: 12px; font-weight: 800; margin-top: 1px;
+  flex: 0 0 24px;
+  font-family: var(--font-mono); font-size: 13px; line-height: 28px; font-weight: 500;
+  color: var(--ink-faint); font-variant-numeric: tabular-nums;
 }
-.q .body { flex: 1; }
-.q .body p { font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
-.hist { border-top: 1px solid var(--color-border-tertiary); padding: 9px 2px; }
-.hist summary { cursor: pointer; font-size: 13.5px; font-weight: 600; list-style: none; display: flex; gap: 8px; align-items: baseline; }
-.hist summary::before { content: "▸"; color: var(--color-text-tertiary); font-size: 11px; }
-.hist[open] summary::before { content: "▾"; }
-.hist .ans { margin: 8px 0 4px 18px; font-size: 13px; }
-.hist .ans b { display: block; font-size: 11.5px; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 1px; margin-top: 8px; }
+.q .body { flex: 1; min-width: 0; }
+.q .body p {
+  font-family: var(--font-serif); font-size: 19px; line-height: 28px; font-weight: 400;
+  color: var(--ink); margin-bottom: var(--space-2); text-wrap: pretty;
+}
+.q .body .tiny {
+  font-family: var(--font-serif); font-style: italic;
+  font-size: 14px; line-height: 21px; color: var(--ink-muted);
+  margin: calc(var(--space-1) * -1) 0 var(--space-2);
+}
 
-/* ---------- bottom nav ---------- */
+.hist { border-bottom: 1px solid var(--rule); padding: var(--space-3) 0; }
+.hist summary {
+  cursor: pointer; font-size: 14px; line-height: 20px; font-weight: 500;
+  list-style: none; display: flex; gap: var(--space-2); align-items: baseline;
+  min-height: 24px;
+}
+.hist summary::-webkit-details-marker { display: none; }
+.hist summary::before { content: "\25B8"; color: var(--ink-faint); font-size: 11px; }
+.hist[open] summary::before { content: "\25BE"; }
+.hist .ans {
+  font-family: var(--font-serif); font-size: 16px; line-height: 25px;
+  margin: var(--space-2) 0 var(--space-1) var(--space-5);
+}
+.hist .ans b {
+  display: block; font-family: var(--font-grotesk);
+  font-size: 11px; line-height: 12px; font-weight: 700; letter-spacing: 0.11em;
+  color: var(--ink-faint); text-transform: uppercase;
+  margin-top: var(--space-4); margin-bottom: var(--space-1);
+}
+
+/* ---------- bottom nav: the thumb index ---------- */
 nav {
   position: fixed; left: 0; right: 0; bottom: 0;
-  background: var(--color-background-primary);
-  border-top: 1px solid var(--color-border-tertiary);
-  display: flex; justify-content: center; gap: 2px;
-  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  background: var(--paper-sheet);
+  box-shadow: var(--shadow-bar);
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-1);
+  padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom));
   z-index: 20;
 }
 nav button {
   background: none; border: none; cursor: pointer;
-  font: inherit; font-size: 10.5px; font-weight: 700;
-  color: var(--color-text-tertiary);
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 5px 10px; border-radius: var(--border-radius-md);
-  width: 68px;
+  font-family: var(--font-grotesk); font-size: 12.5px; line-height: 17px; font-weight: 500;
+  color: var(--ink-muted);
+  display: flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: var(--space-2) var(--space-1);
+  border-radius: var(--radius-md);
 }
-nav button .glyph { font-size: 19px; line-height: 1; }
-nav button.active { color: var(--navy); background: var(--navy-soft); }
+nav button.active { color: var(--field); background: var(--field-tint); font-weight: 600; }
 
-/* ---------- setup / settings overlay ---------- */
+/* ---------- overlay ---------- */
 .overlay {
   position: fixed; inset: 0; z-index: 30;
-  background: var(--color-background-tertiary);
-  overflow-y: auto; padding: 24px 12px;
+  background: var(--paper);
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-4) calc(var(--space-7) + env(safe-area-inset-bottom));
 }
-.overlay .page { min-height: 0; }
 .hidden { display: none !important; }
 </style>
 </head>
@@ -237,7 +324,6 @@ nav button.active { color: var(--navy); background: var(--navy-soft); }
 <div class="page" id="app">
   <header>
     <div class="header-row">
-      <span style="width:34px"></span>
       <span class="eyebrow" id="todayEyebrow">Harper Family Hub</span>
       <button class="icon-btn" onclick="openSettings()" aria-label="Settings">⚙</button>
     </div>
@@ -375,7 +461,7 @@ function dayLabel(iso) {
   return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 }
 function chip(name) {
-  const initial = name === "Family" ? "★" : (name || "?").slice(0, 1);
+  const initial = (name || "?").slice(0, 1);
   return name ? `<span class="chip ${esc(name)}" title="${esc(name)}">${initial}</span>` : "";
 }
 function eventRow(e) {
@@ -395,11 +481,11 @@ function taskRow(t) {
 
 /* ============ views ============ */
 const VIEWS = {
-  today: { label: "Today", glyph: "☀", title: () => "Today", render: renderToday },
-  calendar: { label: "Calendar", glyph: "▦", title: () => "Calendar", render: renderCalendar },
-  meals: { label: "Dinner", glyph: "◍", title: () => "This Week's Dinners", render: renderMeals },
-  tasks: { label: "Tasks", glyph: "✓", title: () => "Tasks", render: renderTasks },
-  checkins: { label: "Check-In", glyph: "❤", title: () => "Check-Ins", render: renderCheckins },
+  today: { label: "Today", title: () => "Today", render: renderToday },
+  calendar: { label: "Calendar", title: () => "Calendar", render: renderCalendar },
+  meals: { label: "Dinner", title: () => "This Week's Dinners", render: renderMeals },
+  tasks: { label: "Tasks", title: () => "Tasks", render: renderTasks },
+  checkins: { label: "Check-in", title: () => "Check-Ins", render: renderCheckins },
 };
 
 function render() {
@@ -411,8 +497,7 @@ function render() {
   restoreDraft();
   document.getElementById("main").addEventListener("input", saveDraft);
   document.getElementById("nav").innerHTML = Object.keys(VIEWS).map(k =>
-    `<button class="${k === VIEW ? "active" : ""}" onclick="go('${k}')">
-      <span class="glyph">${VIEWS[k].glyph}</span>${VIEWS[k].label}</button>`).join("");
+    `<button class="${k === VIEW ? "active" : ""}" onclick="go('${k}')">${VIEWS[k].label}</button>`).join("");
 }
 function go(v) { VIEW = v; render(); window.scrollTo(0, 0); }
 
@@ -426,31 +511,33 @@ function renderToday() {
   const oneOff = DATA.tasks.filter(x => x.recurrence === "once" && !x.completed);
   const onDeck = DATA.tasks.filter(x => ["weekly", "monthly", "quarterly", "yearly"].includes(x.recurrence) && !x.completed);
 
-  let h = `<div class="card gold"><div class="tiny" style="letter-spacing:1.5px;text-transform:uppercase;font-weight:800">Tonight's dinner</div>
-    <div style="font-size:17px;font-weight:800;margin-top:2px">${dinner ? esc(dinner) : "Not planned yet — tap Dinner below"}</div></div>`;
+  let h = `<div class="lineup"><span class="marker now">Tonight</span>
+    <h3>${dinner ? esc(dinner) : "Dinner isn't planned yet"}</h3>
+    ${dinner ? "" : `<div class="muted">Tap Dinner below to fill in the week.</div>`}</div>`;
 
   h += `<h2>Today's schedule</h2>`;
-  h += todaysEvents.length ? `<div class="card">${todaysEvents.map(eventRow).join("")}</div>`
-                           : `<div class="empty">Nothing on the calendar today.</div>`;
+  h += todaysEvents.length ? `<div class="block">${todaysEvents.map(eventRow).join("")}</div>`
+                           : `<div class="block"><div class="empty">Nothing on the calendar today.</div></div>`;
 
   h += `<h2>Daily rhythm</h2>`;
-  h += daily.length ? `<div class="card">${daily.map(taskRow).join("")}</div>`
-                    : `<div class="empty">No daily tasks yet — add some in Tasks.</div>`;
+  h += daily.length ? `<div class="block">${daily.map(taskRow).join("")}</div>`
+                    : `<div class="block"><div class="empty">No daily tasks yet — add some in Tasks.</div></div>`;
 
-  if (oneOff.length) h += `<h2>To-dos</h2><div class="card">${oneOff.map(taskRow).join("")}</div>`;
-  if (onDeck.length) h += `<h2>On deck this period</h2><div class="card">${onDeck.map(taskRow).join("")}</div>`;
+  if (oneOff.length) h += `<h2>To-dos</h2><div class="block">${oneOff.map(taskRow).join("")}</div>`;
+  else h += `<h2>To-dos</h2><div class="block"><div class="empty good">Nothing outstanding today.</div></div>`;
+  if (onDeck.length) h += `<h2>On deck this period</h2><div class="block">${onDeck.map(taskRow).join("")}</div>`;
   return h;
 }
 
 /* ----- Calendar ----- */
 function renderCalendar() {
-  if (!DATA.events.length) return `<div class="empty">No events in the next two weeks (or calendars not set up yet).</div>`;
+  if (!DATA.events.length) return `<div class="block"><div class="empty">No events in the next two weeks — or the calendars aren't connected yet.</div></div>`;
   const byDay = {};
   DATA.events.forEach(e => { (byDay[e.date] = byDay[e.date] || []).push(e); });
   const t = todayStr();
   return Object.keys(byDay).sort().map(d =>
-    `<div class="dayhead">${dayLabel(d)}${d === t ? '<span class="today-pill">Today</span>' : ""}</div>
-     <div class="card">${byDay[d].map(eventRow).join("")}</div>`).join("");
+    `<div class="dayhead">${dayLabel(d)}${d === t ? '<span class="marker now">Today</span>' : ""}</div>
+     <div class="block">${byDay[d].map(eventRow).join("")}</div>`).join("");
 }
 
 /* ----- Meals ----- */
@@ -463,9 +550,9 @@ function renderMeals() {
       <input type="text" id="meal-${d}" value="${esc(m.meal)}" placeholder="Dinner…">
     </div>`;
   }).join("");
-  const hint = localStorage.getItem("fd_draft_meals") ? `<div class="tiny" style="margin:-4px 0 10px;color:var(--gold)">Unsaved edits restored — tap Save week when ready.</div>` : "";
-  return `${hint}<div class="card">${rows}</div>
-    <div style="display:flex;gap:10px;align-items:center">
+  const hint = localStorage.getItem("fd_draft_meals") ? `<div class="tiny" style="color:var(--warn);margin-bottom:var(--space-3)">Unsaved edits restored — tap Save week when you're ready.</div>` : "";
+  return `${hint}<div class="block">${rows}</div>
+    <div class="actions">
       <button class="primary" onclick="saveMeals()">Save week</button>
       <span class="tiny">Also editable straight from the Google Sheet.</span>
     </div>`;
@@ -492,10 +579,10 @@ function renderTasks() {
     const group = DATA.tasks.filter(t => t.recurrence === r);
     if (!group.length) return;
     const hint = { once: "", daily: " · resets every day", weekly: " · resets Mondays", monthly: " · resets on the 1st", quarterly: " · resets each quarter", yearly: " · resets Jan 1" }[r];
-    h += `<h2>${RECUR_LABEL[r]}${hint ? `<span style="letter-spacing:0;text-transform:none;font-weight:400;color:var(--color-text-tertiary)">${hint}</span>` : ""}</h2>
-      <div class="card">${group.map(taskRow).join("")}</div>`;
+    h += `<h2>${RECUR_LABEL[r]}${hint ? `<span class="hint">${hint}</span>` : ""}</h2>
+      <div class="block">${group.map(taskRow).join("")}</div>`;
   });
-  if (!DATA.tasks.length) h += `<div class="empty">No tasks yet. Add the first one above.</div>`;
+  if (!DATA.tasks.length) h += `<div class="block"><div class="empty">No tasks yet — add the first one above.</div></div>`;
   return h;
 }
 function addTask() {
@@ -524,20 +611,24 @@ function renderCheckins() {
   if (CHECKIN_OPEN === "huddle") return renderHuddleForm();
   if (CHECKIN_OPEN === "couples") return renderCouplesForm();
 
-  let h = `<div class="card navy" style="cursor:pointer" onclick="openCheckin('huddle')">
-      <div style="font-weight:800;font-size:16px">Family Huddle</div>
-      <div class="muted">Sundays 6:30 PM · 20 min · everyone — Rose/Thorn/Bud, week ahead, chores, fun pick, gratitude</div>
-    </div>
-    <div class="card gold" style="cursor:pointer" onclick="openCheckin('couples')">
-      <div style="font-weight:800;font-size:16px">Jon &amp; Maggie Check-In</div>
-      <div class="muted">Sundays 8:00 PM · 30 min · the seven questions, then the week's logistics</div>
+  let h = `<button type="button" class="lineup tappable" onclick="openCheckin('huddle')">
+      <span class="marker team">Everyone</span>
+      <span class="ttl-lg">Family Huddle</span>
+      <span class="muted">Sundays 6:30 PM · 20 min — Rose/Thorn/Bud, the week ahead, chores, the fun pick, gratitude</span>
+    </button>
+    <div class="block" style="border-top:0">
+      <button type="button" class="tappable" style="padding:var(--space-4) 0;border-bottom:1px solid var(--rule)" onclick="openCheckin('couples')">
+        <span class="marker ceremony">Jon &amp; Maggie</span>
+        <span class="ttl-lg">Weekly Check-In</span>
+        <span class="muted">Sundays 8:00 PM · 30 min — the seven questions, then the week's logistics</span>
+      </button>
     </div>`;
 
   h += `<h2>Past check-ins</h2>`;
   if (!DATA.checkins.length) {
-    h += `<div class="empty">History appears here after your first saved check-in.</div>`;
+    h += `<div class="block"><div class="empty">History appears here after your first saved check-in.</div></div>`;
   } else {
-    h += `<div class="card">` + DATA.checkins.map(c => {
+    h += `<div class="block">` + DATA.checkins.map(c => {
       const label = c.type === "couples" ? "Jon & Maggie" : "Family Huddle";
       const parts = Object.entries(c.answers || {}).filter(([, v]) => v).map(([k, v]) => {
         const name = c.type === "couples"
@@ -565,9 +656,11 @@ function renderHuddleForm() {
     `<div class="q"><span class="num">${i + 1}</span><div class="body">
       <p>${title}</p><div class="tiny" style="margin:-4px 0 6px">${hint}</div>
       <textarea id="hud-${key}" placeholder="Notes (optional)"></textarea></div></div>`).join("");
-  return `<div class="card navy"><b>Family Huddle</b><div class="tiny">Clayton is Calendar Captain · Heidi is Fun Picker · notes are optional — saving marks this week done</div></div>
-    <div class="card">${rows}</div>
-    <div style="display:flex;gap:10px">
+  return `<div class="lineup"><span class="marker team">Everyone</span>
+      <h3>Family Huddle</h3>
+      <div class="muted">Clayton is Calendar Captain · Heidi is Fun Picker. Notes are optional — saving marks this week done.</div></div>
+    <div class="block">${rows}</div>
+    <div class="actions">
       <button class="primary" onclick="saveCheckin('huddle')">Save huddle</button>
       <button class="ghost" onclick="closeCheckin()">Cancel</button>
     </div>`;
@@ -576,9 +669,11 @@ function renderCouplesForm() {
   const rows = COUPLES_QUESTIONS.map((q, i) =>
     `<div class="q"><span class="num">${i + 1}</span><div class="body">
       <p>${q}</p><textarea id="cpl-q${i}" placeholder="Notes (optional)"></textarea></div></div>`).join("");
-  return `<div class="card gold"><b>Jon &amp; Maggie — Weekly Check-In</b><div class="tiny">Part one: the seven questions. Big topics get their own time. Hard stop at 30.</div></div>
-    <div class="card">${rows}</div>
-    <div style="display:flex;gap:10px">
+  return `<div class="lineup"><span class="marker ceremony">Jon &amp; Maggie</span>
+      <h3>Weekly Check-In</h3>
+      <div class="muted">Part one: the seven questions. Big topics get their own time. Hard stop at 30.</div></div>
+    <div class="block">${rows}</div>
+    <div class="actions">
       <button class="primary" onclick="saveCheckin('couples')">Save check-in</button>
       <button class="ghost" onclick="closeCheckin()">Cancel</button>
     </div>`;
@@ -609,7 +704,7 @@ function showSetup() {
     <input type="password" id="setPin" inputmode="numeric" value="${esc(cfg.pin)}">
     <label class="f">This device belongs to</label>
     <select id="setUser">${FAMILY.slice(0, 4).map(f => `<option ${f === cfg.user ? "selected" : ""}>${f}</option>`).join("")}</select>
-    <div style="margin-top:18px"><button class="primary" onclick="saveSetup()">Connect</button></div>`);
+    <div class="actions"><button class="primary" onclick="saveSetup()">Connect</button></div>`);
 }
 function saveSetup() {
   localStorage.setItem("fd_api", document.getElementById("setApi").value.trim());
@@ -627,11 +722,11 @@ function openSettings() {
     <input type="password" id="setPin" value="${esc(cfg.pin)}">
     <label class="f">This device belongs to</label>
     <select id="setUser">${FAMILY.slice(0, 4).map(f => `<option ${f === cfg.user ? "selected" : ""}>${f}</option>`).join("")}</select>
-    <div style="margin-top:18px;display:flex;gap:10px">
+    <div class="actions">
       <button class="primary" onclick="saveSetup()">Save</button>
       <button class="ghost" onclick="closeOverlay()">Cancel</button>
     </div>
-    <div class="tiny" style="margin-top:14px">Data refreshes every 60 seconds and whenever the app is reopened.</div>`);
+    <div class="tiny" style="margin-top:var(--space-5)">Data refreshes every 60 seconds and whenever the app is reopened.</div>`);
 }
 
 /* ============ boot ============ */
