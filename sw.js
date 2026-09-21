@@ -1,6 +1,7 @@
 // Minimal service worker: makes the app installable and lets the shell open offline.
-const CACHE = "family-hub-v3";
-const SHELL = ["./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
+const CACHE = "family-hub-v4";
+const SHELL = ["./index.html", "./manifest.json", "./favicon.svg", "./favicon-32.png",
+  "./apple-touch-icon.png", "./icon-192.png", "./icon-512.png", "./icon-512-maskable.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
