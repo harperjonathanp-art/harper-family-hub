@@ -208,7 +208,7 @@ button[disabled] { opacity: .45; cursor: default; }
 .actions { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-top: var(--space-4); }
 
 /* ---------- form controls ---------- */
-input[type=text], input[type=password], input[type=url], select, textarea {
+input[type=text], input[type=password], input[type=url], input[type=time], select, textarea {
   font-family: var(--font-grotesk); font-size: 16px; /* 16px: stops iOS zooming on focus */
   color: var(--ink);
   background: var(--paper-sunk);
@@ -224,6 +224,16 @@ label.f {
   font-size: 11px; line-height: 12px; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase;
   color: var(--ink-muted); margin: var(--space-4) 0 var(--space-2);
 }
+
+/* ---------- notification settings ---------- */
+.nrow { padding: var(--space-3) 0; border-bottom: 1px solid var(--rule); }
+.ncheck { display: flex; gap: var(--space-3); align-items: flex-start; cursor: pointer; min-height: 44px; }
+.ncheck input { width: 20px; height: 20px; accent-color: var(--field); flex: 0 0 20px; margin-top: 1px; cursor: pointer; }
+.ncheck .ttl { font-size: 16px; line-height: 22px; font-weight: 500; }
+.ncheck .tiny { display: block; font-weight: 400; margin-top: 2px; }
+.nwhen { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin: var(--space-2) 0 0 calc(20px + var(--space-3)); }
+.nwhen input, .nwhen select { width: auto; min-width: 120px; }
+.nwhen select { min-width: 88px; }
 
 /* ---------- the initial dot ---------- */
 .chip {
@@ -401,8 +411,8 @@ const cfg = {
 };
 
 /* ============ networking ============ */
-async function apiGet() {
-  const r = await fetch(cfg.api + "?action=all&pin=" + encodeURIComponent(cfg.pin));
+async function apiGet(action) {
+  const r = await fetch(cfg.api + "?action=" + (action || "all") + "&pin=" + encodeURIComponent(cfg.pin));
   return r.json();
 }
 async function apiPost(body) {
@@ -587,7 +597,7 @@ function saveMeals() {
   DAYS.forEach(d => { meals[d] = { meal: document.getElementById("meal-" + d).value.trim(), note: "" }; });
   DATA.meals = meals;
   clearDraft("fd_draft_meals");
-  send({ action: "saveMeals", meals });
+  send({ action: "saveMeals", meals, by: cfg.user });
 }
 
 /* ----- Tasks ----- */
@@ -613,7 +623,7 @@ function renderTasks() {
 function addTask() {
   const title = document.getElementById("newTitle").value.trim();
   if (!title) return;
-  const body = { action: "addTask", title, recurrence: document.getElementById("newRecur").value, assignee: document.getElementById("newWho").value };
+  const body = { action: "addTask", title, recurrence: document.getElementById("newRecur").value, assignee: document.getElementById("newWho").value, by: cfg.user };
   DATA.tasks.push({ id: "tmp", title, recurrence: body.recurrence, assignee: body.assignee, completed: false });
   clearDraft("fd_draft_task");
   send(body);
@@ -735,6 +745,7 @@ function saveSetup() {
   localStorage.setItem("fd_user", document.getElementById("setUser").value);
   closeOverlay();
   refresh();
+  syncPush();
 }
 function openSettings() {
   overlayHtml(`
@@ -749,20 +760,210 @@ function openSettings() {
       <button class="primary" onclick="saveSetup()">Save</button>
       <button class="ghost" onclick="closeOverlay()">Cancel</button>
     </div>
-    <div class="tiny" style="margin-top:var(--space-5)">Data refreshes every 60 seconds and whenever the app is reopened.</div>`);
+    <div class="tiny" style="margin-top:var(--space-5)">Data refreshes every 60 seconds and whenever the app is reopened.</div>
+    <h2>Notifications<span class="hint">for ${esc(cfg.user)}</span></h2>
+    <div id="notifyBox"><div class="empty">Loading…</div></div>`);
+  loadNotify();
+}
+
+/* ============ notifications ============ */
+let NOTIFY = null; // { publicKey, ready, lastTick, parents, prefs, devices } from the server
+const NOTIFY_ROWS = [
+  ["summary", "Morning summary", "Your to-dos, the kids', today's calendar and dinner", "time"],
+  ["dinner", "Dinner nudge", "Only if tonight's dinner isn't planned", "time"],
+  ["huddle", "Family Huddle reminder", "Skipped once this week's huddle is saved", "day"],
+  ["couples", "Weekly Check-In reminder", "Skipped once this week's check-in is saved", "day"],
+  ["assigned", "New to-dos", "When someone adds one for you or the family", ""],
+  ["meals", "Meal plan ready", "Once every day has a dinner and the plan has sat unchanged for 10 minutes", ""],
+];
+
+async function loadNotify() {
+  const box = document.getElementById("notifyBox");
+  try {
+    const d = await apiGet("notify");
+    if (!d.ok) throw new Error(d.error);
+    NOTIFY = d;
+  } catch (e) {
+    box.innerHTML = `<div class="empty">Couldn't load notification settings — check the connection above.</div>`;
+    return;
+  }
+  if (!NOTIFY.prefs) {
+    box.innerHTML = `<div class="empty">The Apps Script backend needs updating before notifications can be turned on.</div>`;
+    return;
+  }
+  const p = NOTIFY.prefs[cfg.user];
+  const time = (k, f, label) => `<input type="time" id="n-${k}-${f}" value="${esc(p[k][f])}" aria-label="${esc(label)}">`;
+  const rows = NOTIFY_ROWS.filter(([k]) => k !== "couples" || NOTIFY.parents.includes(cfg.user)).map(([k, label, hint, when]) => {
+    const day = when === "day" ? `<select id="n-${k}-day" aria-label="${esc(label)} day">${DAYS.map(d =>
+      `<option ${d === p[k].day ? "selected" : ""}>${d}</option>`).join("")}</select>` : "";
+    return `<div class="nrow">
+      <label class="ncheck"><input type="checkbox" id="n-${k}-on" ${p[k].on ? "checked" : ""}>
+        <span class="ttl">${label}<span class="tiny">${hint}</span></span></label>
+      ${when ? `<div class="nwhen">${day}${time(k, "at", label + " time")}</div>` : ""}
+    </div>`;
+  }).join("");
+  box.innerHTML = `<div class="sheet" id="pushState"><div class="muted">Checking this device…</div></div>
+    <div class="block">${rows}
+      <div class="nrow">
+        <label class="ncheck"><input type="checkbox" id="n-quiet-on" ${p.quiet.on ? "checked" : ""}>
+          <span class="ttl">Quiet hours<span class="tiny">New to-do and meal-plan alerts wait until quiet hours end. Reminders still come at the times you set above.</span></span></label>
+        <div class="nwhen">${time("quiet", "from", "Quiet hours start")}<span class="muted">to</span>${time("quiet", "to", "Quiet hours end")}</div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="saveNotifyPrefs()">Save notification settings</button>
+      <span class="tiny" id="prefsMsg" role="status"></span>
+    </div>`;
+  renderPushState();
+}
+
+async function pushStatus() {
+  if (!NOTIFY.ready) return "server";
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "unsupported";
+  if (Notification.permission === "denied") return "blocked";
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  return sub && Notification.permission === "granted" ? "on" : "off";
+}
+
+async function renderPushState(msg) {
+  const el = document.getElementById("pushState");
+  if (!el) return;
+  const state = await pushStatus();
+  const text = {
+    server: "Notifications aren't connected on the server yet. Finish the setup in the repo's apps-script/README.md.",
+    unsupported: "Notifications need the Home Screen app. Open Family Hub from its Home Screen icon (iPhone: iOS 16.4 or later) and come back here.",
+    blocked: "Notifications are blocked for Family Hub. Turn them on in the iPhone's Settings → Notifications → Family Hub, then come back here.",
+    off: "Off on this device.",
+    on: "On for this device.",
+  }[state];
+  const buttons = {
+    off: `<button class="primary" onclick="enablePush()">Turn on notifications</button>`,
+    on: `<button class="ghost" onclick="sendTestPush()">Send a test</button>
+         <button class="ghost" onclick="disablePush()">Turn off here</button>`,
+  }[state] || "";
+  const stale = state === "on" && (!NOTIFY.lastTick || Date.now() - NOTIFY.lastTick > 30 * 60000)
+    ? `<div class="tiny" style="color:var(--warn);margin-top:var(--space-2)">Scheduled reminders aren't running yet — run setupNotifications in the Apps Script editor.</div>` : "";
+  el.innerHTML = `<span class="marker ${state === "on" ? "team" : "scheduled"}">${state === "on" ? "On" : "Off"}</span>
+    <div class="muted">${text}</div>${stale}
+    ${buttons ? `<div class="actions">${buttons}</div>` : ""}
+    <div class="tiny" id="pushMsg" role="status" style="margin-top:var(--space-2)">${esc(msg || "")}</div>`;
+}
+
+function say(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
+
+function b64uBytes(s) {
+  const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4));
+  return Uint8Array.from(bin, c => c.charCodeAt(0));
+}
+
+async function enablePush() {
+  try {
+    // Must be the first await: iOS only asks from a direct tap.
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") { renderPushState(); return; }
+    say("pushMsg", "Turning on…");
+    const reg = await navigator.serviceWorker.ready;
+    const key = b64uBytes(NOTIFY.publicKey);
+    let sub = await reg.pushManager.getSubscription();
+    const oldKey = sub && sub.options && sub.options.applicationServerKey;
+    if (sub && oldKey && new Uint8Array(oldKey).join() !== key.join()) { await sub.unsubscribe(); sub = null; }
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+    const d = await apiPost({ action: "pushSubscribe", person: cfg.user, subscription: sub.toJSON() });
+    if (!d.ok) throw new Error(d.error);
+    localStorage.setItem("fd_push_sync", cfg.user + "|" + todayStr());
+    renderPushState("Turned on ✓ — try Send a test.");
+  } catch (e) {
+    say("pushMsg", "Couldn't turn on notifications (" + e.message + ").");
+  }
+}
+
+async function sendTestPush() {
+  say("pushMsg", "Sending…");
+  try {
+    const d = await apiPost({ action: "pushTest", person: cfg.user });
+    const s = d.sent || {};
+    say("pushMsg", s.delivered ? `Sent to ${s.delivered} device${s.delivered > 1 ? "s" : ""} ✓`
+      : "Didn't send — " + (s.error || "no devices signed up"));
+  } catch (e) { say("pushMsg", "Couldn't send — offline?"); }
+}
+
+async function disablePush() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await apiPost({ action: "pushUnsubscribe", endpoint: sub.endpoint }).catch(() => {});
+      await sub.unsubscribe();
+    }
+    localStorage.removeItem("fd_push_sync");
+    renderPushState("Turned off for this device.");
+  } catch (e) { say("pushMsg", "Couldn't turn off (" + e.message + ")."); }
+}
+
+async function saveNotifyPrefs() {
+  const p = JSON.parse(JSON.stringify(NOTIFY.prefs[cfg.user]));
+  Object.keys(p).forEach(k => {
+    const on = document.getElementById(`n-${k}-on`);
+    if (on) p[k].on = on.checked;
+    ["at", "day", "from", "to"].forEach(f => {
+      const el = document.getElementById(`n-${k}-${f}`);
+      if (el && el.value) p[k][f] = el.value.slice(0, 5);
+    });
+  });
+  say("prefsMsg", "Saving…");
+  try {
+    const d = await apiPost({ action: "savePrefs", person: cfg.user, prefs: p });
+    if (!d.ok) throw new Error(d.error);
+    NOTIFY.prefs[cfg.user] = d.prefs;
+    say("prefsMsg", "Saved ✓");
+  } catch (e) { say("prefsMsg", "Couldn't save — " + (e.message || "offline?")); }
+}
+
+/* Re-register this device once a day (and when its person changes), so the
+   server's list stays current even if a subscription rotates. */
+async function syncPush() {
+  try {
+    if (!cfg.api || !cfg.pin || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (Notification.permission !== "granted") return;
+    const key = cfg.user + "|" + todayStr();
+    if (localStorage.getItem("fd_push_sync") === key) return;
+    const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+    if (!sub) return;
+    const d = await apiPost({ action: "pushSubscribe", person: cfg.user, subscription: sub.toJSON() });
+    if (d.ok) localStorage.setItem("fd_push_sync", key);
+  } catch (e) {}
+}
+
+/* A tapped notification opens the screen it's about. */
+function openFromNotification(d) {
+  if (!d || !VIEWS[d.view]) return;
+  closeOverlay();
+  if (d.checkin === "huddle" || d.checkin === "couples") CHECKIN_OPEN = d.checkin;
+  go(d.view);
 }
 
 /* ============ boot ============ */
 (function boot() {
   const cached = localStorage.getItem("fd_cache");
   if (cached) { try { DATA = JSON.parse(cached); } catch (e) {} }
+  const [view, checkin] = location.hash.slice(1).split("/"); // from a tapped notification
+  if (VIEWS[view]) {
+    VIEW = view;
+    if (checkin === "huddle" || checkin === "couples") CHECKIN_OPEN = checkin;
+    history.replaceState(null, "", location.pathname);
+  }
   render();
   refresh(true);
   POLL = setInterval(() => { if (document.visibilityState === "visible") refresh(true); }, 60000);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") refresh(true);
   });
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+    navigator.serviceWorker.addEventListener("message", e => openFromNotification(e.data));
+  }
+  syncPush();
 })();
 </script>
 </body>

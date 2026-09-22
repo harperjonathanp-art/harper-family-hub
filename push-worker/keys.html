@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Push Keys</title>
+<style>
+:root {
+  --paper: #e7eae0; --paper-sunk: #dde1d6; --ink: #1a231e; --ink-muted: #4a544b;
+  --rule: rgba(26,35,30,0.15); --field: #2f5d46; --on-field: #f5f6f0; --warn: #8a6310;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #151916; --paper-sunk: #0f1311; --ink: #eef0e8; --ink-muted: #a3aca4;
+    --rule: rgba(238,240,232,0.16); --field: #6fa583; --on-field: #121a15; --warn: #dcae4e;
+  }
+}
+* { box-sizing: border-box; margin: 0; }
+body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; background: var(--paper); color: var(--ink);
+  line-height: 1.45; padding: 24px 16px 48px; }
+main { max-width: 640px; margin: 0 auto; }
+h1 { font-size: 26px; line-height: 30px; margin-bottom: 8px; }
+p { color: var(--ink-muted); font-size: 14px; margin-bottom: 12px; }
+.warn { color: var(--warn); }
+.key { border-top: 1px solid var(--rule); padding: 14px 0; }
+.key b { display: block; font-size: 12px; letter-spacing: 0.08em; }
+.key .where { font-size: 13px; color: var(--ink-muted); margin: 2px 0 8px; }
+.row { display: flex; gap: 8px; }
+code { flex: 1; min-width: 0; font: 13px/1.4 ui-monospace, Menlo, monospace; background: var(--paper-sunk);
+  padding: 10px; border-radius: 3px; overflow-wrap: anywhere; }
+button { font: inherit; font-size: 14px; border: 0; border-radius: 6px; padding: 10px 14px; min-height: 44px;
+  background: var(--field); color: var(--on-field); cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Family Hub push keys</h1>
+  <p>These are made in this browser and never leave it. Copy each one to where it says, then close this page.
+    Reloading makes a new set, which is fine until you've pasted them in.</p>
+  <p class="warn">Changing the keys later means turning notifications off and on again on each phone.</p>
+  <div id="keys"><p>Making keys…</p></div>
+</main>
+<script>
+function b64u(bytes) {
+  let s = "";
+  new Uint8Array(bytes).forEach(b => { s += String.fromCharCode(b); });
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+(async () => {
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  const pub = b64u(await crypto.subtle.exportKey("raw", pair.publicKey));
+  const priv = (await crypto.subtle.exportKey("jwk", pair.privateKey)).d;
+  const secret = b64u(crypto.getRandomValues(new Uint8Array(32)));
+  const keys = [
+    ["VAPID_PUBLIC_KEY", pub, "Cloudflare Worker (as text) and Apps Script Script Properties"],
+    ["VAPID_PRIVATE_KEY", priv, "Cloudflare Worker only (as a secret)"],
+    ["PUSH_SECRET", secret, "Cloudflare Worker (as a secret) and Apps Script Script Properties"],
+  ];
+  document.getElementById("keys").innerHTML = keys.map(([name, value, where], i) =>
+    `<div class="key"><b>${name}</b><div class="where">${where}</div>
+      <div class="row"><code id="k${i}">${value}</code><button onclick="copyKey(${i}, this)">Copy</button></div></div>`).join("");
+})().catch(err => {
+  document.getElementById("keys").innerHTML = `<p class="warn">This browser couldn't make keys (${err.message}). Try Safari or Chrome.</p>`;
+});
+function copyKey(i, btn) {
+  navigator.clipboard.writeText(document.getElementById("k" + i).textContent).then(() => {
+    btn.textContent = "Copied";
+    setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+  });
+}
+</script>
+</body>
+</html>
