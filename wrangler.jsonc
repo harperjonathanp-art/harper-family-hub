@@ -1,0 +1,10 @@
+// Cloudflare Workers Builds deploys the push relay from this repo on every
+// push to main. Only push-worker/worker.js is deployed; the rest of the
+// repo is the GitHub Pages site. See push-worker/README.md.
+{
+  "name": "harper-family-hub",
+  "main": "push-worker/worker.js",
+  "compatibility_date": "2025-06-01",
+  // Keep the text variables set in the Cloudflare dashboard (secrets are always kept).
+  "keep_vars": true
+}
