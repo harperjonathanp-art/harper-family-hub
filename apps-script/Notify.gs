@@ -236,7 +236,7 @@ function mealsReady_(ctx, data) {
   const who = editors.length === 1 ? editors[0] : '';
   return route_(ctx, ctx.people.filter(function (p) { return editors.indexOf(p) < 0; }), 'meals', {
     title: who ? who + ' planned the week\'s dinners' : 'The week\'s dinners are planned',
-    body: DAYS.map(function (d, i) { return d + '  ' + clip_(dinners[i], 40); }).join('\n'),
+    body: DAYS.map(function (d, i) { return d + '  ' + clip_(mealName_(dinners[i]), 40); }).join('\n'),
     tag: 'meals', view: 'meals',
   });
 }
@@ -255,7 +255,7 @@ function summaryMsg_(person, data, clock) {
   const dinner = (data.meals[clock.day] || {}).meal;
 
   const lines = [
-    'Dinner: ' + (dinner ? clip_(dinner, 40) : 'not planned yet'),
+    'Dinner: ' + (dinner ? clip_(mealName_(dinner), 40) : 'not planned yet'),
     'Calendar: ' + (events.length
       ? list_(events.map(function (e) { return (e.allDay ? '' : e.start + ' ') + e.title; }))
       : 'nothing today'),
@@ -481,6 +481,13 @@ function lazyData_() {
     get events() { return load('events', getEvents_); },
     get checkins() { return load('checkins', function () { return getCheckins_(10); }); },
   };
+}
+
+/** A dinner as it reads in a notification: recipe links dropped. */
+function mealName_(text) {
+  const name = String(text || '').replace(/https?:\/\/\S+/g, ' ').replace(/\s+/g, ' ')
+    .replace(/^[\s\-–—:|,]+|[\s\-–—:|,(]+$/g, '');
+  return name || (text ? 'recipe link' : '');
 }
 
 function mealPlan_(meals) {

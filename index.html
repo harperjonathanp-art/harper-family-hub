@@ -285,7 +285,17 @@ label.f {
 }
 .meal.today { background: var(--signal-tint); margin-inline: calc(var(--space-2) * -1); padding-inline: var(--space-2); border-radius: var(--radius-sm); }
 .meal.today .d { color: var(--signal); }
-.meal input { flex: 1; }
+.meal { align-items: flex-start; }
+.meal .d { margin-top: 15px; } /* centred on the 44px field, even with a recipe link below it */
+.meal .mealbody { flex: 1; min-width: 0; }
+.recipe {
+  display: inline-flex; align-items: center; min-height: 32px; max-width: 100%;
+  font-size: 12.5px; line-height: 17px; font-weight: 500; color: var(--field);
+  text-decoration: underline; text-underline-offset: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.recipes { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.lineup .recipes { margin-top: var(--space-1); }
 
 /* ---------- prompts: the serif marks the shift to talking ---------- */
 .q { display: flex; gap: var(--space-3); padding: var(--space-4) 0; border-bottom: 1px solid var(--rule); }
@@ -495,6 +505,27 @@ function dayLabel(iso) {
   const d = new Date(iso + "T12:00:00");
   return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 }
+/* Recipe links typed into a dinner: show the dinner's name, and each link
+   as a short tappable site name instead of the whole address. */
+const URL_RE = /https?:\/\/[^\s<>"']+/g;
+function mealParts(text) {
+  const links = (String(text || "").match(URL_RE) || []).map(u => u.replace(/[).,;!?]+$/, ""));
+  const name = String(text || "").replace(URL_RE, " ").replace(/\s+/g, " ").replace(/^[\s\-–—:|,]+|[\s\-–—:|,(]+$/g, "");
+  return { name, links };
+}
+function recipeLinks(links) {
+  if (!links.length) return "";
+  return `<div class="recipes">${links.map(u => {
+    let site = u;
+    try { site = new URL(u).hostname.replace(/^www\./, ""); } catch (e) {}
+    return `<a class="recipe" href="${esc(u)}" target="_blank" rel="noopener">${esc(site)} ↗</a>`;
+  }).join("")}</div>`;
+}
+function mealLinks(input) {
+  const box = document.getElementById(input.id + "-links");
+  if (box) box.innerHTML = recipeLinks(mealParts(input.value).links);
+}
+
 function chip(name) {
   const initial = (name || "?").slice(0, 1);
   return name ? `<span class="chip ${esc(name)}" title="${esc(name)}">${initial}</span>` : "";
@@ -530,6 +561,7 @@ function render() {
     new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
   document.getElementById("main").innerHTML = v.render();
   restoreDraft();
+  document.querySelectorAll("#main .meal input").forEach(mealLinks);
   document.getElementById("main").addEventListener("input", saveDraft);
   document.getElementById("nav").innerHTML = Object.keys(VIEWS).map(k =>
     `<button class="${k === VIEW ? "active" : ""}" onclick="go('${k}')">${VIEWS[k].label}</button>`).join("");
@@ -546,8 +578,9 @@ function renderToday() {
   const oneOff = DATA.tasks.filter(x => x.recurrence === "once" && !x.completed);
   const onDeck = DATA.tasks.filter(x => ["weekly", "monthly", "quarterly", "yearly"].includes(x.recurrence) && !x.completed);
 
+  const tonight = mealParts(dinner);
   let h = `<div class="lineup"><span class="marker now">Tonight</span>
-    <h3>${dinner ? esc(dinner) : "Dinner isn't planned yet"}</h3>
+    <h3>${dinner ? esc(tonight.name || "Tonight's recipe") : "Dinner isn't planned yet"}</h3>${recipeLinks(tonight.links)}
     ${dinner ? "" : `<div class="muted">Tap Dinner below to fill in the week.</div>`}</div>`;
 
   h += `<h2>Today's schedule</h2>`;
@@ -582,7 +615,10 @@ function renderMeals() {
     const m = DATA.meals[d] || {};
     return `<div class="meal ${i === dayIdx ? "today" : ""}">
       <span class="d">${d}</span>
-      <input type="text" id="meal-${d}" value="${esc(m.meal)}" placeholder="Dinner…">
+      <div class="mealbody">
+        <input type="text" id="meal-${d}" value="${esc(m.meal)}" placeholder="Dinner, or paste a recipe link…" oninput="mealLinks(this)">
+        <div id="meal-${d}-links"></div>
+      </div>
     </div>`;
   }).join("");
   const hint = localStorage.getItem("fd_draft_meals") ? `<div class="tiny" style="color:var(--warn);margin-bottom:var(--space-3)">Unsaved edits restored — tap Save week when you're ready.</div>` : "";
