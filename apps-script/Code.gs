@@ -10,6 +10,7 @@
  *  1. Project Settings > Script Properties > add FAMILY_PIN, SHEET_ID and
  *     the CAL_* calendar IDs (calendars must be shared with this account).
  *  2. Deploy > New deployment > Web app > Execute as: Me > Access: Anyone.
+ *  3. Notifications live in Notify.gs, with their own setup steps.
  */
 
 // ======================= CONFIG =======================
@@ -42,6 +43,8 @@ const TABS = {
   Completions: ['taskId', 'periodKey', 'completedBy', 'timestamp'],
   Meals:       ['day', 'meal', 'note'],
   CheckIns:    ['id', 'date', 'type', 'answersJson'],
+  Devices:     ['endpoint', 'person', 'subscription', 'addedAt'],
+  NotifyPrefs: ['person', 'prefs', 'updatedAt'],
 };
 
 // ---------- entry points ----------
@@ -49,6 +52,7 @@ const TABS = {
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (!pinOk_(p.pin)) return json_({ ok: false, error: 'bad_pin' });
+  if (p.action === 'notify') return json_(notifyInfo_());
   return json_({
     ok: true,
     now: new Date().toISOString(),
@@ -68,19 +72,27 @@ function doPost(e) {
 
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
+  let outbox = [];  // notifications to send once the lock is released
+  let reply = null; // notification settings actions answer with their own payload
   try {
     switch (body.action) {
-      case 'addTask':      addTask_(body); break;
+      case 'addTask':      outbox = taskAdded_(addTask_(body), body.by); break;
       case 'deleteTask':   deleteTask_(body.id); break;
       case 'toggleTask':   toggleTask_(body.id, body.by); break;
-      case 'saveMeals':    saveMeals_(body.meals); break;
+      case 'saveMeals':    saveMeals_(body.meals); mealsEdited_(body.meals, body.by); break;
       case 'saveCheckin':  saveCheckin_(body.type, body.answers); break;
       case 'deleteCheckin': deleteCheckin_(body.id); break;
+      case 'pushSubscribe':   reply = pushSubscribe_(body.person, body.subscription); break;
+      case 'pushUnsubscribe': reply = pushUnsubscribe_(body.endpoint); break;
+      case 'savePrefs':       reply = savePrefs_(body.person, body.prefs); break;
+      case 'pushTest':        outbox = [testMessage_(body.person)]; reply = { ok: true }; break;
       default: return json_({ ok: false, error: 'unknown_action' });
     }
   } finally {
     lock.releaseLock();
   }
+  const sent = deliver_(outbox);
+  if (reply) return json_(Object.assign(reply, { sent: sent }));
   // Return fresh state so the client can re-render in one round trip.
   return json_({
     ok: true,
@@ -93,7 +105,8 @@ function doPost(e) {
 // ---------- auth & plumbing ----------
 
 function prop_(key) {
-  return PropertiesService.getScriptProperties().getProperty(key);
+  const v = PropertiesService.getScriptProperties().getProperty(key);
+  return v == null ? null : v.trim(); // pasted values often carry a stray space
 }
 
 function pinOk_(pin) {
@@ -177,13 +190,14 @@ function getTasks_() {
 }
 
 function addTask_(b) {
-  sheet_('Tasks').appendRow([
-    Utilities.getUuid().slice(0, 8),
-    String(b.title || '').slice(0, 200),
-    b.recurrence || 'once',
-    b.assignee || '',
-    new Date().toISOString(),
-  ]);
+  const task = {
+    id: Utilities.getUuid().slice(0, 8),
+    title: String(b.title || '').slice(0, 200),
+    recurrence: b.recurrence || 'once',
+    assignee: b.assignee || '',
+  };
+  sheet_('Tasks').appendRow([task.id, task.title, task.recurrence, task.assignee, new Date().toISOString()]);
+  return task;
 }
 
 function deleteTask_(id) {
