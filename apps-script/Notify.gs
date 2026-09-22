@@ -485,8 +485,8 @@ function lazyData_() {
 
 /** A dinner as it reads in a notification: recipe links dropped. */
 function mealName_(text) {
-  const name = String(text || '').replace(/https?:\/\/\S+/g, ' ').replace(/\s+/g, ' ')
-    .replace(/^[\s\-–—:|,]+|[\s\-–—:|,(]+$/g, '');
+  const name = String(text || '').replace(/https?:\/\/\S+/gi, ' ').replace(/\s+/g, ' ')
+    .replace(/^[\s\-–—:|,(]+|[\s\-–—:|,(]+$/g, '');
   return name || (text ? 'recipe link' : '');
 }
 
