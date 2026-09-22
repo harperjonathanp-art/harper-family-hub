@@ -222,7 +222,9 @@ function mealsReady_(ctx, data) {
     ctx.state.meals = { plan: plan, announced: plan, since: ctx.clock.ms, editors: [] };
     return [];
   }
-  if (plan !== m.plan) { m.plan = plan; m.since = ctx.clock.ms; }
+  // Hub saves update m.plan themselves, so a change noticed here came from the
+  // Sheet: its editor is unknown, and nobody is left out of the alert.
+  if (plan !== m.plan) { m.plan = plan; m.since = ctx.clock.ms; m.editors = []; }
   if (plan === m.announced) { m.editors = []; return []; }
   const dinners = JSON.parse(plan);
   if (dinners.some(function (d) { return !d; })) return [];
@@ -275,12 +277,8 @@ function dinnerMsg_(person, data, clock) {
 }
 
 function checkinMsg_(type, data, clock) {
-  const tz = Session.getScriptTimeZone();
   const monday = periodKey_('weekly', new Date(clock.ms)).slice(1);
-  const done = data.checkins.some(function (c) {
-    const date = c.date instanceof Date ? Utilities.formatDate(c.date, tz, 'yyyy-MM-dd') : String(c.date).slice(0, 10);
-    return c.type === type && date >= monday;
-  });
+  const done = data.checkins.some(function (c) { return c.type === type && c.date >= monday; });
   if (done) return null;
   return type === 'huddle'
     ? { title: 'Family Huddle', body: 'Rose/Thorn/Bud, the week ahead, chores, the fun pick, gratitude. Tap to open it.',

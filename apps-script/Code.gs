@@ -281,10 +281,13 @@ function getEvents_() {
 // ---------- check-ins ----------
 
 function getCheckins_(limit) {
+  const tz = Session.getScriptTimeZone();
   const all = rows_('CheckIns').map(function (r) {
     let answers = {};
     try { answers = JSON.parse(r.answersJson); } catch (err) {}
-    return { id: String(r.id), date: r.date, type: r.type, answers: answers };
+    // Sheets usually turns the saved date into a date cell; keep it yyyy-MM-dd so it sorts.
+    const date = r.date instanceof Date ? Utilities.formatDate(r.date, tz, 'yyyy-MM-dd') : String(r.date);
+    return { id: String(r.id), date: date, type: r.type, answers: answers };
   });
   all.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
   return all.slice(0, limit || 10);

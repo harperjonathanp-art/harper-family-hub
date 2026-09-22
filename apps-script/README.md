@@ -23,7 +23,7 @@ Anything private stays out of this public repo. Add these under
 | `CAL_MAGGIE`       | Maggie's calendar ID (her Google account email)        |
 | `CAL_FAMILY`       | The shared Family calendar (`…@group.calendar.google.com`) |
 | `CAL_MCHS`         | The MCHS school calendar                               |
-| `PUSH_WORKER_URL`  | The push relay's address, e.g. `https://family-hub-push.<name>.workers.dev` |
+| `PUSH_WORKER_URL`  | The push relay's address, e.g. `https://harper-family-hub.<name>.workers.dev` |
 | `PUSH_SECRET`      | The shared secret from `push-worker/keys.html`         |
 | `VAPID_PUBLIC_KEY` | The public key from `push-worker/keys.html`            |
 
