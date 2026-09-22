@@ -14,25 +14,28 @@ self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
   if (url.hostname.includes("script.google")) return; // never cache live data
-  if (e.request.mode === "navigate") { e.respondWith(latestPage(e.request)); return; }
+  if (e.request.mode === "navigate") {
+    const network = fetch(e.request, { cache: "no-cache" });
+    // Save each good copy for offline use; waitUntil keeps the worker alive until it's written.
+    e.waitUntil(network.then(res => {
+      if (!res.ok) return;
+      const copy = res.clone();
+      return caches.open(CACHE).then(c => c.put("./index.html", copy));
+    }).catch(() => {}));
+    e.respondWith(latestPage(network));
+    return;
+  }
   e.respondWith(caches.match(e.request).then(hit => hit || fetch(e.request)));
 });
 
 // The page itself: the latest from the network, so an update shows the first
-// time the app opens. The saved copy is used offline, or if the network takes
-// more than a few seconds.
-function latestPage(request) {
-  const network = fetch(request, { cache: "no-cache" }).then(res => {
-    if (res.ok) {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put("./index.html", copy));
-    }
-    return res;
-  });
-  const slow = new Promise(r => setTimeout(r, 4000))
-    .then(() => caches.match("./index.html"))
-    .then(hit => hit || network);
-  return Promise.race([network, slow]).catch(() => caches.match("./index.html"));
+// time the app opens. The saved copy is used offline, if the server answers
+// with an error, or if the network takes more than a few seconds.
+function latestPage(network) {
+  const saved = () => caches.match("./index.html");
+  const good = network.then(res => res.ok ? res : saved().then(hit => hit || res));
+  const slow = new Promise(r => setTimeout(r, 4000)).then(saved).then(hit => hit || good);
+  return Promise.race([good, slow]).catch(saved);
 }
 
 // Every push must show a notification; iOS stops delivering to apps that don't.
