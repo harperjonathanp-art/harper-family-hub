@@ -712,6 +712,7 @@ function dragStart(e, id) {
   const from = rows.indexOf(row);
   e.currentTarget.setPointerCapture(e.pointerId);
   DRAG = { row, rows, from, to: from, startY: e.clientY,
+    ids: rows.map(r => r.querySelector(".grip").dataset.grip), // what was on screen when the drag began
     h: row.getBoundingClientRect().height,
     mids: rows.map(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2; }) };
   row.classList.add("dragging");
@@ -732,27 +733,59 @@ function dragMove(e) {
 }
 function dragEnd() {
   if (!DRAG) return;
-  const { from, to, rows } = DRAG;
+  const { from, to, rows, ids } = DRAG;
   DRAG = null;
   rows.forEach(r => { r.style.transform = ""; r.classList.remove("dragging"); });
-  if (from !== to) moveGrocery(from, to);
+  if (from === to) { render(); return; } // picks up anything a refresh brought in mid-drag
+  const [id] = ids.splice(from, 1);
+  ids.splice(to, 0, id);
+  applyOrder(ids);
 }
 function gripKey(e, id) {
   const step = { ArrowUp: -1, ArrowDown: 1 }[e.key];
   if (!step || id.startsWith("tmp-")) return;
   e.preventDefault();
-  const left = DATA.groceries.filter(g => !g.done);
-  const from = left.findIndex(g => g.id === id), to = from + step;
-  if (to < 0 || to >= left.length) return;
-  moveGrocery(from, to).then(() => { const b = document.querySelector(`[data-grip="${id}"]`); if (b) b.focus(); });
+  const ids = DATA.groceries.filter(g => !g.done).map(g => g.id);
+  const from = ids.indexOf(id), to = from + step;
+  if (from < 0 || to < 0 || to >= ids.length) return;
+  ids.splice(to, 0, ids.splice(from, 1)[0]);
+  const refocus = () => { const b = document.querySelector(`[data-grip="${id}"]`); if (b) b.focus(); };
+  applyOrder(ids).then(refocus);
+  refocus();
 }
-function moveGrocery(from, to) {
-  const left = DATA.groceries.filter(g => !g.done), got = DATA.groceries.filter(g => g.done);
-  const [item] = left.splice(from, 1);
-  left.splice(to, 0, item);
-  DATA.groceries = left.concat(got);
+/* Puts the unchecked items in the given order, matched by id rather than position,
+   so a refresh that changed the list mid-drag can't move the wrong item. Items
+   the order doesn't name (added meanwhile) keep their place after the rest. */
+function applyOrder(ids) {
+  const pos = new Map(ids.map((id, i) => [id, i]));
+  const rank = g => pos.has(g.id) ? pos.get(g.id) : ids.length;
+  const left = DATA.groceries.filter(g => !g.done).sort((a, b) => rank(a) - rank(b));
+  DATA.groceries = left.concat(DATA.groceries.filter(g => g.done));
+  ORDER_WANT = DATA.groceries.filter(g => !g.id.startsWith("tmp-")).map(g => g.id);
   render();
-  return send({ action: "reorderGroceries", ids: DATA.groceries.filter(g => !g.id.startsWith("tmp-")).map(g => g.id) });
+  return saveOrder();
+}
+/* One reorder save at a time, always sending the newest order. A save that a
+   later move has superseded is skipped, and only the last answer is shown. */
+let ORDER_WANT = null, ORDER_SEQ = 0, ORDER_Q = Promise.resolve();
+function saveOrder() {
+  const seq = ++ORDER_SEQ;
+  note("Saving…");
+  ORDER_Q = ORDER_Q.then(async () => {
+    if (seq !== ORDER_SEQ) return;
+    try {
+      const d = await apiPost({ action: "reorderGroceries", ids: ORDER_WANT });
+      if (seq !== ORDER_SEQ) return;
+      if (!d.ok) { note("Save failed"); return; }
+      DATA.groceries = d.groceries;
+      localStorage.setItem("fd_cache", JSON.stringify(DATA));
+      note("Saved ✓");
+      if (!DRAG) render();
+    } catch (e) {
+      if (seq === ORDER_SEQ) note("Save failed — offline?");
+    }
+  });
+  return ORDER_Q;
 }
 
 async function addGrocery() {
