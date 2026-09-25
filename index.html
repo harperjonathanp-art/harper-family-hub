@@ -301,6 +301,19 @@ label.f {
   font-family: var(--font-grotesk); line-height: 22px;
 }
 .task label.ttl { cursor: pointer; }
+.grip {
+  flex: 0 0 28px; min-height: 44px; margin-left: calc(var(--space-2) * -1);
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 0; color: var(--ink-faint); cursor: grab;
+  touch-action: none; -webkit-user-select: none; user-select: none; border-radius: var(--radius-sm);
+}
+.grip-space { flex: 0 0 28px; margin-left: calc(var(--space-2) * -1); }
+.grocery-list .task { transition: transform .15s ease; }
+.grocery-list .task.dragging {
+  transition: none; position: relative; z-index: 5; cursor: grabbing;
+  background: var(--paper-sheet); box-shadow: var(--shadow-raise); border-radius: var(--radius-sm);
+}
+@media (prefers-reduced-motion: reduce) { .grocery-list .task { transition: none; } }
 .lineup .recipes { margin-top: var(--space-1); }
 
 /* ---------- prompts: the serif marks the shift to talking ---------- */
@@ -495,6 +508,7 @@ function restoreDraft() {
 }
 function clearDraft(key) { localStorage.removeItem(key); }
 function hasUnsavedEdits() {
+  if (DRAG) return true; // mid-drag: a background refresh would pull the row out from under the finger
   const key = draftKey();
   if (!key) return false;
   if (document.activeElement && document.activeElement.closest && document.activeElement.closest("#main") &&
@@ -660,7 +674,7 @@ function renderGroceries() {
         enterkeyhint="done" onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); addGrocery(); }"></textarea>
       <button class="primary" onclick="addGrocery()">Add</button>
     </div>`;
-  h += list.length ? `<div class="block">${left.concat(got).map(groceryRow).join("")}</div>`
+  h += list.length ? `<div class="block grocery-list">${left.concat(got).map(groceryRow).join("")}</div>`
                    : `<div class="block"><div class="empty">Nothing on the list yet.</div></div>`;
   if (list.length) {
     h += `<div class="actions">
@@ -673,12 +687,74 @@ function renderGroceries() {
 }
 function groceryRow(g) {
   const id = "g-" + esc(g.id);
+  const grip = g.done ? `<span class="grip-space"></span>`
+    : `<button class="grip" data-grip="${esc(g.id)}" aria-label="Move ${esc(g.item)} (arrow keys)"
+        onpointerdown="dragStart(event, '${esc(g.id)}')" onpointermove="dragMove(event)"
+        onpointerup="dragEnd()" onpointercancel="dragEnd()" onkeydown="gripKey(event, '${esc(g.id)}')">
+        <svg width="12" height="18" viewBox="0 0 12 18" aria-hidden="true" fill="currentColor">
+          <circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/><circle cx="3" cy="9" r="1.6"/>
+          <circle cx="9" cy="9" r="1.6"/><circle cx="3" cy="15" r="1.6"/><circle cx="9" cy="15" r="1.6"/></svg></button>`;
   return `<div class="task ${g.done ? "done" : ""}">
+    ${grip}
     <input type="checkbox" id="${id}" ${g.done ? "checked" : ""} onchange="toggleGrocery('${esc(g.id)}')">
     <label class="ttl" for="${id}">${esc(g.item)}</label>
     <button class="del" onclick="deleteGrocery('${esc(g.id)}')" aria-label="Remove ${esc(g.item)}">×</button>
   </div>`;
 }
+/* Reordering: press the grip and drag. Pointer events cover touch and mouse;
+   the other unchecked rows slide aside to show where the item will land. */
+let DRAG = null;
+function dragStart(e, id) {
+  if (id.startsWith("tmp-") || DRAG) return; // still saving
+  e.preventDefault();
+  const row = e.currentTarget.closest(".task");
+  const rows = [...row.parentElement.querySelectorAll(".task:not(.done)")];
+  const from = rows.indexOf(row);
+  e.currentTarget.setPointerCapture(e.pointerId);
+  DRAG = { row, rows, from, to: from, startY: e.clientY,
+    h: row.getBoundingClientRect().height,
+    mids: rows.map(r => { const b = r.getBoundingClientRect(); return b.top + b.height / 2; }) };
+  row.classList.add("dragging");
+}
+function dragMove(e) {
+  if (!DRAG) return;
+  const { row, rows, from, mids, h } = DRAG;
+  const dy = e.clientY - DRAG.startY;
+  const center = mids[from] + dy;
+  const to = rows.filter((r, i) => i !== from && mids[i] < center).length;
+  row.style.transform = `translateY(${dy}px)`;
+  rows.forEach((r, i) => {
+    if (r === row) return;
+    const shift = from < to && i > from && i <= to ? -h : from > to && i >= to && i < from ? h : 0;
+    r.style.transform = shift ? `translateY(${shift}px)` : "";
+  });
+  DRAG.to = to;
+}
+function dragEnd() {
+  if (!DRAG) return;
+  const { from, to, rows } = DRAG;
+  DRAG = null;
+  rows.forEach(r => { r.style.transform = ""; r.classList.remove("dragging"); });
+  if (from !== to) moveGrocery(from, to);
+}
+function gripKey(e, id) {
+  const step = { ArrowUp: -1, ArrowDown: 1 }[e.key];
+  if (!step || id.startsWith("tmp-")) return;
+  e.preventDefault();
+  const left = DATA.groceries.filter(g => !g.done);
+  const from = left.findIndex(g => g.id === id), to = from + step;
+  if (to < 0 || to >= left.length) return;
+  moveGrocery(from, to).then(() => { const b = document.querySelector(`[data-grip="${id}"]`); if (b) b.focus(); });
+}
+function moveGrocery(from, to) {
+  const left = DATA.groceries.filter(g => !g.done), got = DATA.groceries.filter(g => g.done);
+  const [item] = left.splice(from, 1);
+  left.splice(to, 0, item);
+  DATA.groceries = left.concat(got);
+  render();
+  return send({ action: "reorderGroceries", ids: DATA.groceries.filter(g => !g.id.startsWith("tmp-")).map(g => g.id) });
+}
+
 async function addGrocery() {
   const box = document.getElementById("newGrocery");
   const text = box.value.trim();
