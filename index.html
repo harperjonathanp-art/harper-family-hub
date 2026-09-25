@@ -295,6 +295,12 @@ label.f {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .recipes { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.grocery-add { display: flex; gap: var(--space-2); align-items: flex-start; margin-bottom: var(--space-3); }
+.grocery-add textarea {
+  flex: 1; min-width: 0; min-height: 44px; height: 44px; resize: none; overflow: hidden;
+  font-family: var(--font-grotesk); line-height: 22px;
+}
+.task label.ttl { cursor: pointer; }
 .lineup .recipes { margin-top: var(--space-1); }
 
 /* ---------- prompts: the serif marks the shift to talking ---------- */
@@ -410,7 +416,7 @@ const COUPLES_QUESTIONS = [
   "How can I pray for you this week?"
 ];
 
-let DATA = { tasks: [], meals: {}, events: [], checkins: [] };
+let DATA = { tasks: [], meals: {}, events: [], checkins: [], groceries: [] };
 let VIEW = "today";
 let POLL = null;
 
@@ -437,7 +443,8 @@ async function refresh(quiet) {
   try {
     const d = await apiGet();
     if (!d.ok) { note(d.error === "bad_pin" ? "Wrong PIN — check Settings" : "Sync error"); return; }
-    DATA = { tasks: d.tasks || [], meals: d.meals || {}, events: d.events || [], checkins: d.checkins || [] };
+    DATA = { tasks: d.tasks || [], meals: d.meals || {}, events: d.events || [], checkins: d.checkins || [],
+             groceries: d.groceries }; // undefined until the backend has the grocery list
     localStorage.setItem("fd_cache", JSON.stringify(DATA));
     note("Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
     if (hasUnsavedEdits()) { note("Synced — your unsaved edits are kept"); return; }
@@ -455,6 +462,7 @@ async function send(body) {
       DATA.tasks = d.tasks || DATA.tasks;
       DATA.meals = d.meals || DATA.meals;
       DATA.checkins = d.checkins || DATA.checkins;
+      DATA.groceries = d.groceries || DATA.groceries;
       localStorage.setItem("fd_cache", JSON.stringify(DATA));
       note("Saved ✓");
     } else { note("Save failed"); }
@@ -471,10 +479,12 @@ function draftKey() {
   if (VIEW === "tasks") return "fd_draft_task";
   return null;
 }
-function saveDraft() {
+function saveDraft(e) {
+  // Only typed text is a draft: not the grocery box, and not ticking a checkbox.
+  if (e && e.target && (e.target.type === "checkbox" || (e.target.dataset && e.target.dataset.nodraft))) return;
   const key = draftKey(); if (!key) return;
   const d = {};
-  document.querySelectorAll("#main input[type=text], #main textarea, #main select").forEach(el => { if (el.id) d[el.id] = el.value; });
+  document.querySelectorAll("#main input[type=text], #main textarea, #main select").forEach(el => { if (el.id && !el.dataset.nodraft) d[el.id] = el.value; });
   if (Object.values(d).some(v => v && v.trim && v.trim())) localStorage.setItem(key, JSON.stringify(d));
   else localStorage.removeItem(key);
 }
@@ -626,7 +636,8 @@ function renderMeals() {
     <div class="actions">
       <button class="primary" onclick="saveMeals()">Save week</button>
       <span class="tiny">Also editable straight from the Google Sheet.</span>
-    </div>`;
+    </div>
+    ${renderGroceries()}`;
 }
 function saveMeals() {
   const meals = {};
@@ -634,6 +645,73 @@ function saveMeals() {
   DATA.meals = meals;
   clearDraft("fd_draft_meals");
   send({ action: "saveMeals", meals, by: cfg.user });
+}
+
+/* ----- Grocery list (on the Dinner page) ----- */
+function renderGroceries() {
+  const list = DATA.groceries;
+  if (!Array.isArray(list)) {
+    return `<h2>Grocery list</h2><div class="block"><div class="empty">The grocery list needs the latest Apps Script backend. Paste the new Code.gs and publish a new version.</div></div>`;
+  }
+  const left = list.filter(g => !g.done), got = list.filter(g => g.done);
+  let h = `<h2>Grocery list${left.length ? `<span class="hint">${left.length} to get</span>` : ""}</h2>
+    <div class="grocery-add">
+      <textarea id="newGrocery" data-nodraft="1" rows="1" placeholder="Add an item, or paste a list…" aria-label="Add to the grocery list"
+        enterkeyhint="done" onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); addGrocery(); }"></textarea>
+      <button class="primary" onclick="addGrocery()">Add</button>
+    </div>`;
+  h += list.length ? `<div class="block">${left.concat(got).map(groceryRow).join("")}</div>`
+                   : `<div class="block"><div class="empty">Nothing on the list yet.</div></div>`;
+  if (list.length) {
+    h += `<div class="actions">
+      ${left.length ? `<button class="ghost" onclick="shareGroceries()">Share list</button>` : ""}
+      ${got.length ? `<button class="ghost" onclick="clearGroceries()">Clear ${got.length} checked</button>` : ""}
+      <span class="tiny" id="groceryMsg" role="status"></span>
+    </div>`;
+  }
+  return h;
+}
+function groceryRow(g) {
+  const id = "g-" + esc(g.id);
+  return `<div class="task ${g.done ? "done" : ""}">
+    <input type="checkbox" id="${id}" ${g.done ? "checked" : ""} onchange="toggleGrocery('${esc(g.id)}')">
+    <label class="ttl" for="${id}">${esc(g.item)}</label>
+    <button class="del" onclick="deleteGrocery('${esc(g.id)}')" aria-label="Remove ${esc(g.item)}">×</button>
+  </div>`;
+}
+async function addGrocery() {
+  const box = document.getElementById("newGrocery");
+  const text = box.value.trim();
+  if (!text) return;
+  text.split(/\n+/).map(s => s.replace(/^[\s•*\-–—]+/, "").trim()).filter(Boolean)
+    .forEach(item => DATA.groceries.push({ id: "tmp", item, done: false }));
+  box.value = "";
+  await send({ action: "addGroceries", text, by: cfg.user });
+  const again = document.getElementById("newGrocery");
+  if (again) again.focus(); // ready for the next item
+}
+function toggleGrocery(id) {
+  const g = DATA.groceries.find(x => x.id === id);
+  if (g) g.done = !g.done;
+  send({ action: "toggleGrocery", id });
+}
+function deleteGrocery(id) {
+  DATA.groceries = DATA.groceries.filter(x => x.id !== id);
+  send({ action: "deleteGrocery", id });
+}
+function clearGroceries() {
+  DATA.groceries = DATA.groceries.filter(x => !x.done);
+  send({ action: "clearGroceries" });
+}
+async function shareGroceries() {
+  const text = "Grocery list\n" + DATA.groceries.filter(g => !g.done).map(g => "• " + g.item).join("\n");
+  try {
+    if (navigator.share) { await navigator.share({ text }); return; }
+    await navigator.clipboard.writeText(text);
+    say("groceryMsg", "Copied ✓");
+  } catch (e) {
+    if (e.name !== "AbortError") say("groceryMsg", "Couldn't share — " + e.message);
+  }
 }
 
 /* ----- Tasks ----- */
@@ -983,6 +1061,7 @@ function openFromNotification(d) {
 (function boot() {
   const cached = localStorage.getItem("fd_cache");
   if (cached) { try { DATA = JSON.parse(cached); } catch (e) {} }
+  if (!("groceries" in DATA)) DATA.groceries = []; // older saved copies predate the list
   const [view, checkin] = location.hash.slice(1).split("/"); // from a tapped notification
   if (VIEWS[view]) {
     VIEW = view;

@@ -45,6 +45,7 @@ const TABS = {
   CheckIns:    ['id', 'date', 'type', 'answersJson'],
   Devices:     ['endpoint', 'person', 'subscription', 'addedAt'],
   NotifyPrefs: ['person', 'prefs', 'updatedAt'],
+  Groceries:   ['id', 'item', 'done', 'addedBy', 'addedAt'],
 };
 
 // ---------- entry points ----------
@@ -60,6 +61,7 @@ function doGet(e) {
     meals: getMeals_(),
     events: getEvents_(),
     checkins: getCheckins_(10),
+    groceries: getGroceries_(),
   });
 }
 
@@ -82,6 +84,10 @@ function doPost(e) {
       case 'saveMeals':    saveMeals_(body.meals); mealsEdited_(body.meals, body.by); break;
       case 'saveCheckin':  saveCheckin_(body.type, body.answers); break;
       case 'deleteCheckin': deleteCheckin_(body.id); break;
+      case 'addGroceries':   addGroceries_(body.text, body.by); break;
+      case 'toggleGrocery':  toggleGrocery_(body.id); break;
+      case 'deleteGrocery':  deleteGrocery_(body.id); break;
+      case 'clearGroceries': clearGroceries_(); break;
       case 'pushSubscribe':   reply = pushSubscribe_(body.person, body.subscription); break;
       case 'pushUnsubscribe': reply = pushUnsubscribe_(body.endpoint); break;
       case 'savePrefs':       reply = savePrefs_(body.person, body.prefs); break;
@@ -99,6 +105,7 @@ function doPost(e) {
     tasks: getTasks_(),
     meals: getMeals_(),
     checkins: getCheckins_(10),
+    groceries: getGroceries_(),
   });
 }
 
@@ -276,6 +283,45 @@ function getEvents_() {
   });
   out.sort(function (a, b) { return a.sort - b.sort; });
   return out;
+}
+
+// ---------- groceries ----------
+
+function getGroceries_() {
+  return rows_('Groceries').map(function (r) {
+    return { id: String(r.id), item: String(r.item), done: r.done === true, addedBy: r.addedBy || '' };
+  });
+}
+
+/** One item per line, so a pasted ingredient list becomes separate items. */
+function addGroceries_(text, by) {
+  const sh = sheet_('Groceries');
+  String(text || '').split(/\n+/)
+    .map(function (s) { return s.replace(/^[\s•*\-–—]+/, '').trim(); })
+    .filter(Boolean)
+    .slice(0, 50)
+    .forEach(function (item) {
+      sh.appendRow([Utilities.getUuid().slice(0, 8), item.slice(0, 200), false, by || '', new Date().toISOString()]);
+    });
+}
+
+function toggleGrocery_(id) {
+  const sh = sheet_('Groceries');
+  const vals = sh.getDataRange().getValues();
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][0]) === String(id)) {
+      sh.getRange(i + 1, 3).setValue(vals[i][2] !== true);
+      return;
+    }
+  }
+}
+
+function deleteGrocery_(id) {
+  removeRowsWhere_('Groceries', function (r) { return String(r[0]) === String(id); });
+}
+
+function clearGroceries_() {
+  removeRowsWhere_('Groceries', function (r) { return r[2] === true; });
 }
 
 // ---------- check-ins ----------
