@@ -88,6 +88,7 @@ function doPost(e) {
       case 'toggleGrocery':  toggleGrocery_(body.id); break;
       case 'deleteGrocery':  deleteGrocery_(body.id); break;
       case 'clearGroceries': clearGroceries_(); break;
+      case 'reorderGroceries': reorderGroceries_(body.ids); break;
       case 'pushSubscribe':   reply = pushSubscribe_(body.person, body.subscription); break;
       case 'pushUnsubscribe': reply = pushUnsubscribe_(body.endpoint); break;
       case 'savePrefs':       reply = savePrefs_(body.person, body.prefs); break;
@@ -322,6 +323,23 @@ function deleteGrocery_(id) {
 
 function clearGroceries_() {
   removeRowsWhere_('Groceries', function (r) { return r[2] === true; });
+}
+
+/** Rewrites the list in the order given. Items it doesn't name (added meanwhile) keep their place at the end. */
+function reorderGroceries_(ids) {
+  if (!Array.isArray(ids)) return;
+  const sh = sheet_('Groceries');
+  const vals = sh.getDataRange().getValues();
+  const header = vals.shift();
+  const byId = {};
+  vals.forEach(function (r) { byId[String(r[0])] = r; });
+  const ordered = [];
+  ids.forEach(function (id) {
+    const r = byId[String(id)];
+    if (r) { ordered.push(r); delete byId[String(id)]; }
+  });
+  vals.forEach(function (r) { if (String(r[0]) in byId) ordered.push(r); });
+  if (ordered.length) sh.getRange(2, 1, ordered.length, header.length).setValues(ordered);
 }
 
 // ---------- check-ins ----------
