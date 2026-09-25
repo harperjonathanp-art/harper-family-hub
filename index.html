@@ -462,7 +462,7 @@ async function send(body) {
       DATA.tasks = d.tasks || DATA.tasks;
       DATA.meals = d.meals || DATA.meals;
       DATA.checkins = d.checkins || DATA.checkins;
-      DATA.groceries = d.groceries || DATA.groceries;
+      DATA.groceries = d.groceries; // an older backend leaves this out, and the page says so
       localStorage.setItem("fd_cache", JSON.stringify(DATA));
       note("Saved ✓");
     } else { note("Save failed"); }
@@ -684,18 +684,21 @@ async function addGrocery() {
   const text = box.value.trim();
   if (!text) return;
   text.split(/\n+/).map(s => s.replace(/^[\s•*\-–—]+/, "").trim()).filter(Boolean)
-    .forEach(item => DATA.groceries.push({ id: "tmp", item, done: false }));
+    .forEach((item, i) => DATA.groceries.push({ id: "tmp-" + Date.now() + "-" + i, item, done: false }));
   box.value = "";
+  const refocus = () => { const b = document.getElementById("newGrocery"); if (b) b.focus(); }; // ready for the next item
+  render(); refocus(); // show it straight away; the save fills in the real ids
   await send({ action: "addGroceries", text, by: cfg.user });
-  const again = document.getElementById("newGrocery");
-  if (again) again.focus(); // ready for the next item
+  refocus();
 }
 function toggleGrocery(id) {
+  if (id.startsWith("tmp-")) { render(); return; } // still saving; the server hasn't named it yet
   const g = DATA.groceries.find(x => x.id === id);
   if (g) g.done = !g.done;
   send({ action: "toggleGrocery", id });
 }
 function deleteGrocery(id) {
+  if (id.startsWith("tmp-")) return; // still saving
   DATA.groceries = DATA.groceries.filter(x => x.id !== id);
   send({ action: "deleteGrocery", id });
 }
@@ -1061,7 +1064,6 @@ function openFromNotification(d) {
 (function boot() {
   const cached = localStorage.getItem("fd_cache");
   if (cached) { try { DATA = JSON.parse(cached); } catch (e) {} }
-  if (!("groceries" in DATA)) DATA.groceries = []; // older saved copies predate the list
   const [view, checkin] = location.hash.slice(1).split("/"); // from a tapped notification
   if (VIEWS[view]) {
     VIEW = view;
