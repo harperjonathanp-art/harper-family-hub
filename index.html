@@ -208,7 +208,7 @@ button[disabled] { opacity: .45; cursor: default; }
 .actions { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-top: var(--space-4); }
 
 /* ---------- form controls ---------- */
-input[type=text], input[type=password], input[type=url], input[type=time], select, textarea {
+input[type=text], input[type=password], input[type=url], input[type=time], input[type=date], input[type=number], select, textarea {
   font-family: var(--font-grotesk); font-size: 16px; /* 16px: stops iOS zooming on focus */
   color: var(--ink);
   background: var(--paper-sunk);
@@ -275,8 +275,34 @@ label.f {
   font-size: 18px; cursor: pointer; padding: var(--space-2); min-width: 44px; min-height: 44px;
   border-radius: var(--radius-md);
 }
-.addbar { display: grid; grid-template-columns: 1fr; gap: var(--space-2); margin-bottom: var(--space-5); }
-@media (min-width: 600px) { .addbar { grid-template-columns: 1fr 130px 110px auto; } }
+/* ---------- adding a task: title, then who / due / repeat ---------- */
+.addform { display: grid; gap: var(--space-2); margin-bottom: var(--space-5); }
+.addrow { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+.addrow > select, .addrow > input[type=date] { flex: 1 1 120px; width: auto; min-width: 0; }
+.addrow > input[type=number] { width: 72px; }
+.addrow .grow { flex: 1; min-width: 0; }
+.daypick { display: flex; gap: var(--space-1); flex-wrap: wrap; }
+.daypick label { position: relative; cursor: pointer; }
+.daypick input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.daypick span {
+  display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px;
+  border-radius: var(--radius-pill); border: 1px solid var(--rule-strong);
+  font-size: 13px; font-weight: 600; color: var(--ink-muted);
+}
+.daypick input:checked + span { background: var(--field); border-color: var(--field); color: var(--on-field); }
+.daypick input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* due date and repeat under a task's title */
+.task .ttl .meta { display: block; font-size: 12.5px; line-height: 17px; font-weight: 400; color: var(--ink-muted); margin-top: 2px; }
+.task.done .ttl .meta { text-decoration: none; }
+.task .ttl .meta .overdue { color: var(--crit); font-weight: 500; }
+details.later > summary {
+  cursor: pointer; list-style: none; font-size: 14px; line-height: 20px; font-weight: 500;
+  padding: var(--space-3) 0; color: var(--ink-muted); min-height: 44px; display: flex; align-items: center; gap: var(--space-2);
+}
+details.later > summary::-webkit-details-marker { display: none; }
+details.later > summary::before { content: "\25B8"; color: var(--ink-faint); font-size: 11px; }
+details.later[open] > summary::before { content: "\25BE"; }
 
 .meal .d {
   flex: 0 0 44px;
@@ -562,12 +588,83 @@ function eventRow(e) {
 }
 function taskRow(t) {
   return `<div class="task ${t.completed ? "done" : ""}">
-    <input type="checkbox" ${t.completed ? "checked" : ""} onchange="toggleTask('${esc(t.id)}')">
+    <input type="checkbox" ${t.completed ? "checked" : ""} onchange="toggleTask('${esc(t.id)}')" aria-label="${esc(t.title)}">
     ${chip(t.assignee)}
-    <span class="ttl">${esc(t.title)}${t.completed && t.completedBy ? ` <span class="tiny">by ${esc(t.completedBy)}</span>` : ""}</span>
+    <span class="ttl">${esc(t.title)}${t.completed && t.completedBy ? ` <span class="tiny">by ${esc(t.completedBy)}</span>` : ""}${taskMeta(t)}</span>
     <button class="del" onclick="deleteTask('${esc(t.id)}')" aria-label="Delete">×</button>
   </div>`;
 }
+
+/* ---------- due dates and Apple Reminders-style repeats ----------
+   A repeat is stored as text the server also reads: "every 2 weeks",
+   "every 1 week on sun,tue,thu", "every 3 months on 3rd sat". */
+const WD = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const WD_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const NTH = { "1st": 1, first: 1, "2nd": 2, second: 2, "3rd": 3, third: 3, "4th": 4, fourth: 4, "5th": 5, fifth: 5, last: -1 };
+const NTH_WORD = { 1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth", "-1": "last" };
+const NTH_CODE = { 1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 5: "5th", "-1": "last" };
+
+function parseRepeat(text) {
+  const m = String(text || "").trim().toLowerCase().match(/^every\s+(\d+)\s+(day|week|month|year)s?(?:\s+on\s+(.+))?$/);
+  if (!m) return null;
+  const r = { n: Math.max(1, Number(m[1])), unit: m[2] };
+  if (r.unit === "week" && m[3]) {
+    const days = m[3].split(/[\s,]+/).filter(Boolean).map(d => WD.indexOf(d.slice(0, 3)));
+    if (!days.length || days.includes(-1)) return null; // same rule as the server
+    r.days = [...new Set(days)].sort();
+  }
+  if (r.unit !== "week" && r.unit !== "day" && m[3]) {
+    const p = m[3].match(/^(\w+)\s+(\w{3})/);
+    if (p && p[1] in NTH && WD.includes(p[2])) r.nth = { k: NTH[p[1]], wd: WD.indexOf(p[2]) };
+  }
+  return r;
+}
+/* Worded like Apple Reminders: "Weekly", "Every 2 weeks", "Every 3 months on the third Saturday". */
+function describeRepeat(text, due) {
+  const r = parseRepeat(text);
+  if (!r) return text;
+  const plural = { day: "days", week: "weeks", month: "months", year: "years" }[r.unit];
+  const base = r.n === 1 ? { day: "Daily", week: "Weekly", month: "Monthly", year: "Yearly" }[r.unit] : `Every ${r.n} ${plural}`;
+  if (r.unit === "week" && r.days && r.days.length) {
+    if (r.n === 1 && r.days.join() === "1,2,3,4,5") return "Every weekday";
+    return `${base} on ${r.days.map(d => WD_LONG[d].slice(0, 3)).join(", ")}`;
+  }
+  if (r.nth) {
+    const on = `the ${NTH_WORD[r.nth.k]} ${WD_LONG[r.nth.wd]}`;
+    if (r.unit === "year") {
+      const month = due ? new Date(due + "T12:00:00").toLocaleDateString("en-US", { month: "long" }) : "";
+      return `${r.n === 1 ? "Every year" : base} on ${on}${month ? " of " + month : ""}`;
+    }
+    return `${base} on ${on}`;
+  }
+  return base;
+}
+function dueInfo(due) {
+  if (!due) return null;
+  const d = new Date(due + "T12:00:00"), t = new Date(todayStr() + "T12:00:00");
+  const days = Math.round((d - t) / 86400000);
+  const text = days === 0 ? "Today" : days === 1 ? "Tomorrow" : days === -1 ? "Yesterday"
+    : days > 1 && days < 7 ? d.toLocaleDateString("en-US", { weekday: "long" })
+    : d.toLocaleDateString("en-US", d.getFullYear() === t.getFullYear() ? { month: "numeric", day: "numeric" } : { month: "numeric", day: "numeric", year: "2-digit" });
+  return { text, days };
+}
+function taskMeta(t) {
+  const due = dueInfo(t.due), parts = [];
+  if (due) {
+    const late = due.days < 0 && !t.completed;
+    // a repeating task ticked today has already moved on to its next date
+    const text = t.completed && t.repeat ? "Next: " + due.text : due.text;
+    parts.push(`<span class="${late ? "overdue" : ""}">${esc(text)}${late ? " · overdue" : ""}</span>`);
+  }
+  if (t.repeat) parts.push(`<span>↻ ${esc(describeRepeat(t.repeat, t.due))}</span>`);
+  if (t.badRepeat) parts.push(`<span class="overdue">Can't read the repeat "${esc(t.badRepeat)}" — fix it in the Sheet</span>`);
+  return parts.length ? `<span class="meta">${parts.join(" &nbsp;")}</span>` : "";
+}
+function isDailyRepeat(t) {
+  const r = t.repeat && parseRepeat(t.repeat);
+  return !!r && r.unit === "day" && r.n === 1;
+}
+const byDue = (a, b) => a.due.localeCompare(b.due) || String(a.title).localeCompare(String(b.title));
 
 /* ============ views ============ */
 const VIEWS = {
@@ -586,6 +683,7 @@ function render() {
   document.getElementById("main").innerHTML = v.render();
   restoreDraft();
   document.querySelectorAll("#main .meal input").forEach(mealLinks);
+  if (VIEW === "tasks") repeatUI();
   document.getElementById("main").addEventListener("input", saveDraft);
   document.getElementById("nav").innerHTML = Object.keys(VIEWS).map(k =>
     `<button class="${k === VIEW ? "active" : ""}" onclick="go('${k}')">${VIEWS[k].label}</button>`).join("");
@@ -598,8 +696,11 @@ function renderToday() {
   const dayIdx = (new Date().getDay() + 6) % 7;
   const dinner = (DATA.meals[DAYS[dayIdx]] || {}).meal;
   const todaysEvents = DATA.events.filter(e => e.date === t);
-  const daily = DATA.tasks.filter(x => x.recurrence === "daily");
-  const oneOff = DATA.tasks.filter(x => x.recurrence === "once" && !x.completed);
+  const daily = DATA.tasks.filter(x => x.recurrence === "daily" || isDailyRepeat(x));
+  // Dated tasks once they're due (overdue first); undated one-offs as before.
+  const oneOff = DATA.tasks.filter(x => !x.completed && !isDailyRepeat(x) &&
+      (x.due ? x.due <= t : x.recurrence === "once"))
+    .sort((a, b) => (a.due || "9") .localeCompare(b.due || "9"));
   const onDeck = DATA.tasks.filter(x => ["weekly", "monthly", "quarterly", "yearly"].includes(x.recurrence) && !x.completed);
 
   const tonight = mealParts(dinner);
@@ -827,17 +928,48 @@ async function shareGroceries() {
 }
 
 /* ----- Tasks ----- */
+const REPEAT_PRESETS = [
+  ["", "Doesn't repeat"], ["every 1 day", "Daily"], ["every 1 week on mon,tue,wed,thu,fri", "Every weekday"],
+  ["every 1 week", "Weekly"], ["every 2 weeks", "Every 2 weeks"], ["every 1 month", "Monthly"],
+  ["every 3 months", "Every 3 months"], ["every 6 months", "Every 6 months"], ["every 1 year", "Yearly"], ["custom", "Custom…"],
+];
 function renderTasks() {
   const options = FAMILY.map(f => `<option>${f}</option>`).join("");
-  const recOpts = RECURS.map(r => `<option value="${r}">${RECUR_LABEL[r]}</option>`).join("");
-  let h = `<div class="addbar">
+  let h = `<div class="addform">
     <input type="text" id="newTitle" placeholder="New task…">
-    <select id="newRecur">${recOpts}</select>
-    <select id="newWho">${options}</select>
-    <button class="primary" onclick="addTask()">Add</button>
+    <div class="addrow">
+      <select id="newWho" aria-label="Who">${options}</select>
+      <input type="date" id="newDue" aria-label="Due date" onchange="repeatUI()">
+      <select id="newRepeat" aria-label="Repeat" onchange="repeatUI()">${REPEAT_PRESETS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>
+    </div>
+    <div class="addrow hidden" id="customRepeat">
+      <span class="muted">Every</span>
+      <input type="number" id="repN" min="1" max="99" value="1" aria-label="How many" oninput="repeatUI()">
+      <select id="repUnit" aria-label="Days, weeks, months or years" onchange="repeatUI()">
+        <option value="day">day(s)</option><option value="week" selected>week(s)</option>
+        <option value="month">month(s)</option><option value="year">year(s)</option></select>
+      <div class="daypick" id="repDays">${WD.map((d, i) => `<label><input type="checkbox" value="${d}" onchange="this.closest('.daypick').dataset.touched = 1; repeatUI()"><span aria-label="${WD_LONG[i]}">${WD_LONG[i][0]}</span></label>`).join("")}</div>
+      <select id="repOn" aria-label="Which day of the month" onchange="repeatUI()"></select>
+    </div>
+    <div class="addrow">
+      <span class="tiny grow" id="repeatText"></span>
+      <button class="primary" onclick="addTask()">Add</button>
+    </div>
   </div>`;
+  // Dated tasks, like Apple Reminders: overdue, today, the coming week, then later.
+  const today = todayStr(), week = isoPlus(today, 7), shown = new Set();
+  const dated = DATA.tasks.filter(x => x.due);
+  const take = list => { list.forEach(x => shown.add(x.id)); return list.sort(byDue); };
+  const overdue = take(dated.filter(x => x.due < today && !x.completed));
+  const todays = take(dated.filter(x => !shown.has(x.id) && (x.due === today || (x.repeat && x.completed))));
+  const soon = take(dated.filter(x => !shown.has(x.id) && x.due > today && x.due <= week));
+  const later = take(dated.filter(x => !shown.has(x.id) && x.due > week));
+  if (overdue.length) h += `<h2>Overdue<span class="hint">${overdue.length}</span></h2><div class="block">${overdue.map(taskRow).join("")}</div>`;
+  if (todays.length) h += `<h2>Today</h2><div class="block">${todays.map(taskRow).join("")}</div>`;
+  if (soon.length) h += `<h2>Next 7 days</h2><div class="block">${soon.map(taskRow).join("")}</div>`;
+  if (later.length) h += `<details class="later"><summary>Later · ${later.length} task${later.length > 1 ? "s" : ""}</summary><div class="block">${later.map(taskRow).join("")}</div></details>`;
   RECURS.forEach(r => {
-    const group = DATA.tasks.filter(t => t.recurrence === r);
+    const group = DATA.tasks.filter(t => t.recurrence === r && !shown.has(t.id));
     if (!group.length) return;
     const hint = { once: "", daily: " · resets every day", weekly: " · resets Mondays", monthly: " · resets on the 1st", quarterly: " · resets each quarter", yearly: " · resets Jan 1" }[r];
     h += `<h2>${RECUR_LABEL[r]}${hint ? `<span class="hint">${hint}</span>` : ""}</h2>
@@ -846,15 +978,60 @@ function renderTasks() {
   if (!DATA.tasks.length) h += `<div class="block"><div class="empty">No tasks yet — add the first one above.</div></div>`;
   return h;
 }
+function isoPlus(iso, days) {
+  const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + days);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+const val = id => (document.getElementById(id) || {}).value || "";
+/* The repeat the form describes, in the stored text form. */
+function currentRepeat() {
+  const preset = val("newRepeat");
+  if (preset !== "custom") return preset;
+  const n = Math.max(1, Math.min(99, parseInt(val("repN"), 10) || 1)), unit = val("repUnit");
+  let rule = `every ${n} ${unit}${n > 1 ? "s" : ""}`;
+  if (unit === "week") {
+    const days = [...document.querySelectorAll("#repDays input:checked")].map(i => i.value);
+    if (days.length) rule += " on " + days.join(",");
+  }
+  if ((unit === "month" || unit === "year") && val("repOn")) rule += " on " + val("repOn");
+  return rule;
+}
+/* Shows the custom controls that fit, and says in words what will happen. */
+function repeatUI() {
+  const box = document.getElementById("customRepeat");
+  if (!box) return;
+  const custom = val("newRepeat") === "custom", unit = val("repUnit");
+  const due = val("newDue") || todayStr(), d = new Date(due + "T12:00:00");
+  box.classList.toggle("hidden", !custom);
+  document.getElementById("repDays").classList.toggle("hidden", unit !== "week");
+  // The due date's weekday, until the days are picked by hand (or all unpicked).
+  const days = [...document.querySelectorAll("#repDays input")];
+  if (!document.getElementById("repDays").dataset.touched || !days.some(i => i.checked)) {
+    days.forEach((i, n) => { i.checked = n === d.getDay(); });
+  }
+  // "On the same date" or "on the third Saturday" (and "last", when it is), from the due date
+  const on = document.getElementById("repOn"), keep = on.value, k = Math.ceil(d.getDate() / 7), wd = WD[d.getDay()];
+  const isLast = d.getDate() + 7 > new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  const choices = [["", `On day ${d.getDate()}`], [`${NTH_CODE[k]} ${wd}`, `On the ${NTH_WORD[k]} ${WD_LONG[d.getDay()]}`]]
+    .concat(isLast && k !== 5 ? [[`last ${wd}`, `On the last ${WD_LONG[d.getDay()]}`]] : []);
+  on.innerHTML = choices.map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
+  if (choices.some(c => c[0] === keep)) on.value = keep;
+  on.classList.toggle("hidden", unit !== "month" && unit !== "year");
+  const rule = currentRepeat(), info = dueInfo(due);
+  say("repeatText", rule ? `↻ ${describeRepeat(rule, due)}, starting ${info.text.toLowerCase() === "today" ? "today" : info.text}`
+    : val("newDue") ? `Due ${info.text}` : "");
+}
 function addTask() {
   const title = document.getElementById("newTitle").value.trim();
   if (!title) return;
-  const body = { action: "addTask", title, recurrence: document.getElementById("newRecur").value, assignee: document.getElementById("newWho").value, by: cfg.user };
-  DATA.tasks.push({ id: "tmp", title, recurrence: body.recurrence, assignee: body.assignee, completed: false });
+  const repeat = currentRepeat(), due = val("newDue") || (repeat ? todayStr() : "");
+  const body = { action: "addTask", title, recurrence: "once", due, repeat, assignee: val("newWho"), by: cfg.user };
+  DATA.tasks.push({ id: "tmp-" + Date.now(), title, recurrence: repeat ? "repeat" : "once", repeat, due, assignee: body.assignee, completed: false });
   clearDraft("fd_draft_task");
   send(body);
 }
 function toggleTask(id) {
+  if (id.startsWith("tmp")) { render(); return; } // still saving
   const t = DATA.tasks.find(x => x.id === id);
   if (t) { t.completed = !t.completed; t.completedBy = t.completed ? cfg.user : null; }
   send({ action: "toggleTask", id, by: cfg.user });
