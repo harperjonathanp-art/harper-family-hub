@@ -608,7 +608,11 @@ function parseRepeat(text) {
   const m = String(text || "").trim().toLowerCase().match(/^every\s+(\d+)\s+(day|week|month|year)s?(?:\s+on\s+(.+))?$/);
   if (!m) return null;
   const r = { n: Math.max(1, Number(m[1])), unit: m[2] };
-  if (r.unit === "week" && m[3]) r.days = m[3].split(/[\s,]+/).map(d => WD.indexOf(d.slice(0, 3))).filter(d => d >= 0).sort();
+  if (r.unit === "week" && m[3]) {
+    const days = m[3].split(/[\s,]+/).filter(Boolean).map(d => WD.indexOf(d.slice(0, 3)));
+    if (!days.length || days.includes(-1)) return null; // same rule as the server
+    r.days = [...new Set(days)].sort();
+  }
   if (r.unit !== "week" && r.unit !== "day" && m[3]) {
     const p = m[3].match(/^(\w+)\s+(\w{3})/);
     if (p && p[1] in NTH && WD.includes(p[2])) r.nth = { k: NTH[p[1]], wd: WD.indexOf(p[2]) };
@@ -653,7 +657,12 @@ function taskMeta(t) {
     parts.push(`<span class="${late ? "overdue" : ""}">${esc(text)}${late ? " · overdue" : ""}</span>`);
   }
   if (t.repeat) parts.push(`<span>↻ ${esc(describeRepeat(t.repeat, t.due))}</span>`);
+  if (t.badRepeat) parts.push(`<span class="overdue">Can't read the repeat "${esc(t.badRepeat)}" — fix it in the Sheet</span>`);
   return parts.length ? `<span class="meta">${parts.join(" &nbsp;")}</span>` : "";
+}
+function isDailyRepeat(t) {
+  const r = t.repeat && parseRepeat(t.repeat);
+  return !!r && r.unit === "day" && r.n === 1;
 }
 const byDue = (a, b) => a.due.localeCompare(b.due) || String(a.title).localeCompare(String(b.title));
 
@@ -687,9 +696,9 @@ function renderToday() {
   const dayIdx = (new Date().getDay() + 6) % 7;
   const dinner = (DATA.meals[DAYS[dayIdx]] || {}).meal;
   const todaysEvents = DATA.events.filter(e => e.date === t);
-  const daily = DATA.tasks.filter(x => x.recurrence === "daily" || (x.repeat === "every 1 day"));
+  const daily = DATA.tasks.filter(x => x.recurrence === "daily" || isDailyRepeat(x));
   // Dated tasks once they're due (overdue first); undated one-offs as before.
-  const oneOff = DATA.tasks.filter(x => !x.completed && x.repeat !== "every 1 day" &&
+  const oneOff = DATA.tasks.filter(x => !x.completed && !isDailyRepeat(x) &&
       (x.due ? x.due <= t : x.recurrence === "once"))
     .sort((a, b) => (a.due || "9") .localeCompare(b.due || "9"));
   const onDeck = DATA.tasks.filter(x => ["weekly", "monthly", "quarterly", "yearly"].includes(x.recurrence) && !x.completed);

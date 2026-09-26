@@ -194,7 +194,7 @@ function getTasks_() {
   const today = today_();
   return rows_('Tasks').map(function (t) {
     const repeat = String(t.repeat || '').trim();
-    if (repeat) {
+    if (parseRepeat_(repeat)) { // an unreadable repeat leaves it a plain task
       // A repeating task moves to its next date when it's done, so "completed"
       // means done today (it can still be unticked until tomorrow).
       const doneToday = dateStr_(t.lastDone) === today;
@@ -209,12 +209,15 @@ function getTasks_() {
         completedBy: doneToday ? (done[t.id + '|' + dateStr_(t.prevDue)] || null) : null,
       };
     }
-    const pk = periodKey_(t.recurrence);
+    // A repeat typed in the Sheet that can't be read: a one-off, flagged so it can be fixed.
+    const recurrence = t.recurrence === 'repeat' ? 'once' : t.recurrence;
+    const pk = periodKey_(recurrence);
     const key = t.id + '|' + pk;
     return {
       id: String(t.id),
       title: t.title,
-      recurrence: t.recurrence,
+      recurrence: recurrence,
+      badRepeat: repeat || undefined,
       due: dateStr_(t.due),
       assignee: t.assignee,
       completed: key in done,
@@ -248,7 +251,7 @@ function toggleTask_(id, by) {
   const tasks = rows_('Tasks');
   const task = tasks.filter(function (t) { return String(t.id) === String(id); })[0];
   if (!task) return;
-  if (String(task.repeat || '').trim()) { toggleRepeat_(task, by); return; }
+  if (parseRepeat_(task.repeat)) { toggleRepeat_(task, by); return; }
   const pk = periodKey_(task.recurrence);
   const existed = removeRowsWhere_('Completions', function (r) {
     return String(r[0]) === String(id) && periodKeys_(r[1]).indexOf(pk) >= 0;
@@ -311,10 +314,12 @@ function parseRepeat_(text) {
   const rule = { n: Math.max(1, Math.min(99, Number(m[1]))), unit: m[2] };
   const on = m[3] || '';
   if (rule.unit === 'week' && on) {
-    rule.days = on.split(/[\s,]+/).map(function (d) { return WEEKDAYS_.indexOf(d.slice(0, 3)); })
-      .filter(function (d, i, all) { return d >= 0 && all.indexOf(d) === i; })
-      .sort();
+    // Every listed day must be a real weekday, or the rule isn't what was meant.
+    const days = on.split(/[\s,]+/).filter(Boolean).map(function (d) { return WEEKDAYS_.indexOf(d.slice(0, 3)); });
+    if (!days.length || days.some(function (d) { return d < 0; })) return null;
+    rule.days = days.filter(function (d, i, all) { return all.indexOf(d) === i; }).sort();
   }
+  if (rule.unit === 'day' && on) return null;
   if ((rule.unit === 'month' || rule.unit === 'year') && on) {
     const p = on.match(/^(\w+)\s+(\w{3})/);
     if (!p || !(p[1] in NTH_) || WEEKDAYS_.indexOf(p[2]) < 0) return null;
