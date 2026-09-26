@@ -1,6 +1,6 @@
 // Service worker: makes the app installable, lets the shell open offline,
 // and shows push notifications.
-const CACHE = "family-hub-v10";
+const CACHE = "family-hub-v11";
 const SHELL = ["./index.html", "./manifest.json", "./favicon.svg", "./favicon-32.png",
   "./apple-touch-icon.png", "./icon-192.png", "./icon-512.png", "./icon-512-maskable.png"];
 self.addEventListener("install", e => {

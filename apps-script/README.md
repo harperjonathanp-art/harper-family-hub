@@ -64,3 +64,22 @@ The meal-plan alert goes once every day has a dinner and the plan has sat
 unchanged for 10 minutes (`MEALS_SETTLE_MIN` in `Notify.gs`). It isn't
 sent to whoever saved the plan in the Hub. A plan changed straight in the
 Sheet goes to everyone.
+
+## Tasks: due dates and repeats
+
+A task can have a due date and a repeat, set in the Hub or typed straight into
+the Tasks tab's `due` and `repeat` columns. Repeats are written the way Apple
+Reminders words them:
+
+| `repeat` | Means |
+|----------|-------|
+| `every 1 week` | Weekly, on the due date's weekday |
+| `every 2 weeks` | Every other week |
+| `every 1 week on sun,tue,thu` | Those days each week |
+| `every 3 months` | Every 3 months, on the due date's day of the month |
+| `every 3 months on 3rd sat` | Every 3 months, on the third Saturday |
+| `every 1 year on last fri` | Yearly, on the last Friday of the due date's month |
+
+Ticking a repeating task moves `due` to its next date, as Reminders does.
+Unticking it the same day puts it back. Tasks with no repeat keep the older
+daily/weekly/monthly reset behaviour.

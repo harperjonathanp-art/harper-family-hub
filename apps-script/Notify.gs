@@ -155,7 +155,8 @@ function taskAdded_(task, by) {
     people = people.filter(function (p) { return p !== by; });
     if (!people.length) return [];
     const ctx = context_(new Date());
-    const recur = task.recurrence && task.recurrence !== 'once' ? ' · ' + task.recurrence : '';
+    const recur = task.repeat ? ' · ' + task.repeat
+      : task.recurrence && task.recurrence !== 'once' ? ' · ' + task.recurrence : '';
     const out = route_(ctx, people, 'assigned', {
       title: (isPerson_(by) ? by : 'Someone') + (family ? ' added a family to-do' : ' added a to-do for you'),
       body: clip_(task.title, 120) + recur,
@@ -245,7 +246,8 @@ function mealsReady_(ctx, data) {
 
 function summaryMsg_(person, data, clock) {
   const open = data.tasks.filter(function (t) {
-    return !t.completed && (t.recurrence === 'daily' || t.recurrence === 'once');
+    // Dated tasks when due or overdue; undated ones as the Today screen shows them.
+    return !t.completed && (t.due ? t.due <= clock.today : (t.recurrence === 'daily' || t.recurrence === 'once'));
   });
   const mine = open.filter(function (t) { return t.assignee === person; });
   const family = open.filter(function (t) { return t.assignee === 'Family' || !t.assignee; });

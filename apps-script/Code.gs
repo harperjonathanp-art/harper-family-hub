@@ -39,7 +39,7 @@ const DAYS_AHEAD = 14; // how far ahead the calendar view looks
 // ======================================================
 
 const TABS = {
-  Tasks:       ['id', 'title', 'recurrence', 'assignee', 'createdAt'],
+  Tasks:       ['id', 'title', 'recurrence', 'assignee', 'createdAt', 'due', 'repeat', 'lastDone', 'prevDue'],
   Completions: ['taskId', 'periodKey', 'completedBy', 'timestamp'],
   Meals:       ['day', 'meal', 'note'],
   CheckIns:    ['id', 'date', 'type', 'answersJson'],
@@ -127,6 +127,8 @@ function json_(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+const HEADERS_CHECKED_ = {}; // tabs whose header row this run has already checked
+
 function sheet_(name) {
   const id = prop_('SHEET_ID');
   if (!id) throw new Error('Add SHEET_ID in Project Settings > Script Properties.');
@@ -139,7 +141,13 @@ function sheet_(name) {
       ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
         .forEach(function (d) { sh.appendRow([d, '', '']); });
     }
+  } else if (!HEADERS_CHECKED_[name]) {
+    // A tab made by an older version lacks newer columns: add their headers.
+    const want = TABS[name];
+    const have = sh.getRange(1, 1, 1, want.length).getValues()[0];
+    want.forEach(function (h, i) { if (have[i] === '') sh.getRange(1, i + 1).setValue(h); });
   }
+  HEADERS_CHECKED_[name] = true;
   return sh;
 }
 
@@ -181,15 +189,33 @@ function getTasks_() {
   const completions = rows_('Completions');
   const done = {};
   completions.forEach(function (c) {
-    done[c.taskId + '|' + c.periodKey] = c.completedBy || true;
+    periodKeys_(c.periodKey).forEach(function (k) { done[c.taskId + '|' + k] = c.completedBy || true; });
   });
+  const today = today_();
   return rows_('Tasks').map(function (t) {
+    const repeat = String(t.repeat || '').trim();
+    if (repeat) {
+      // A repeating task moves to its next date when it's done, so "completed"
+      // means done today (it can still be unticked until tomorrow).
+      const doneToday = dateStr_(t.lastDone) === today;
+      return {
+        id: String(t.id),
+        title: t.title,
+        recurrence: 'repeat',
+        repeat: repeat,
+        due: dateStr_(t.due),
+        assignee: t.assignee,
+        completed: doneToday,
+        completedBy: doneToday ? (done[t.id + '|' + dateStr_(t.prevDue)] || null) : null,
+      };
+    }
     const pk = periodKey_(t.recurrence);
     const key = t.id + '|' + pk;
     return {
       id: String(t.id),
       title: t.title,
       recurrence: t.recurrence,
+      due: dateStr_(t.due),
       assignee: t.assignee,
       completed: key in done,
       completedBy: done[key] || null,
@@ -198,13 +224,18 @@ function getTasks_() {
 }
 
 function addTask_(b) {
+  const repeat = parseRepeat_(b.repeat) ? String(b.repeat).trim().toLowerCase() : '';
+  const due = /^\d{4}-\d{2}-\d{2}$/.test(String(b.due)) ? String(b.due) : (repeat ? today_() : '');
   const task = {
     id: Utilities.getUuid().slice(0, 8),
     title: String(b.title || '').slice(0, 200),
-    recurrence: b.recurrence || 'once',
+    recurrence: repeat ? 'repeat' : (b.recurrence || 'once'),
     assignee: b.assignee || '',
+    due: due,
+    repeat: repeat,
   };
-  sheet_('Tasks').appendRow([task.id, task.title, task.recurrence, task.assignee, new Date().toISOString()]);
+  sheet_('Tasks').appendRow([task.id, task.title, task.recurrence, task.assignee, new Date().toISOString(),
+    task.due, task.repeat, '', '']);
   return task;
 }
 
@@ -217,13 +248,147 @@ function toggleTask_(id, by) {
   const tasks = rows_('Tasks');
   const task = tasks.filter(function (t) { return String(t.id) === String(id); })[0];
   if (!task) return;
+  if (String(task.repeat || '').trim()) { toggleRepeat_(task, by); return; }
   const pk = periodKey_(task.recurrence);
   const existed = removeRowsWhere_('Completions', function (r) {
-    return String(r[0]) === String(id) && String(r[1]) === pk;
+    return String(r[0]) === String(id) && periodKeys_(r[1]).indexOf(pk) >= 0;
   });
   if (!existed) {
     sheet_('Completions').appendRow([String(id), pk, by || '', new Date().toISOString()]);
   }
+}
+
+/**
+ * Ticking a repeating task moves it to its next date, like Apple Reminders.
+ * Unticking it the same day puts it back where it was.
+ */
+function toggleRepeat_(task, by) {
+  const today = today_();
+  const prevDue = dateStr_(task.prevDue);
+  if (dateStr_(task.lastDone) === today && prevDue) {
+    updateRow_('Tasks', task.id, { due: prevDue, lastDone: '', prevDue: '' });
+    removeRowsWhere_('Completions', function (r) {
+      return String(r[0]) === String(task.id) && dateStr_(r[1]) === prevDue;
+    });
+    return;
+  }
+  const due = dateStr_(task.due) || today;
+  updateRow_('Tasks', task.id, { due: nextDue_(task.repeat, due, today), lastDone: today, prevDue: due });
+  sheet_('Completions').appendRow([String(task.id), due, by || '', new Date().toISOString()]);
+}
+
+/** Sets named columns on the row whose first cell is id. */
+function updateRow_(name, id, fields) {
+  const sh = sheet_(name);
+  const vals = sh.getDataRange().getValues();
+  const header = vals[0];
+  for (let i = 1; i < vals.length; i++) {
+    if (String(vals[i][0]) !== String(id)) continue;
+    Object.keys(fields).forEach(function (k) {
+      const c = header.indexOf(k);
+      if (c >= 0) sh.getRange(i + 1, c + 1).setValue(fields[k]);
+    });
+    return true;
+  }
+  return false;
+}
+
+// ---------- repeat rules ----------
+// Written the way Apple Reminders reads them, and stored as text in the Tasks tab:
+//   "every 2 weeks"               "every 1 week on sun,tue,thu"
+//   "every 3 months on 3rd sat"   "every 1 year on last fri"   "every 6 months"
+// A weekly rule without days repeats on the due date's weekday; a monthly or
+// yearly one without "on" keeps the due date's day of the month.
+
+const WEEKDAYS_ = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const NTH_ = { '1st': 1, first: 1, '2nd': 2, second: 2, '3rd': 3, third: 3, '4th': 4, fourth: 4,
+  '5th': 5, fifth: 5, last: -1 };
+
+function parseRepeat_(text) {
+  const m = String(text || '').trim().toLowerCase()
+    .match(/^every\s+(\d+)\s+(day|week|month|year)s?(?:\s+on\s+(.+))?$/);
+  if (!m) return null;
+  const rule = { n: Math.max(1, Math.min(99, Number(m[1]))), unit: m[2] };
+  const on = m[3] || '';
+  if (rule.unit === 'week' && on) {
+    rule.days = on.split(/[\s,]+/).map(function (d) { return WEEKDAYS_.indexOf(d.slice(0, 3)); })
+      .filter(function (d, i, all) { return d >= 0 && all.indexOf(d) === i; })
+      .sort();
+  }
+  if ((rule.unit === 'month' || rule.unit === 'year') && on) {
+    const p = on.match(/^(\w+)\s+(\w{3})/);
+    if (!p || !(p[1] in NTH_) || WEEKDAYS_.indexOf(p[2]) < 0) return null;
+    rule.nth = { k: NTH_[p[1]], wd: WEEKDAYS_.indexOf(p[2]) };
+  }
+  return rule;
+}
+
+/** The first date in the series after the current due date that's also after today. */
+function nextDue_(repeat, due, today) {
+  const rule = parseRepeat_(repeat);
+  if (!rule) return due;
+  let d = stepRepeat_(rule, ymd_(due));
+  for (let guard = 0; iso_(d) <= today && guard < 2000; guard++) d = stepRepeat_(rule, d);
+  return iso_(d);
+}
+
+function stepRepeat_(rule, d) {
+  if (rule.unit === 'day') return addDays_(d, rule.n);
+  if (rule.unit === 'week') {
+    if (!rule.days || !rule.days.length) return addDays_(d, 7 * rule.n);
+    const wd = d.getUTCDay();
+    const later = rule.days.filter(function (x) { return x > wd; });
+    if (later.length) return addDays_(d, later[0] - wd); // later this week
+    return addDays_(d, 7 * rule.n - wd + rule.days[0]);  // first listed day, n weeks on
+  }
+  return addMonths_(d, rule.unit === 'year' ? 12 * rule.n : rule.n, rule.nth);
+}
+
+// Dates as UTC midnights, so time zones and daylight saving can't shift a day.
+function ymd_(s) {
+  const p = String(s).split('-').map(Number);
+  return new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+}
+function iso_(d) { return d.toISOString().slice(0, 10); }
+function addDays_(d, n) { return new Date(d.getTime() + n * 86400000); }
+function daysIn_(y, m) { return new Date(Date.UTC(y, m + 1, 0)).getUTCDate(); }
+
+function addMonths_(d, months, nth) {
+  const total = d.getUTCMonth() + months;
+  const y = d.getUTCFullYear() + Math.floor(total / 12), m = ((total % 12) + 12) % 12;
+  if (nth) return nthWeekday_(y, m, nth.k, nth.wd);
+  return new Date(Date.UTC(y, m, Math.min(d.getUTCDate(), daysIn_(y, m))));
+}
+
+/** The kth (or last, k = -1) weekday wd of a month; a missing 5th falls back to the last. */
+function nthWeekday_(y, m, k, wd) {
+  const len = daysIn_(y, m);
+  if (k > 0) {
+    let day = 1 + (wd - new Date(Date.UTC(y, m, 1)).getUTCDay() + 7) % 7 + (k - 1) * 7;
+    if (day > len) day -= 7;
+    return new Date(Date.UTC(y, m, day));
+  }
+  return new Date(Date.UTC(y, m, len - (new Date(Date.UTC(y, m, len)).getUTCDay() - wd + 7) % 7));
+}
+
+function today_() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+/**
+ * A stored period key as the text it was written as. Sheets turns "2026-09-26"
+ * (daily) and "2026-09" (monthly) into date cells, so a date gives both forms.
+ */
+function periodKeys_(v) {
+  if (!(v instanceof Date)) return [String(v)];
+  const tz = Session.getScriptTimeZone();
+  return [Utilities.formatDate(v, tz, 'yyyy-MM-dd'), Utilities.formatDate(v, tz, 'yyyy-MM')];
+}
+
+/** Sheets turns typed dates into date cells; read them back as yyyy-MM-dd. */
+function dateStr_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return v ? String(v).slice(0, 10) : '';
 }
 
 function removeRowsWhere_(name, predicate) {
