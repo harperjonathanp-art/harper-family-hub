@@ -466,8 +466,8 @@ const cfg = {
 };
 
 /* ============ networking ============ */
-async function apiGet(action) {
-  const r = await fetch(cfg.api + "?action=" + (action || "all") + "&pin=" + encodeURIComponent(cfg.pin));
+async function apiGet(action, withReminders) {
+  const r = await fetch(cfg.api + "?action=" + (action || "all") + "&pin=" + encodeURIComponent(cfg.pin) + (withReminders ? "&reminders=1" : ""));
   return r.json();
 }
 async function apiPost(body) {
@@ -480,10 +480,11 @@ async function refresh(quiet) {
   if (!cfg.api || !cfg.pin) { showSetup(); return; }
   if (!quiet) note("Syncing…");
   try {
-    const d = await apiGet();
+    const d = await apiGet("all", REM.show);
     if (!d.ok) { note(d.error === "bad_pin" ? "Wrong PIN — check Settings" : "Sync error"); return; }
     DATA = { tasks: d.tasks || [], meals: d.meals || {}, events: d.events || [], checkins: d.checkins || [],
-             groceries: d.groceries }; // undefined until the backend has the grocery list
+             groceries: d.groceries, // undefined until the backend has the grocery list
+             reminders: REM.show ? d.reminders : undefined }; // never kept on a device that hides them
     localStorage.setItem("fd_cache", JSON.stringify(DATA));
     note("Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
     if (hasUnsavedEdits()) { note("Synced — your unsaved edits are kept"); return; }
@@ -711,6 +712,8 @@ function renderToday() {
   h += `<h2>Today's schedule</h2>`;
   h += todaysEvents.length ? `<div class="block">${todaysEvents.map(eventRow).join("")}</div>`
                            : `<div class="block"><div class="empty">Nothing on the calendar today.</div></div>`;
+
+  h += renderTodayReminders();
 
   h += `<h2>Daily rhythm</h2>`;
   h += daily.length ? `<div class="block">${daily.map(taskRow).join("")}</div>`
@@ -976,8 +979,105 @@ function renderTasks() {
       <div class="block">${group.map(taskRow).join("")}</div>`;
   });
   if (!DATA.tasks.length) h += `<div class="block"><div class="empty">No tasks yet — add the first one above.</div></div>`;
+  return h + renderReminderLists();
+}
+/* ----- Jon's Apple Reminders -----
+   Read-only. The backend reads the snapshot email Jon's iPhone sends each
+   morning and replaces its copy with every new one, so a reminder ticked off
+   on the phone leaves here at the next sync. Nothing here goes back to Apple
+   Reminders. Rows are never merged or deduplicated: titles repeat. */
+const REM = {
+  get show() { const v = localStorage.getItem("fd_rem_show"); return v == null ? ["Jon", "Maggie"].includes(cfg.user) : v === "1"; },
+  get hidden() { try { return JSON.parse(localStorage.getItem("fd_rem_hidden") || "[]"); } catch (e) { return []; } },
+  open: new Set(), // lists the reader has expanded, so a refresh doesn't fold them
+};
+function reminderItems() {
+  const rm = DATA.reminders;
+  return rm && Array.isArray(rm.items) ? rm.items.filter(r => !REM.hidden.includes(r.list)) : [];
+}
+function remMinutes(t) {
+  const m = /^(\d+):(\d+) ([AP]M)$/.exec(t || "");
+  return m ? (Number(m[1]) % 12 + (m[3] === "PM" ? 12 : 0)) * 60 + Number(m[2]) : -1;
+}
+const byRemDue = (a, b) => a.due.localeCompare(b.due) || remMinutes(a.time) - remMinutes(b.time);
+function remStamp(rm) {
+  return new Date(rm.generated).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+/* Says how fresh the list is. Yesterday's snapshot is shown, but never as current. */
+function remStatus(rm) {
+  if (rm.status === "stale") return `<div class="tiny" style="color:var(--warn);margin:var(--space-2) 0">Not today's list — the iPhone last sent one ${esc(remStamp(rm))}. Showing that.</div>`;
+  if (rm.status === "fresh") return `<div class="tiny" style="margin:var(--space-2) 0">From Jon's iPhone, ${esc(remStamp(rm))}.</div>`;
+  return "";
+}
+function remEmpty(rm) {
+  if (rm.status === "none") return `<div class="empty">Nothing synced yet — Jon's iPhone emails its reminders each morning.</div>`;
+  if (rm.status === "error") return `<div class="empty">Couldn't read the reminders email. Check the Apps Script log.</div>`;
+  return "";
+}
+function reminderRow(r) {
+  const due = dueInfo(r.due), parts = [`<span>${esc(r.list)}</span>`];
+  if (due) {
+    const late = due.days < 0;
+    parts.push(`<span class="${late ? "overdue" : ""}">${esc(due.text)}${r.time ? " · " + esc(r.time) : ""}${late ? " · overdue" : ""}</span>`);
+  } else if (r.dueText) parts.push(`<span>${esc(r.dueText)}</span>`);
+  if (r.priority && r.priority !== "None") parts.push(`<span>${esc(r.priority)} priority</span>`);
+  if (r.notes) parts.push(`<span>${esc(r.notes.length > 120 ? r.notes.slice(0, 117) + "…" : r.notes)}</span>`);
+  return `<div class="task">${chip("Jon")}
+    <span class="ttl">${esc(r.title)}<span class="meta">${parts.join(" &nbsp;")}</span></span></div>`;
+}
+function renderTodayReminders() {
+  const rm = DATA.reminders;
+  if (!REM.show || !rm) return "";
+  const today = todayStr(), due = reminderItems().filter(r => r.due && r.due <= today).sort(byRemDue);
+  let h = `<h2>Jon's reminders${due.length ? `<span class="hint">${due.length} due</span>` : ""}</h2>`;
+  if (!due.length && remEmpty(rm)) return h + `<div class="block">${remEmpty(rm)}</div>`;
+  h += due.length ? `<div class="block">${due.map(reminderRow).join("")}</div>`
+                  : `<div class="block"><div class="empty good">Nothing due today.</div></div>`;
+  return h + remStatus(rm);
+}
+function renderReminderLists() {
+  const rm = DATA.reminders;
+  if (!REM.show || !rm) return "";
+  const items = reminderItems(), lists = [];
+  items.forEach(r => { if (!lists.includes(r.list)) lists.push(r.list); });
+  let h = `<h2>Jon's reminders<span class="hint">${items.length} open · read-only</span></h2>`;
+  if (!items.length) return h + `<div class="block">${remEmpty(rm) || `<div class="empty good">Nothing open.</div>`}</div>` + remStatus(rm);
+  // Dated ones first, soonest first; undated keep the order the phone listed them.
+  h += lists.map(l => {
+    const mine = items.filter(r => r.list === l);
+    const rows = mine.filter(r => r.due).sort(byRemDue).concat(mine.filter(r => !r.due));
+    return `<details class="later" data-list="${esc(l)}" ontoggle="remToggle(this)" ${REM.open.has(l) ? "open" : ""}>
+      <summary>${esc(l)} · ${mine.length}</summary><div class="block">${rows.map(reminderRow).join("")}</div></details>`;
+  }).join("");
+  return h + remStatus(rm);
+}
+function remToggle(el) { el.open ? REM.open.add(el.dataset.list) : REM.open.delete(el.dataset.list); }
+
+function remSettingsHtml() {
+  const rm = DATA.reminders, lists = rm && Array.isArray(rm.lists) ? rm.lists : [];
+  const row = (id, attrs, label, hint) => `<div class="nrow"><label class="ncheck"><input type="checkbox" ${id} ${attrs}>
+    <span class="ttl">${esc(label)}${hint ? `<span class="tiny">${esc(hint)}</span>` : ""}</span></label></div>`;
+  let h = row(`onchange="setRemShow(this.checked)"`, REM.show ? "checked" : "", "Show Jon's reminders on this device",
+    "Read from the morning email Jon's iPhone sends. Chosen per device. Lists the backend hides (Work, unless changed) are never sent.");
+  if (REM.show && lists.length) h += lists.map(l =>
+    row(`data-list="${esc(l)}" onchange="setRemList(this.dataset.list, this.checked)"`, REM.hidden.includes(l) ? "" : "checked", l, "Show this list here")).join("");
+  else if (REM.show && rm === undefined) h += `<div class="empty">Waiting for the backend — paste the latest Apps Script files and publish a new version.</div>`;
   return h;
 }
+function redrawRemSettings() { const b = document.getElementById("remBox"); if (b) b.innerHTML = `<div class="block">${remSettingsHtml()}</div>`; }
+async function setRemShow(on) {
+  localStorage.setItem("fd_rem_show", on ? "1" : "0");
+  if (!on) { DATA.reminders = undefined; localStorage.setItem("fd_cache", JSON.stringify(DATA)); render(); }
+  redrawRemSettings();
+  if (on) { await refresh(true); render(); redrawRemSettings(); }
+}
+function setRemList(list, show) {
+  const hidden = REM.hidden.filter(l => l !== list);
+  if (!show) hidden.push(list);
+  localStorage.setItem("fd_rem_hidden", JSON.stringify(hidden));
+  render();
+}
+
 function isoPlus(iso, days) {
   const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + days);
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -1164,6 +1264,8 @@ function openSettings() {
       <button class="ghost" onclick="closeOverlay()">Cancel</button>
     </div>
     <div class="tiny" style="margin-top:var(--space-5)">Data refreshes every 60 seconds and whenever the app is reopened.</div>
+    <h2>Reminders<span class="hint">on this device</span></h2>
+    <div id="remBox"><div class="block">${remSettingsHtml()}</div></div>
     <h2>Notifications<span class="hint">for ${esc(cfg.user)}</span></h2>
     <div id="notifyBox"><div class="empty">Loading…</div></div>`);
   loadNotify();

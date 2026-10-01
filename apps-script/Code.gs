@@ -9,6 +9,7 @@
  * SETUP (see README.md next to this file):
  *  1. Project Settings > Script Properties > add FAMILY_PIN, SHEET_ID and
  *     the CAL_* calendar IDs (calendars must be shared with this account).
+ *     Jon's Reminders come from Reminders.gs (own setup steps).
  *  2. Deploy > New deployment > Web app > Execute as: Me > Access: Anyone.
  *  3. Notifications live in Notify.gs, with their own setup steps.
  */
@@ -54,7 +55,7 @@ function doGet(e) {
   const p = (e && e.parameter) || {};
   if (!pinOk_(p.pin)) return json_({ ok: false, error: 'bad_pin' });
   if (p.action === 'notify') return json_(notifyInfo_());
-  return json_({
+  const out = {
     ok: true,
     now: new Date().toISOString(),
     tasks: getTasks_(),
@@ -62,7 +63,12 @@ function doGet(e) {
     events: getEvents_(),
     checkins: getCheckins_(10),
     groceries: getGroceries_(),
-  });
+  };
+  // Jon's Apple Reminders go only to a device that asks (its settings say to show them).
+  if (p.reminders === '1') {
+    try { out.reminders = getReminders_(); } catch (err) { out.reminders = { status: 'error', items: [], lists: [] }; }
+  }
+  return json_(out);
 }
 
 function doPost(e) {

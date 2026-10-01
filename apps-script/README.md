@@ -8,7 +8,8 @@ Change it here, then paste it into the editor and publish a new version.
 |------|--------------|
 | `Code.gs` | The web app: tasks, meals, calendar, check-ins |
 | `Notify.gs` | Notifications: what to send, to whom, and when |
-| `appsscript.json` | Project settings (time zone, web app access) |
+| `Reminders.gs` | Jon's Apple Reminders, read from his daily snapshot email |
+| `appsscript.json` | Project settings (time zone, web app access, the permissions the script asks for, the Gmail service) |
 
 ## Script Properties
 
@@ -26,6 +27,7 @@ Anything private stays out of this public repo. Add these under
 | `PUSH_WORKER_URL`  | The push relay's address, e.g. `https://harper-family-hub.<name>.workers.dev` |
 | `PUSH_SECRET`      | The shared secret from `push-worker/keys.html`         |
 | `VAPID_PUBLIC_KEY` | The public key from `push-worker/keys.html`            |
+| `REMINDERS_HIDE_LISTS` | Optional. Reminders lists the Hub never receives, comma separated. Left unset it hides `Work` (student names). Set it to a different list to change that, e.g. `Work, Finance` |
 
 A calendar whose property is missing is left out of the Hub.
 `NOTIFY_STATE` appears there too once notifications run. It's the
@@ -64,6 +66,70 @@ The meal-plan alert goes once every day has a dinner and the plan has sat
 unchanged for 10 minutes (`MEALS_SETTLE_MIN` in `Notify.gs`). It isn't
 sent to whoever saved the plan in the Hub. A plan changed straight in the
 Sheet goes to everyone.
+
+## Reminders
+
+Apple Reminders has no public API and lives only on Jon's iPhone, so the Hub
+reads the **REMINDERS SNAPSHOT** email an iPhone Shortcuts automation sends
+(daily around 4:40 AM Eastern, plus any manual runs). `Reminders.gs` finds it
+with the Gmail API, **read-only**, and keeps the newest snapshot.
+
+- **One way, phone to Hub.** Nothing flows back to Apple Reminders, and the Hub
+  never writes to Gmail. Each snapshot is every open reminder, so it replaces
+  the last one: what was ticked off or deleted on the phone leaves the Hub at the
+  next sync.
+- **No credentials in the repo.** The script runs as the account that deployed
+  it, so Google's own consent screen grants the `gmail.readonly` permission.
+  Snapshot bodies are never logged or sent anywhere but the Hub, and the saved
+  copy lives only in Script Properties.
+- **Freshness.** The first line of the email says when it was generated. If the
+  newest snapshot is not from today (Eastern), the Hub keeps showing it, says
+  when it was generated, and never calls it current.
+- **Which email.** `subject:"REMINDERS SNAPSHOT" from:me newer_than:1d`. The
+  `from:me` stops anyone else from mailing the same subject line onto the Hub.
+  If the Shortcut ever sends from another address, change `REMINDERS_QUERY`.
+
+### Setup
+
+1. Replace `Code.gs` and `appsscript.json` with this folder's copies, and add a
+   script file named `Reminders` (**+ → Script**) with `Reminders.gs` pasted in.
+   To edit `appsscript.json`, turn on **Project Settings → Show
+   "appsscript.json" manifest file in editor**. Its `oauthScopes` list names every
+   permission the project uses, Gmail read-only included.
+2. Check **Services** (the **+** beside it) lists **Gmail API** (v1). The
+   manifest adds it; add it by hand if it isn't there.
+3. Pick **setupReminders** in the function menu and press **Run**. Google asks
+   for permission once ("View your email messages and settings" is the
+   read-only Gmail permission). It then sets a daily timer shortly after 4:45 AM and an
+   hourly one for manual re-runs, and syncs once. The execution log says what
+   it found, for example `Reminders: updated (snapshot 10/1/26, 9:40 AM, 42 open)`.
+   Run it **before** publishing: a web app can't ask for new permissions itself.
+4. Publish a new version (above).
+5. On each device, open ⚙ Settings → **Reminders** and choose what that device shows.
+
+If the log says `no_email`, check the Gmail filter still labels
+"Reminders Snapshot" and that the Shortcut ran. A filter that skips the inbox is
+fine: the search covers all mail.
+
+### Who sees what
+
+Reminders go only to a device that asks for them. A device belonging to Jon or
+Maggie shows them until switched off; Clayton's and Heidi's devices don't.
+That is a per-device choice in Settings, plus a per-list one, and a family
+member can change it on their own device, so it is a courtesy, not a lock.
+What *is* a lock is `REMINDERS_HIDE_LISTS`: those lists never leave the script.
+`Work` is hidden by default because its reminders name students. The email also
+carries financial reminders (HOA dues, tithe); to keep a whole list off every
+phone, add it to `REMINDERS_HIDE_LISTS`.
+
+New lists appear on their own, since list names are free text.
+
+### What the Hub shows
+
+**Today** lists reminders due today or overdue. **Tasks** lists every open
+reminder under its list, dated ones first, then undated. They are read-only.
+Titles repeat in Reminders ("Counters" more than once), so the Hub never merges
+or de-duplicates them.
 
 ## Tasks: due dates and repeats
 
