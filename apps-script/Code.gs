@@ -99,6 +99,7 @@ function doPost(e) {
       case 'pushUnsubscribe': reply = pushUnsubscribe_(body.endpoint); break;
       case 'savePrefs':       reply = savePrefs_(body.person, body.prefs); break;
       case 'pushTest':        outbox = [testMessage_(body.person)]; reply = { ok: true }; break;
+      case 'tickReminder':    tickReminder_(body.key, body.on === true, body.by); reply = { ok: true }; break;
       default: return json_({ ok: false, error: 'unknown_action' });
     }
   } finally {

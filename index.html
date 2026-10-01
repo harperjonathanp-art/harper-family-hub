@@ -1017,19 +1017,39 @@ function remEmpty(rm) {
 function reminderRow(r) {
   const due = dueInfo(r.due), parts = [`<span>${esc(r.list)}</span>`];
   if (due) {
-    const late = due.days < 0;
+    const late = due.days < 0 && !r.ticked;
     parts.push(`<span class="${late ? "overdue" : ""}">${esc(due.text)}${r.time ? " · " + esc(r.time) : ""}${late ? " · overdue" : ""}</span>`);
   } else if (r.dueText) parts.push(`<span>${esc(r.dueText)}</span>`);
   if (r.priority && r.priority !== "None") parts.push(`<span>${esc(r.priority)} priority</span>`);
   if (r.notes) parts.push(`<span>${esc(r.notes.length > 120 ? r.notes.slice(0, 117) + "…" : r.notes)}</span>`);
-  return `<div class="task">${chip("Jon")}
+  if (r.ticked) parts.push(`<span>Ticked here${r.tickedBy ? " by " + esc(r.tickedBy) : ""} — tick it on the iPhone too</span>`);
+  return `<div class="task ${r.ticked ? "done" : ""}">
+    <input type="checkbox" ${r.ticked ? "checked" : ""} data-key="${esc(r.key)}" onchange="tickReminder(this.dataset.key, this.checked)" aria-label="${esc(r.title)}">
+    ${chip("Jon")}
     <span class="ttl">${esc(r.title)}<span class="meta">${parts.join(" &nbsp;")}</span></span></div>`;
 }
+/* A tick here hides a reminder on every device until the next snapshot from
+   the iPhone settles it: gone from the snapshot, it was done there; still in
+   one made after the tick, it comes back. Nothing goes back to the iPhone. */
+async function tickReminder(key, on) {
+  const r = reminderItems().find(x => x.key === key);
+  if (!r) return;
+  r.ticked = on; r.tickedBy = on ? cfg.user : "";
+  localStorage.setItem("fd_cache", JSON.stringify(DATA));
+  render();
+  note("Saving…");
+  try {
+    const d = await apiPost({ action: "tickReminder", key, on, by: cfg.user });
+    note(d.ok ? "Saved ✓" : "Save failed");
+  } catch (e) { note("Save failed — offline?"); }
+}
+const openFirst = (a, b) => !!a.ticked - !!b.ticked;
 function renderTodayReminders() {
   const rm = DATA.reminders;
   if (!REM.show || !rm) return "";
-  const today = todayStr(), due = reminderItems().filter(r => r.due && r.due <= today).sort(byRemDue);
-  let h = `<h2>Jon's reminders${due.length ? `<span class="hint">${due.length} due</span>` : ""}</h2>`;
+  const today = todayStr(), due = reminderItems().filter(r => r.due && r.due <= today).sort(byRemDue).sort(openFirst);
+  const open = due.filter(r => !r.ticked).length;
+  let h = `<h2>Jon's reminders${open ? `<span class="hint">${open} due</span>` : ""}</h2>`;
   if (!due.length && remEmpty(rm)) return h + `<div class="block">${remEmpty(rm)}</div>`;
   h += due.length ? `<div class="block">${due.map(reminderRow).join("")}</div>`
                   : `<div class="block"><div class="empty good">Nothing due today.</div></div>`;
@@ -1040,14 +1060,14 @@ function renderReminderLists() {
   if (!REM.show || !rm) return "";
   const items = reminderItems(), lists = [];
   items.forEach(r => { if (!lists.includes(r.list)) lists.push(r.list); });
-  let h = `<h2>Jon's reminders<span class="hint">${items.length} open · read-only</span></h2>`;
+  let h = `<h2>Jon's reminders<span class="hint">${items.filter(r => !r.ticked).length} open · the iPhone has the final say</span></h2>`;
   if (!items.length) return h + `<div class="block">${remEmpty(rm) || `<div class="empty good">Nothing open.</div>`}</div>` + remStatus(rm);
   // Dated ones first, soonest first; undated keep the order the phone listed them.
   h += lists.map(l => {
     const mine = items.filter(r => r.list === l);
-    const rows = mine.filter(r => r.due).sort(byRemDue).concat(mine.filter(r => !r.due));
+    const rows = mine.filter(r => r.due).sort(byRemDue).concat(mine.filter(r => !r.due)).sort(openFirst);
     return `<details class="later" data-list="${esc(l)}" ontoggle="remToggle(this)" ${REM.open.has(l) ? "open" : ""}>
-      <summary>${esc(l)} · ${mine.length}</summary><div class="block">${rows.map(reminderRow).join("")}</div></details>`;
+      <summary>${esc(l)} · ${mine.filter(r => !r.ticked).length}</summary><div class="block">${rows.map(reminderRow).join("")}</div></details>`;
   }).join("");
   return h + remStatus(rm);
 }

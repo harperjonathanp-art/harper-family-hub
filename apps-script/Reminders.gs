@@ -33,6 +33,8 @@ const REMINDERS_CHUNK = 3000;             // Script Properties hold 9 KB a value
 // ======================================================
 
 const REM_META_ = 'REMINDERS_META';
+const REM_TICKS_ = 'REMINDERS_TICKS';     // reminders ticked in the Hub: { key: { at, by } }
+const REM_TICKS_MAX_ = 300;
 const REM_DATA_ = 'REMINDERS_DATA_';      // + chunk number
 
 // ---------- setup & timers ----------
@@ -228,8 +230,50 @@ function storeSnapshot_(snap) {
     syncedAt: Date.now(), attemptedAt: Date.now(), error: '',
   };
   chunks[REM_META_] = JSON.stringify(meta);
+  chunks[REM_TICKS_] = JSON.stringify(settleTicks_(loadTicks_(), snap));
   props.setProperties(chunks, false);
   for (let i = n; i < old; i++) props.deleteProperty(REM_DATA_ + i);
+}
+
+// ---------- ticks made in the Hub ----------
+// A tick in the Hub only hides a reminder until the phone has its say. The
+// phone stays the source of truth: each new snapshot settles every tick.
+
+/**
+ * Which ticks survive a new snapshot. Gone from it: done on the phone, so the
+ * tick has served its purpose. Still in a snapshot made after the tick: not
+ * done on the phone, so it comes back. Still in a snapshot made before the
+ * tick (the phone hasn't sent one since): keep hiding it.
+ */
+function settleTicks_(ticks, snap) {
+  const present = {};
+  snap.items.forEach(function (r) { present[r.key] = true; });
+  const kept = {};
+  Object.keys(ticks).forEach(function (k) {
+    if (present[k] && ticks[k].at > snap.generated) kept[k] = ticks[k];
+  });
+  return kept;
+}
+
+function loadTicks_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(REM_TICKS_) || '{}'); }
+  catch (err) { return {}; }
+}
+
+/** From the Hub: tick (or untick) one reminder the Hub can see, by its key. */
+function tickReminder_(key, on, by) {
+  key = String(key || '');
+  const meta = loadMeta_();
+  const visible = visibleItems_(meta).some(function (r) { return r.key === key; });
+  const ticks = loadTicks_();
+  if (on && visible) ticks[key] = { at: Date.now(), by: String(by || '').slice(0, 20) };
+  else delete ticks[key];
+  const keys = Object.keys(ticks);
+  if (keys.length > REM_TICKS_MAX_) {
+    keys.sort(function (a, b) { return ticks[a].at - ticks[b].at; })
+      .slice(0, keys.length - REM_TICKS_MAX_).forEach(function (k) { delete ticks[k]; });
+  }
+  PropertiesService.getScriptProperties().setProperty(REM_TICKS_, JSON.stringify(ticks));
 }
 
 function loadMeta_() {
@@ -259,6 +303,13 @@ function loadItems_(meta) {
 
 // ---------- what the Hub is sent ----------
 
+/** The snapshot minus the lists named in REMINDERS_HIDE_LISTS (default Work). */
+function visibleItems_(meta) {
+  const hide = String(prop_('REMINDERS_HIDE_LISTS') == null ? REMINDERS_HIDE_DEFAULT : prop_('REMINDERS_HIDE_LISTS'))
+    .split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+  return loadItems_(meta).filter(function (r) { return hide.indexOf(r.list.toLowerCase()) < 0; });
+}
+
 /**
  * The Hub's view of the snapshot. Lists named in REMINDERS_HIDE_LISTS are left
  * out here, so a hidden list never reaches any phone. `stale` means the newest
@@ -275,9 +326,12 @@ function getReminders_() {
   }
   if (!meta.generated) return { status: meta.error ? 'error' : 'none', items: [], lists: [] };
 
-  const hide = String(prop_('REMINDERS_HIDE_LISTS') == null ? REMINDERS_HIDE_DEFAULT : prop_('REMINDERS_HIDE_LISTS'))
-    .split(',').map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
-  const items = loadItems_(meta).filter(function (r) { return hide.indexOf(r.list.toLowerCase()) < 0; });
+  const ticks = loadTicks_();
+  const items = visibleItems_(meta).map(function (r) {
+    const t = ticks[r.key];
+    if (t && t.at > meta.generated) { r.ticked = true; r.tickedBy = t.by; }
+    return r;
+  });
   const lists = [];
   items.forEach(function (r) { if (lists.indexOf(r.list) < 0) lists.push(r.list); });
   return {
