@@ -127,8 +127,12 @@ New lists appear on their own, since list names are free text.
 ### What the Hub shows
 
 **Today** lists reminders due today or overdue. **Tasks** lists every open
-reminder under its list, dated ones first, then undated. They are read-only.
-Titles repeat in Reminders ("Counters" more than once), so the Hub never merges
+reminder under its list, dated ones first, then undated. A tick in the
+Hub hides a reminder on every device, but the iPhone has the final say. The
+tick lasts until the next snapshot. If the reminder is gone from it, it was
+done on the phone and the tick is dropped. If it is still there in a snapshot
+made after the tick, it comes back, as a nudge to tick it on the phone. Nothing
+goes back to Apple Reminders. Titles repeat in Reminders ("Counters" more than once), so the Hub never merges
 or de-duplicates them.
 
 ## Tasks: due dates and repeats
