@@ -18,21 +18,21 @@
 // A calendar whose property is missing is simply skipped.
 const CALENDARS = [
   // Jon — personal
-  { prop: 'CAL_JON', name: 'Jon', color: '#2C4A63' },
+  { prop: 'CAL_JON', name: 'Jon', color: '#4285F4' },
 
   // Maggie — her primary calendar ID is her Google account email.
   // She must share it with the account running this script.
-  { prop: 'CAL_MAGGIE', name: 'Maggie', color: '#B98A2E' },
+  { prop: 'CAL_MAGGIE', name: 'Maggie', color: '#009688' },
 
   // Family — shared calendar for kids' activities, church, etc.
   // ID looks like xxxxxxxx@group.calendar.google.com
   // (Google Calendar > Settings > [calendar] > Integrate calendar > Calendar ID)
-  { prop: 'CAL_FAMILY', name: 'Family', color: '#6B8F71' },
+  { prop: 'CAL_FAMILY', name: 'Family', color: '#F6BF26' },
 
-  // MCHS — school calendar, shown in Mill Creek maroon.
+  // MCHS — school calendar.
   // If it's a public/subscribed calendar, its ID is under the same
   // Integrate calendar setting once it appears in your calendar list.
-  { prop: 'CAL_MCHS', name: 'MCHS', color: '#862633' },
+  { prop: 'CAL_MCHS', name: 'MCHS', color: '#C5B783' },
 ];
 
 const DAYS_AHEAD = 14; // how far ahead the calendar view looks
