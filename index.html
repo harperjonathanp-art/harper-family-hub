@@ -1341,7 +1341,7 @@ function openSettings() {
 /* ============ notifications ============ */
 let NOTIFY = null; // { publicKey, ready, lastTick, parents, prefs, devices } from the server
 const NOTIFY_ROWS = [
-  ["summary", "Morning summary", "Your to-dos, the kids', today's calendar and dinner", "time"],
+  ["summary", "Morning summary", "Your to-dos, the kids', today's calendar and dinner", "time"], // Jon's adds his reminders
   ["dinner", "Dinner nudge", "Only if tonight's dinner isn't planned", "time"],
   ["huddle", "Family Huddle reminder", "Skipped once this week's huddle is saved", "day"],
   ["couples", "Weekly Check-In reminder", "Skipped once this week's check-in is saved", "day"],
@@ -1368,6 +1368,7 @@ async function loadNotify() {
   const rows = NOTIFY_ROWS.filter(([k]) => k !== "couples" || NOTIFY.parents.includes(cfg.user)).map(([k, label, hint, when]) => {
     const day = when === "day" ? `<select id="n-${k}-day" aria-label="${esc(label)} day">${DAYS.map(d =>
       `<option ${d === p[k].day ? "selected" : ""}>${d}</option>`).join("")}</select>` : "";
+    if (k === "summary" && cfg.user === "Jon") hint = hint.replace(" and dinner", ", dinner and your reminders");
     return `<div class="nrow">
       <label class="ncheck"><input type="checkbox" id="n-${k}-on" ${p[k].on ? "checked" : ""}>
         <span class="ttl">${label}<span class="tiny">${hint}</span></span></label>

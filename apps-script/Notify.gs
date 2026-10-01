@@ -263,9 +263,12 @@ function summaryMsg_(person, data, clock) {
       : 'nothing today'),
   ];
   if (mine.length) lines.push('Yours: ' + list_(mine.map(function (t) { return t.title; })));
+  // Jon's Apple Reminders go in his summary only (Reminders.gs).
+  const reminders = typeof remindersLine_ === 'function' && person === REMINDERS_OWNER ? remindersLine_(clock.today) : null;
+  if (reminders) lines.push(reminders);
   if (kids.length) lines.push('Kids: ' + list_(kids.map(function (t) { return t.title + ' (' + t.assignee + ')'; })));
   if (family.length) lines.push('Family: ' + list_(family.map(function (t) { return t.title; })));
-  if (!mine.length && !kids.length && !family.length) lines.push('No to-dos today.');
+  if (!mine.length && !kids.length && !family.length && !reminders) lines.push('No to-dos today.');
   return { title: 'Today · ' + clock.label, body: lines.join('\n'), tag: 'summary', view: 'today' };
 }
 

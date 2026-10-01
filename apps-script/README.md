@@ -57,7 +57,8 @@ does the Web Push encryption Apps Script can't. Set that up first (see
    **Turn on notifications**, and **Send a test**.
 
 What gets sent, and when, is set per person in the Hub's Settings: the
-morning summary, the dinner nudge, the Family Huddle and Weekly Check-In
+morning summary (Jon's also lists his Apple Reminders that are due today or
+overdue, minus any ticked in the Hub; nobody else's does), the dinner nudge, the Family Huddle and Weekly Check-In
 reminders, new to-dos, the meal plan being ready, and quiet hours. Quiet
 hours hold back new to-do and meal-plan alerts until they end. The
 scheduled reminders go at the times each person picks.
