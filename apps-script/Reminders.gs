@@ -46,7 +46,8 @@ function setupReminders() {
   ScriptApp.newTrigger('syncReminders').timeBased().atHour(4).nearMinute(45).everyDays(1).create();
   ScriptApp.newTrigger('syncReminders').timeBased().everyHours(1).create();
   const r = syncReminders();
-  Logger.log('Reminders: ' + r.status + (r.generatedText ? ' (snapshot ' + r.generatedText + ', ' + r.count + ' open)' : ''));
+  Logger.log('Reminders: ' + r.status + (r.generatedText ? ' (snapshot ' + r.generatedText + ', ' + r.count + ' open)' : '') +
+    (r.message ? ' — ' + r.message : ''));
 }
 
 /** Timer entry point. Never throws: a failed check leaves the last good snapshot alone. */
@@ -56,8 +57,9 @@ function syncReminders() {
   try {
     return syncReminders_();
   } catch (err) {
-    saveMeta_({ attemptedAt: Date.now(), error: String(err && err.message || err).slice(0, 200) });
-    return { status: 'error' };
+    const message = String(err && err.message || err).slice(0, 200); // the error text only, never a snapshot
+    saveMeta_({ attemptedAt: Date.now(), error: message });
+    return { status: 'error', message: message };
   } finally {
     lock.releaseLock();
   }
