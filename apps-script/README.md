@@ -126,8 +126,10 @@ New lists appear on their own, since list names are free text.
 
 ### What the Hub shows
 
-**Today** lists reminders due today or overdue. **Tasks** lists every open
-reminder under its list, dated ones first, then undated. A tick in the
+Reminders sit among the Hub's own tasks, each row naming its list. On
+**Today**, those due today or overdue join the to-dos. On **Tasks**, dated
+ones sort into Overdue, Today, Next 7 days and Later; undated ones get a
+folded section per list, at the bottom. A tick in the
 Hub hides a reminder on every device, but the iPhone has the final say. The
 tick lasts until the next snapshot. If the reminder is gone from it, it was
 done on the phone and the tick is dropped. If it is still there in a snapshot

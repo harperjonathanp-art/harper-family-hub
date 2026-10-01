@@ -713,14 +713,15 @@ function renderToday() {
   h += todaysEvents.length ? `<div class="block">${todaysEvents.map(eventRow).join("")}</div>`
                            : `<div class="block"><div class="empty">Nothing on the calendar today.</div></div>`;
 
-  h += renderTodayReminders();
-
   h += `<h2>Daily rhythm</h2>`;
   h += daily.length ? `<div class="block">${daily.map(taskRow).join("")}</div>`
                     : `<div class="block"><div class="empty">No daily tasks yet — add some in Tasks.</div></div>`;
 
-  if (oneOff.length) h += `<h2>To-dos</h2><div class="block">${oneOff.map(taskRow).join("")}</div>`;
-  else h += `<h2>To-dos</h2><div class="block"><div class="empty good">Nothing outstanding today.</div></div>`;
+  // Jon's reminders due today or overdue join the to-dos, ticked ones last.
+  const rems = reminderItems().filter(r => r.due && r.due <= t);
+  const todos = mixRows(oneOff, rems);
+  if (todos.length) h += `<h2>To-dos</h2>${remStale()}<div class="block">${todos.join("")}</div>`;
+  else h += `<h2>To-dos</h2>${remStale()}<div class="block"><div class="empty good">Nothing outstanding today.</div></div>`;
   if (onDeck.length) h += `<h2>On deck this period</h2><div class="block">${onDeck.map(taskRow).join("")}</div>`;
   return h;
 }
@@ -967,10 +968,17 @@ function renderTasks() {
   const todays = take(dated.filter(x => !shown.has(x.id) && (x.due === today || (x.repeat && x.completed))));
   const soon = take(dated.filter(x => !shown.has(x.id) && x.due > today && x.due <= week));
   const later = take(dated.filter(x => !shown.has(x.id) && x.due > week));
-  if (overdue.length) h += `<h2>Overdue<span class="hint">${overdue.length}</span></h2><div class="block">${overdue.map(taskRow).join("")}</div>`;
-  if (todays.length) h += `<h2>Today</h2><div class="block">${todays.map(taskRow).join("")}</div>`;
-  if (soon.length) h += `<h2>Next 7 days</h2><div class="block">${soon.map(taskRow).join("")}</div>`;
-  if (later.length) h += `<details class="later"><summary>Later · ${later.length} task${later.length > 1 ? "s" : ""}</summary><div class="block">${later.map(taskRow).join("")}</div></details>`;
+  // Jon's reminders sort into the same sections by their due date.
+  const rems = reminderItems(), rDated = rems.filter(r => r.due);
+  const rOver = rDated.filter(r => r.due < today), rToday = rDated.filter(r => r.due === today);
+  const rSoon = rDated.filter(r => r.due > today && r.due <= week), rLater = rDated.filter(r => r.due > week);
+  const open = (ts, rs) => ts.filter(x => !x.completed).length + rs.filter(r => !r.ticked).length;
+  h += remStale();
+  if (overdue.length || rOver.length) h += `<h2>Overdue<span class="hint">${open(overdue, rOver)}</span></h2><div class="block">${mixRows(overdue, rOver).join("")}</div>`;
+  if (todays.length || rToday.length) h += `<h2>Today</h2><div class="block">${mixRows(todays, rToday).join("")}</div>`;
+  if (soon.length || rSoon.length) h += `<h2>Next 7 days</h2><div class="block">${mixRows(soon, rSoon).join("")}</div>`;
+  const nLater = later.length + rLater.length;
+  if (nLater) h += `<details class="later" data-sec="later" ontoggle="secToggle(this)" ${REM.open.has("later") ? "open" : ""}><summary>Later · ${nLater} task${nLater > 1 ? "s" : ""}</summary><div class="block">${mixRows(later, rLater).join("")}</div></details>`;
   RECURS.forEach(r => {
     const group = DATA.tasks.filter(t => t.recurrence === r && !shown.has(t.id));
     if (!group.length) return;
@@ -978,8 +986,9 @@ function renderTasks() {
     h += `<h2>${RECUR_LABEL[r]}${hint ? `<span class="hint">${hint}</span>` : ""}</h2>
       <div class="block">${group.map(taskRow).join("")}</div>`;
   });
-  if (!DATA.tasks.length) h += `<div class="block"><div class="empty">No tasks yet — add the first one above.</div></div>`;
-  return h + renderReminderLists();
+  h += renderUndatedReminders(rems.filter(r => !r.due));
+  if (!DATA.tasks.length && !rems.length) h += `<div class="block"><div class="empty">No tasks yet — add the first one above.</div></div>`;
+  return h + remFresh();
 }
 /* ----- Jon's Apple Reminders -----
    Read-only. The backend reads the snapshot email Jon's iPhone sends each
@@ -1044,34 +1053,38 @@ async function tickReminder(key, on) {
   } catch (e) { note("Save failed — offline?"); }
 }
 const openFirst = (a, b) => !!a.ticked - !!b.ticked;
-function renderTodayReminders() {
-  const rm = DATA.reminders;
-  if (!REM.show || !rm) return "";
-  const today = todayStr(), due = reminderItems().filter(r => r.due && r.due <= today).sort(byRemDue).sort(openFirst);
-  const open = due.filter(r => !r.ticked).length;
-  let h = `<h2>Jon's reminders${open ? `<span class="hint">${open} due</span>` : ""}</h2>`;
-  if (!due.length && remEmpty(rm)) return h + `<div class="block">${remEmpty(rm)}</div>`;
-  h += due.length ? `<div class="block">${due.map(reminderRow).join("")}</div>`
-                  : `<div class="block"><div class="empty good">Nothing due today.</div></div>`;
-  return h + remStatus(rm);
+/* Hub tasks and reminders in one list: open before done, then by date and
+   time. An undated Hub task sorts after the dated ones ("9" > any date). */
+function mixRows(tasks, rems) {
+  const rows = tasks.map(t => ({ done: !!t.completed, due: t.due || "9", min: -1, title: String(t.title), html: () => taskRow(t) }))
+    .concat(rems.map(r => ({ done: !!r.ticked, due: r.due, min: remMinutes(r.time), title: r.title, html: () => reminderRow(r) })));
+  return rows.sort((a, b) => a.done - b.done || a.due.localeCompare(b.due) || a.min - b.min || a.title.localeCompare(b.title))
+    .map(x => x.html());
 }
-function renderReminderLists() {
-  const rm = DATA.reminders;
-  if (!REM.show || !rm) return "";
-  const items = reminderItems(), lists = [];
+/* Undated reminders have no section to sort into, so each list gets its own,
+   folded until opened, in the order the iPhone listed them. */
+function renderUndatedReminders(items) {
+  const lists = [];
   items.forEach(r => { if (!lists.includes(r.list)) lists.push(r.list); });
-  let h = `<h2>Jon's reminders<span class="hint">${items.filter(r => !r.ticked).length} open · the iPhone has the final say</span></h2>`;
-  if (!items.length) return h + `<div class="block">${remEmpty(rm) || `<div class="empty good">Nothing open.</div>`}</div>` + remStatus(rm);
-  // Dated ones first, soonest first; undated keep the order the phone listed them.
-  h += lists.map(l => {
-    const mine = items.filter(r => r.list === l);
-    const rows = mine.filter(r => r.due).sort(byRemDue).concat(mine.filter(r => !r.due)).sort(openFirst);
-    return `<details class="later" data-list="${esc(l)}" ontoggle="remToggle(this)" ${REM.open.has(l) ? "open" : ""}>
-      <summary>${esc(l)} · ${mine.filter(r => !r.ticked).length}</summary><div class="block">${rows.map(reminderRow).join("")}</div></details>`;
+  return lists.map(l => {
+    const mine = items.filter(r => r.list === l).sort(openFirst), n = mine.filter(r => !r.ticked).length;
+    return `<details class="later" data-sec="list:${esc(l)}" ontoggle="secToggle(this)" ${REM.open.has("list:" + l) ? "open" : ""}>
+      <summary>${esc(l)} · ${n}<span class="tiny">no due date</span></summary><div class="block">${mine.map(reminderRow).join("")}</div></details>`;
   }).join("");
-  return h + remStatus(rm);
 }
-function remToggle(el) { el.open ? REM.open.add(el.dataset.list) : REM.open.delete(el.dataset.list); }
+/* Where reminders sit among tasks, these lines say how fresh they are. A stale
+   list goes at the top so its dates are never taken as current. */
+function remStale() {
+  const rm = REM.show && DATA.reminders;
+  if (!rm) return "";
+  if (rm.status === "stale") return remStatus(rm);
+  return rm.status === "none" || rm.status === "error" ? `<div class="block">${remEmpty(rm)}</div>` : "";
+}
+function remFresh() {
+  const rm = REM.show && DATA.reminders;
+  return rm && rm.status === "fresh" ? remStatus(rm) : "";
+}
+function secToggle(el) { el.open ? REM.open.add(el.dataset.sec) : REM.open.delete(el.dataset.sec); }
 
 function remSettingsHtml() {
   const rm = DATA.reminders, lists = rm && Array.isArray(rm.lists) ? rm.lists : [];
