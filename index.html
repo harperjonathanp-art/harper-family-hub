@@ -304,6 +304,20 @@ details.later > summary::-webkit-details-marker { display: none; }
 details.later > summary::before { content: "\25B8"; color: var(--ink-faint); font-size: 11px; }
 details.later[open] > summary::before { content: "\25BE"; }
 
+/* a reminder's subtasks, folded under it and indented past its tick and dot */
+.task.has-subs { border-bottom: 0; }
+details.subs { border-bottom: 1px solid var(--rule); padding: 0 0 var(--space-1) calc(20px + 26px + var(--space-3) * 2); }
+details.subs > summary {
+  cursor: pointer; list-style: none; min-height: 44px; margin-top: calc(var(--space-3) * -1);
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: 12.5px; line-height: 17px; font-weight: 500; color: var(--ink-muted);
+}
+details.subs > summary::-webkit-details-marker { display: none; }
+details.subs > summary::before { content: "\25B8"; color: var(--ink-faint); font-size: 11px; }
+details.subs[open] > summary::before { content: "\25BE"; }
+details.subs .task { padding: var(--space-2) 0; }
+details.subs .task:last-child { border-bottom: 0; }
+
 .meal .d {
   flex: 0 0 44px;
   font-family: var(--font-mono); font-size: 11px; line-height: 14px; font-weight: 500;
@@ -718,7 +732,7 @@ function renderToday() {
                     : `<div class="block"><div class="empty">No daily tasks yet — add some in Tasks.</div></div>`;
 
   // Jon's reminders due today or overdue join the to-dos, ticked ones last.
-  const rems = reminderItems().filter(r => r.due && r.due <= t);
+  const rems = reminderTops().filter(r => r.due && r.due <= t);
   const todos = mixRows(oneOff, rems);
   if (todos.length) h += `<h2>To-dos</h2>${remStale()}<div class="block">${todos.join("")}</div>`;
   else h += `<h2>To-dos</h2>${remStale()}<div class="block"><div class="empty good">Nothing outstanding today.</div></div>`;
@@ -969,7 +983,7 @@ function renderTasks() {
   const soon = take(dated.filter(x => !shown.has(x.id) && x.due > today && x.due <= week));
   const later = take(dated.filter(x => !shown.has(x.id) && x.due > week));
   // Jon's reminders sort into the same sections by their due date.
-  const rems = reminderItems(), rDated = rems.filter(r => r.due);
+  const rems = reminderTops(), rDated = rems.filter(r => r.due);
   const rOver = rDated.filter(r => r.due < today), rToday = rDated.filter(r => r.due === today);
   const rSoon = rDated.filter(r => r.due > today && r.due <= week), rLater = rDated.filter(r => r.due > week);
   const open = (ts, rs) => ts.filter(x => !x.completed).length + rs.filter(r => !r.ticked).length;
@@ -999,10 +1013,21 @@ const REM = {
   get show() { const v = localStorage.getItem("fd_rem_show"); return v == null ? ["Jon", "Maggie"].includes(cfg.user) : v === "1"; },
   get hidden() { try { return JSON.parse(localStorage.getItem("fd_rem_hidden") || "[]"); } catch (e) { return []; } },
   open: new Set(), // lists the reader has expanded, so a refresh doesn't fold them
+  subOpen: new Map(), // parent key -> whether its subtasks are showing, once the reader has chosen
 };
 function reminderItems() {
   const rm = DATA.reminders;
   return rm && Array.isArray(rm.items) ? rm.items.filter(r => !REM.hidden.includes(r.list)) : [];
+}
+/* Reminders as the views place them: each subtask under its parent (same list
+   first, then any), so only the parents sort into the date sections. A subtask
+   whose parent isn't in the snapshot stays a row of its own. */
+function reminderTops() {
+  const all = reminderItems(), tops = all.filter(r => !r.parent).map(r => ({ ...r, subs: [] }));
+  const find = r => tops.find(p => p.list === r.list && p.title === r.parent) || tops.find(p => p.title === r.parent);
+  const orphans = [];
+  all.filter(r => r.parent).forEach(r => { const p = find(r); p ? p.subs.push(r) : orphans.push({ ...r, subs: [] }); });
+  return tops.concat(orphans);
 }
 function remMinutes(t) {
   const m = /^(\d+):(\d+) ([AP]M)$/.exec(t || "");
@@ -1023,8 +1048,9 @@ function remEmpty(rm) {
   if (rm.status === "error") return `<div class="empty">Couldn't read the reminders email. Check the Apps Script log.</div>`;
   return "";
 }
-function reminderRow(r) {
-  const due = dueInfo(r.due), parts = [`<span>${esc(r.list)}</span>`];
+function reminderRow(r, asSub) {
+  const due = dueInfo(r.due), parts = asSub ? [] : [`<span>${esc(r.list)}</span>`];
+  if (r.parent && !asSub) parts.push(`<span>Subtask of ${esc(r.parent)}</span>`);
   if (due) {
     const late = due.days < 0 && !r.ticked;
     parts.push(`<span class="${late ? "overdue" : ""}">${esc(due.text)}${r.time ? " · " + esc(r.time) : ""}${late ? " · overdue" : ""}</span>`);
@@ -1032,10 +1058,18 @@ function reminderRow(r) {
   if (r.priority && r.priority !== "None") parts.push(`<span>${esc(r.priority)} priority</span>`);
   if (r.notes) parts.push(`<span>${esc(r.notes.length > 120 ? r.notes.slice(0, 117) + "…" : r.notes)}</span>`);
   if (r.ticked) parts.push(`<span>Ticked here${r.tickedBy ? " by " + esc(r.tickedBy) : ""} — tick it on the iPhone too</span>`);
-  return `<div class="task ${r.ticked ? "done" : ""}">
+  const subs = !asSub && r.subs && r.subs.length ? r.subs : null;
+  const row = `<div class="task ${r.ticked ? "done" : ""} ${subs ? "has-subs" : ""}">
     <input type="checkbox" ${r.ticked ? "checked" : ""} data-key="${esc(r.key)}" onchange="tickReminder(this.dataset.key, this.checked)" aria-label="${esc(r.title)}">
-    ${chip("Jon")}
-    <span class="ttl">${esc(r.title)}<span class="meta">${parts.join(" &nbsp;")}</span></span></div>`;
+    ${asSub ? "" : chip("Jon")}
+    <span class="ttl">${esc(r.title)}${parts.length ? `<span class="meta">${parts.join(" &nbsp;")}</span>` : ""}</span></div>`;
+  if (!subs) return row;
+  // Subtasks fold under their parent. Open by default once the parent is due.
+  const left = subs.filter(x => !x.ticked).length;
+  const open = REM.subOpen.has(r.key) ? REM.subOpen.get(r.key) : !!(r.due && r.due <= todayStr());
+  const label = left === subs.length ? `${left} subtask${left === 1 ? "" : "s"}` : left ? `${left} of ${subs.length} subtasks left` : "All subtasks ticked";
+  return row + `<details class="subs" data-key="${esc(r.key)}" ontoggle="REM.subOpen.set(this.dataset.key, this.open)" ${open ? "open" : ""}>
+    <summary>${label}</summary>${subs.slice().sort(openFirst).map(x => reminderRow(x, true)).join("")}</details>`;
 }
 /* A tick here hides a reminder on every device until the next snapshot from
    the iPhone settles it: gone from the snapshot, it was done there; still in

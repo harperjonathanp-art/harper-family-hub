@@ -129,7 +129,14 @@ New lists appear on their own, since list names are free text.
 Reminders sit among the Hub's own tasks, each row naming its list. On
 **Today**, those due today or overdue join the to-dos. On **Tasks**, dated
 ones sort into Overdue, Today, Next 7 days and Later; undated ones get a
-folded section per list, at the bottom. A tick in the
+folded section per list, at the bottom.
+
+**Subtasks.** The Shortcut writes a subtask with its parent in the title:
+`Counters (Subtask of Tuesday)`. The Hub splits that off and folds each subtask
+under its parent (Tuesday, Fall…), so only the parent sorts by date. A parent
+due today or overdue shows its subtasks open; later ones start folded. Each
+subtask has its own tick. A subtask whose parent isn't in the snapshot is
+shown as a row of its own, saying what it belongs to. A tick in the
 Hub hides a reminder on every device, but the iPhone has the final say. The
 tick lasts until the next snapshot. If the reminder is gone from it, it was
 done on the phone and the tick is dropped. If it is still there in a snapshot
