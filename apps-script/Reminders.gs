@@ -140,7 +140,8 @@ const REM_LINE_ = /^(?<list>[^|]+?) \| (?<title>.*) \| due(?: (?<due>.*?))? \| p
  * or null if it has no GENERATED line (not a snapshot).
  *   generated      the snapshot's time, epoch ms (Eastern)
  *   generatedDate  that day, yyyy-MM-dd (Eastern)
- *   items          [{ list, title, due (yyyy-MM-dd or ''), time ('7:30 AM' or ''), dueText, priority, notes, key }]
+ *   items          [{ list, title, parent, due (yyyy-MM-dd or ''), time ('7:30 AM' or ''), dueText, priority, notes, key }]
+ *                  (parent: the title of the reminder this is a subtask of, or '')
  *                  (dueText keeps a due the parser couldn't read, so nothing is silently lost)
  *   skipped        lines that matched neither the format nor NONE (counted, never logged)
  */
@@ -162,8 +163,9 @@ function parseSnapshot_(body) {
     const g = m.groups;
     const due = parseDue_(g.due);
     // Titles repeat (several "Counters"), so identity is list + title + due + which one of those it is.
+    const sub = splitSubtask_(g.title.trim());
     const item = {
-      list: g.list.trim(), title: g.title.trim(),
+      list: g.list.trim(), title: sub.title, parent: sub.parent,
       due: due.date, time: due.time, dueText: due.date ? '' : (g.due || '').trim(),
       priority: g.priority, notes: (g.notes || '').trim(),
     };
@@ -192,9 +194,18 @@ function parseDue_(text) {
   };
 }
 
-/** list + title + due + which of those it is in the file; titles repeat, so a title alone never identifies one. */
+/**
+ * The Shortcut writes a subtask as "Counters (Subtask of Tuesday)". The last
+ * such marker wins, so a title with its own brackets ("Sinks (kitchen)") stays whole.
+ */
+function splitSubtask_(title) {
+  const m = String(title).match(/^(.*\S) \(Subtask of (.+)\)$/);
+  return m ? { title: m[1], parent: m[2].trim() } : { title: String(title), parent: '' };
+}
+
+/** list + parent + title + due + which of those it is in the file; titles repeat, so a title alone never identifies one. */
 function itemKey_(r, seen) {
-  const base = [r.list, r.title, r.due, r.time, r.dueText].join('|');
+  const base = [r.list, r.parent || '', r.title, r.due, r.time, r.dueText].join('|');
   seen[base] = (seen[base] || 0) + 1;
   return base + '|' + seen[base];
 }
@@ -218,7 +229,7 @@ function easternMs_(y, mo, d, h, mi) {
 function storeSnapshot_(snap) {
   const props = PropertiesService.getScriptProperties();
   const packed = JSON.stringify(snap.items.map(function (r) {
-    return [r.list, r.title, r.due, r.time, r.priority, r.notes, r.dueText];
+    return [r.list, r.title, r.due, r.time, r.priority, r.notes, r.dueText, r.parent];
   }));
   const chunks = {};
   let n = 0;
@@ -295,7 +306,9 @@ function loadItems_(meta) {
   try { rows = packed ? JSON.parse(packed) : []; } catch (err) { rows = []; }
   const seen = {};
   return rows.map(function (r) {
-    const item = { list: r[0], title: r[1], due: r[2], time: r[3], priority: r[4], notes: r[5], dueText: r[6] };
+    // A snapshot saved before subtasks were split still carries the marker in its title.
+    const sub = r[7] == null ? splitSubtask_(r[1]) : { title: r[1], parent: r[7] };
+    const item = { list: r[0], title: sub.title, parent: sub.parent, due: r[2], time: r[3], priority: r[4], notes: r[5], dueText: r[6] };
     item.key = itemKey_(item, seen);
     return item;
   });
