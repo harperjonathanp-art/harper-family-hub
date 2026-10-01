@@ -111,8 +111,13 @@ function bodyText_(payload) {
     }
     return null;
   };
+  // The Gmail service hands back a body either as bytes or as web-safe base64
+  // without its trailing '=' padding, which base64DecodeWebSafe refuses.
   const decode = function (data) {
-    return Utilities.newBlob(Utilities.base64DecodeWebSafe(data)).getDataAsString('UTF-8');
+    if (typeof data !== 'string') return Utilities.newBlob(data).getDataAsString('UTF-8');
+    let b64 = data.replace(/-/g, '+').replace(/_/g, '/').replace(/\s+/g, '');
+    while (b64.length % 4) b64 += '=';
+    return Utilities.newBlob(Utilities.base64Decode(b64)).getDataAsString('UTF-8');
   };
   const plain = find(payload, 'text/plain');
   if (plain) return decode(plain);
