@@ -29,6 +29,7 @@ const REMINDERS_RETRY_MIN = 15;           // a stale Hub re-checks Gmail at most
 // Script Property REMINDERS_HIDE_LISTS: lists never sent to the Hub, comma
 // separated. Work names students, so it stays hidden unless this says otherwise.
 const REMINDERS_HIDE_DEFAULT = 'Work';
+const REMINDERS_OWNER = 'Jon';           // whose reminders these are: only his morning summary lists them
 const REMINDERS_CHUNK = 3000;             // Script Properties hold 9 KB a value, and some characters take 3 bytes
 // ======================================================
 
@@ -314,6 +315,37 @@ function loadItems_(meta) {
   });
 }
 
+// ---------- the morning summary ----------
+
+/**
+ * The owner's summary line: reminders due today or overdue, not ticked in the
+ * Hub, each parent with how many of its subtasks are left. A list that isn't
+ * today's says so. Null when there is nothing to say.
+ */
+function remindersLine_(today) {
+  let rm;
+  try { rm = getReminders_(true); } catch (err) { return null; }
+  if (!rm.items || !rm.items.length) return null;
+  const tops = rm.items.filter(function (r) { return !r.parent; });
+  const subsLeft = function (p) {
+    return rm.items.filter(function (r) {
+      if (r.parent !== p.title || r.ticked) return false;
+      // a subtask belongs to the same-list parent when there is one
+      const sameList = tops.some(function (t) { return t.title === r.parent && t.list === r.list; });
+      return sameList ? r.list === p.list : true;
+    }).length;
+  };
+  const due = tops.filter(function (r) { return r.due && r.due <= today && !r.ticked; })
+    .sort(function (a, b) { return a.due < b.due ? -1 : a.due > b.due ? 1 : 0; });
+  if (!due.length) return null;
+  const names = due.map(function (r) {
+    const n = subsLeft(r);
+    return n ? r.title + ' (' + n + ' subtask' + (n === 1 ? '' : 's') + ')' : r.title;
+  });
+  const from = rm.status === 'stale' ? ' (from the ' + String(rm.generatedText).split(',')[0] + ' list)' : '';
+  return 'Reminders' + from + ': ' + list_(names);
+}
+
 // ---------- what the Hub is sent ----------
 
 /** The snapshot minus the lists named in REMINDERS_HIDE_LISTS (default Work). */
@@ -329,11 +361,12 @@ function visibleItems_(meta) {
  * snapshot was not generated today (Eastern): the Hub keeps showing it, labelled
  * with its own time, and never calls it current.
  */
-function getReminders_() {
+function getReminders_(noSync) {
   let meta = loadMeta_();
   const today = Utilities.formatDate(new Date(), REMINDERS_TZ, 'yyyy-MM-dd');
   // Behind on today's snapshot and the timers haven't looked lately: look now.
-  if (meta.generatedDate !== today && Date.now() - (meta.attemptedAt || 0) > REMINDERS_RETRY_MIN * 60000) {
+  // (Not from the notification timer, which already holds the script lock.)
+  if (!noSync && meta.generatedDate !== today && Date.now() - (meta.attemptedAt || 0) > REMINDERS_RETRY_MIN * 60000) {
     syncReminders();
     meta = loadMeta_();
   }
