@@ -139,7 +139,7 @@ const REM_LINE_ = /^(?<list>[^|]+?) \| (?<title>.*) \| due(?: (?<due>.*?))? \| p
  */
 function parseSnapshot_(body) {
   // Newer iOS puts a narrow no-break space before AM/PM; treat every space alike.
-  const lines = String(body || '').replace(/[   ]/g, ' ').split(/\r?\n/)
+  const lines = String(body || '').replace(/[\u00a0\u202f\u2009]/g, ' ').split(/\r?\n/)
     .map(function (l) { return l.trim(); }).filter(Boolean);
   const head = lines.length && lines[0].match(/^GENERATED:\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4}),?\s+(\d{1,2}):(\d{2})\s*([AP]M)$/i);
   if (!head) return null;
