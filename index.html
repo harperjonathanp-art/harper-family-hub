@@ -500,6 +500,20 @@ const COUPLES_QUESTIONS = [
 ];
 
 let DATA = { tasks: [], meals: {}, events: [], checkins: [], groceries: [] };
+/* Whether the backend that last answered predates times and subtasks: its tasks
+   have no parentId. Set only from live answers, never from the copy saved on
+   this device, which can be older than the backend. */
+let OLD_BACKEND = false;
+function noteBackend(tasks) {
+  OLD_BACKEND = Array.isArray(tasks) && tasks.some(t => !("parentId" in t));
+  // Shown or cleared straight away, even when a redraw is held back for a draft.
+  const w = document.getElementById("oldBackend"), form = document.querySelector("#main .addform");
+  if (!OLD_BACKEND && w) w.remove();
+  if (OLD_BACKEND && !w && form && VIEW === "tasks") form.insertAdjacentHTML("afterend", oldBackendHtml());
+}
+function oldBackendHtml() {
+  return `<div class="block" id="oldBackend"><div class="empty" style="color:var(--warn)">Times, subtasks and moving tasks won't save yet: the Apps Script backend is an older version. Paste the latest Apps Script files and publish a new version.</div></div>`;
+}
 let VIEW = "today";
 let POLL = null;
 
@@ -530,6 +544,7 @@ async function refresh(quiet) {
              groceries: d.groceries, // undefined until the backend has the grocery list
              reminders: REM.show ? d.reminders : undefined }; // never kept on a device that hides them
     localStorage.setItem("fd_cache", JSON.stringify(DATA));
+    noteBackend(d.tasks);
     note("Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
     if (hasUnsavedEdits()) { note("Synced — your unsaved edits are kept"); return; }
     render();
@@ -543,6 +558,7 @@ async function send(body) {
   try {
     const d = await apiPost(body);
     if (d.ok) {
+      if (d.tasks) noteBackend(d.tasks);
       DATA.tasks = d.tasks || DATA.tasks;
       DATA.meals = d.meals || DATA.meals;
       DATA.checkins = d.checkins || DATA.checkins;
@@ -1067,9 +1083,7 @@ function renderTasks() {
     </div>
   </div>`;
   // A backend from before times and subtasks leaves those fields out, and drops them when saving.
-  if (DATA.tasks.some(t => !String(t.id).startsWith("tmp-") && !("parentId" in t))) {
-    h += `<div class="block"><div class="empty" style="color:var(--warn)">Times, subtasks and moving tasks won't save yet: the Apps Script backend is an older version. Paste the latest Apps Script files and publish a new version.</div></div>`;
-  }
+  if (OLD_BACKEND) h += oldBackendHtml();
   // Dated tasks, like Apple Reminders: overdue, today, the coming week, then later.
   // Subtasks go with their parents, so only top-level tasks sort into sections.
   const today = todayStr(), week = isoPlus(today, 7), shown = new Set();
