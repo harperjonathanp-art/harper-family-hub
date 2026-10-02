@@ -177,3 +177,8 @@ runs, so an existing Sheet needs no changes.
 
 Deleting a task deletes its subtasks. A subtask whose parent row is gone
 shows as an ordinary task.
+
+A subtask of a repeating task (a `repeat`, or a daily/weekly/monthly
+`recurrence`) comes round with it: its tick counts for the parent's current
+turn, so when the parent moves on to its next date the subtasks untick too.
+A subtask with a `repeat` of its own keeps its own schedule.

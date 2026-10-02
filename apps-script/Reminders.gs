@@ -175,7 +175,7 @@ function parseSnapshot_(body) {
   });
   return {
     generated: at,
-    generatedDate: ymd_(year, Number(head[1]), Number(head[2])),
+    generatedDate: remYmd_(year, Number(head[1]), Number(head[2])),
     generatedText: lines[0].replace(/^GENERATED:\s*/i, ''),
     items: items, skipped: skipped,
   };
@@ -190,7 +190,7 @@ function parseDue_(text) {
   if (mo < 0) return none;
   const midnight = !m[4] || (Number(m[4]) === 12 && m[5] === '00' && m[6].toUpperCase() === 'AM');
   return {
-    date: ymd_(Number(m[3]), mo + 1, Number(m[2])),
+    date: remYmd_(Number(m[3]), mo + 1, Number(m[2])),
     time: midnight ? '' : Number(m[4]) + ':' + m[5] + ' ' + m[6].toUpperCase(),
   };
 }
@@ -211,7 +211,7 @@ function itemKey_(r, seen) {
   return base + '|' + seen[base];
 }
 function hour24_(h, ampm) { return (h % 12) + (/^p/i.test(ampm) ? 12 : 0); }
-function ymd_(y, m, d) { return y + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d; }
+function remYmd_(y, m, d) { return y + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d; }
 
 /** A US Eastern wall-clock time as epoch ms (EDT from the 2nd Sunday of March to the 1st Sunday of November, 2:00 AM). */
 function easternMs_(y, mo, d, h, mi) {

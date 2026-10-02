@@ -201,7 +201,8 @@ function getTasks_() {
     periodKeys_(c.periodKey).forEach(function (k) { done[c.taskId + '|' + k] = c.completedBy || true; });
   });
   const today = today_();
-  return rows_('Tasks').map(function (t) {
+  const all = rows_('Tasks');
+  return all.map(function (t) {
     const repeat = String(t.repeat || '').trim();
     if (parseRepeat_(repeat)) { // an unreadable repeat leaves it a plain task
       // A repeating task moves to its next date when it's done, so "completed"
@@ -223,7 +224,7 @@ function getTasks_() {
     }
     // A repeat typed in the Sheet that can't be read: a one-off, flagged so it can be fixed.
     const recurrence = t.recurrence === 'repeat' ? 'once' : t.recurrence;
-    const pk = periodKey_(recurrence);
+    const pk = subPeriod_(t, all, today) || periodKey_(recurrence);
     const key = t.id + '|' + pk;
     return {
       id: String(t.id),
@@ -377,6 +378,24 @@ function setTaskOrder_(ids) {
   if (changed && out.length) sh.getRange(2, col + 1, out.length, 1).setValues(out);
 }
 
+/**
+ * A subtask of a repeating task comes round with it: a tick counts for the
+ * parent's current turn, so when the parent moves on its subtasks untick.
+ * Returns that turn's key, or '' for a subtask that keeps its own ticks
+ * (its parent doesn't repeat, or it has a repeat of its own).
+ */
+function subPeriod_(task, tasks, today) {
+  if (!String(task.parentId || '') || parseRepeat_(task.repeat)) return '';
+  const p = tasks.filter(function (t) { return String(t.id) === String(task.parentId); })[0];
+  if (!p) return '';
+  if (parseRepeat_(p.repeat)) {
+    // Ticked today, the parent already shows its next date; its turn is still the one just done.
+    const turn = dateStr_(p.lastDone) === today && dateStr_(p.prevDue) ? dateStr_(p.prevDue) : dateStr_(p.due);
+    return turn ? 'turn:' + turn : '';
+  }
+  return p.recurrence && p.recurrence !== 'once' && p.recurrence !== 'repeat' ? periodKey_(p.recurrence) : '';
+}
+
 function deleteTask_(id) {
   // A task's subtasks go with it.
   const ids = [String(id)];
@@ -390,7 +409,7 @@ function toggleTask_(id, by) {
   const task = tasks.filter(function (t) { return String(t.id) === String(id); })[0];
   if (!task) return;
   if (parseRepeat_(task.repeat)) { toggleRepeat_(task, by); return; }
-  const pk = periodKey_(task.recurrence);
+  const pk = subPeriod_(task, tasks, today_()) || periodKey_(task.recurrence);
   const existed = removeRowsWhere_('Completions', function (r) {
     return String(r[0]) === String(id) && periodKeys_(r[1]).indexOf(pk) >= 0;
   });
