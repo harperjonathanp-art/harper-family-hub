@@ -1066,6 +1066,10 @@ function renderTasks() {
       <button class="primary" onclick="addTask()">Add</button>
     </div>
   </div>`;
+  // A backend from before times and subtasks leaves those fields out, and drops them when saving.
+  if (DATA.tasks.some(t => !String(t.id).startsWith("tmp-") && !("parentId" in t))) {
+    h += `<div class="block"><div class="empty" style="color:var(--warn)">Times, subtasks and moving tasks won't save yet: the Apps Script backend is an older version. Paste the latest Apps Script files and publish a new version.</div></div>`;
+  }
   // Dated tasks, like Apple Reminders: overdue, today, the coming week, then later.
   // Subtasks go with their parents, so only top-level tasks sort into sections.
   const today = todayStr(), week = isoPlus(today, 7), shown = new Set();
