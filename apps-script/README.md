@@ -163,3 +163,17 @@ Reminders words them:
 Ticking a repeating task moves `due` to its next date, as Reminders does.
 Unticking it the same day puts it back. Tasks with no repeat keep the older
 daily/weekly/monthly reset behaviour.
+
+## Tasks: times, subtasks and order
+
+Three more Tasks tab columns. The script adds their headers the first time it
+runs, so an existing Sheet needs no changes.
+
+| Column | Holds |
+|--------|-------|
+| `time` | The time it's due, as text in 24-hour form (`15:30`). Only kept when there's a `due` date. A time typed in the Sheet works too. |
+| `parentId` | For a subtask, the `id` of the task it sits under. Subtasks go one level deep: a subtask can't have subtasks of its own. |
+| `sort` | Where dragging put it. Tasks sort by day, then time, then `sort`; subtasks sort by `sort`. Blank sorts last. |
+
+Deleting a task deletes its subtasks. A subtask whose parent row is gone
+shows as an ordinary task.

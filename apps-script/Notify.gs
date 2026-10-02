@@ -247,6 +247,8 @@ function mealsReady_(ctx, data) {
 function summaryMsg_(person, data, clock) {
   const open = data.tasks.filter(function (t) {
     // Dated tasks when due or overdue; undated ones as the Today screen shows them.
+    // An undated subtask is part of its parent, so it isn't listed on its own.
+    if (t.parentId && !t.due) return false;
     return !t.completed && (t.due ? t.due <= clock.today : (t.recurrence === 'daily' || t.recurrence === 'once'));
   });
   const mine = open.filter(function (t) { return t.assignee === person; });

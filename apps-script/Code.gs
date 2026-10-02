@@ -40,7 +40,8 @@ const DAYS_AHEAD = 14; // how far ahead the calendar view looks
 // ======================================================
 
 const TABS = {
-  Tasks:       ['id', 'title', 'recurrence', 'assignee', 'createdAt', 'due', 'repeat', 'lastDone', 'prevDue'],
+  Tasks:       ['id', 'title', 'recurrence', 'assignee', 'createdAt', 'due', 'repeat', 'lastDone', 'prevDue',
+                'time', 'parentId', 'sort'],
   Completions: ['taskId', 'periodKey', 'completedBy', 'timestamp'],
   Meals:       ['day', 'meal', 'note'],
   CheckIns:    ['id', 'date', 'type', 'answersJson'],
@@ -85,6 +86,7 @@ function doPost(e) {
   try {
     switch (body.action) {
       case 'addTask':      outbox = taskAdded_(addTask_(body), body.by); break;
+      case 'updateTask':   updateTask_(body); break;
       case 'deleteTask':   deleteTask_(body.id); break;
       case 'toggleTask':   toggleTask_(body.id, body.by); break;
       case 'saveMeals':    saveMeals_(body.meals); mealsEdited_(body.meals, body.by); break;
@@ -211,6 +213,9 @@ function getTasks_() {
         recurrence: 'repeat',
         repeat: repeat,
         due: dateStr_(t.due),
+        time: timeStr_(t.time),
+        parentId: String(t.parentId || ''),
+        sort: sortNum_(t.sort),
         assignee: t.assignee,
         completed: doneToday,
         completedBy: doneToday ? (done[t.id + '|' + dateStr_(t.prevDue)] || null) : null,
@@ -226,6 +231,9 @@ function getTasks_() {
       recurrence: recurrence,
       badRepeat: repeat || undefined,
       due: dateStr_(t.due),
+      time: timeStr_(t.time),
+      parentId: String(t.parentId || ''),
+      sort: sortNum_(t.sort),
       assignee: t.assignee,
       completed: key in done,
       completedBy: done[key] || null,
@@ -236,22 +244,145 @@ function getTasks_() {
 function addTask_(b) {
   const repeat = parseRepeat_(b.repeat) ? String(b.repeat).trim().toLowerCase() : '';
   const due = /^\d{4}-\d{2}-\d{2}$/.test(String(b.due)) ? String(b.due) : (repeat ? today_() : '');
+  const tasks = rows_('Tasks');
+  const parentId = validParent_(tasks, '', b.parentId);
   const task = {
     id: Utilities.getUuid().slice(0, 8),
     title: String(b.title || '').slice(0, 200),
     recurrence: repeat ? 'repeat' : (b.recurrence || 'once'),
     assignee: b.assignee || '',
     due: due,
+    time: due ? cleanTime_(b.time) : '', // a time needs a day
     repeat: repeat,
+    parentId: parentId,
+    // A subtask goes last among its siblings; a top-level task is left unordered.
+    sort: parentId ? lastSort_(tasks, parentId) + 1 : '',
   };
-  sheet_('Tasks').appendRow([task.id, task.title, task.recurrence, task.assignee, new Date().toISOString(),
-    task.due, task.repeat, '', '']);
+  const sh = sheet_('Tasks');
+  sh.appendRow([task.id, task.title, task.recurrence, task.assignee, new Date().toISOString(),
+    task.due, task.repeat, '', '', '', task.parentId, task.sort]);
+  // The time is text: left alone, Sheets would turn "15:30" into a time of day.
+  if (task.time) sh.getRange(sh.getLastRow(), TABS.Tasks.indexOf('time') + 1).setNumberFormat('@').setValue(task.time);
   return task;
 }
 
+/**
+ * Changes whichever of title, assignee, due, time, repeat and parentId the
+ * request names, and, given `order` (task ids), puts those tasks in that
+ * order. One call serves the edit form (several fields) and drag and drop
+ * (a new day, a new parent, a new place in the list).
+ */
+function updateTask_(b) {
+  const tasks = rows_('Tasks');
+  const task = tasks.filter(function (t) { return String(t.id) === String(b.id); })[0];
+  if (!task) return;
+  const fields = {};
+  if ('title' in b) {
+    const title = String(b.title || '').trim().slice(0, 200);
+    if (title) fields.title = title;
+  }
+  if ('assignee' in b) fields.assignee = String(b.assignee || '');
+  let due = dateStr_(task.due), repeat = parseRepeat_(task.repeat) ? String(task.repeat).trim() : '';
+  if ('repeat' in b) {
+    repeat = parseRepeat_(b.repeat) ? String(b.repeat).trim().toLowerCase() : '';
+    fields.repeat = repeat;
+    const kept = task.recurrence === 'repeat' ? 'once' : task.recurrence;
+    fields.recurrence = repeat ? 'repeat' : kept;
+    if (!repeat || repeat !== String(task.repeat || '').trim()) { fields.lastDone = ''; fields.prevDue = ''; }
+  }
+  if ('due' in b) {
+    due = /^\d{4}-\d{2}-\d{2}$/.test(String(b.due)) ? String(b.due) : '';
+    if (due !== dateStr_(task.due)) { fields.lastDone = ''; fields.prevDue = ''; }
+  }
+  if (repeat && !due) due = today_(); // a repeating task always has a next date
+  if (due !== dateStr_(task.due) || 'due' in b) fields.due = due;
+  // The time is kept only while there is a day for it to belong to.
+  const time = due ? ('time' in b ? cleanTime_(b.time) : timeStr_(task.time)) : '';
+  const timeChanged = time !== timeStr_(task.time);
+  if ('parentId' in b) {
+    const parentId = validParent_(tasks, task.id, b.parentId);
+    if (parentId !== String(task.parentId || '')) {
+      fields.parentId = parentId;
+      // Joining a parent: last among its subtasks, unless `order` places it.
+      fields.sort = parentId ? lastSort_(tasks, parentId) + 1 : '';
+    }
+  }
+  const sh = sheet_('Tasks');
+  if (Object.keys(fields).length) updateRow_('Tasks', task.id, fields);
+  if (timeChanged) {
+    const vals = sh.getDataRange().getValues();
+    for (let i = 1; i < vals.length; i++) {
+      if (String(vals[i][0]) === String(task.id)) {
+        sh.getRange(i + 1, TABS.Tasks.indexOf('time') + 1).setNumberFormat('@').setValue(time);
+        break;
+      }
+    }
+  }
+  if (Array.isArray(b.order)) setTaskOrder_(b.order);
+}
+
+/** 'HH:mm' (24-hour) or ''. */
+function cleanTime_(v) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v == null ? '' : v).trim());
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return '';
+  return ('0' + m[1]).slice(-2) + ':' + m[2];
+}
+
+/** A time read back from the Sheet. Text is what the app writes; Sheets may still hand back a time of day. */
+function timeStr_(v) {
+  if (v instanceof Date) {
+    // A bare time of day comes back as a Date in 1899; round off its odd seconds.
+    return Utilities.formatDate(new Date(v.getTime() + 30000), Session.getScriptTimeZone(), 'HH:mm');
+  }
+  return cleanTime_(v);
+}
+
+function sortNum_(v) {
+  return v === '' || v == null || isNaN(Number(v)) ? null : Number(v);
+}
+
+/** The parent a task may have: an existing top-level task other than itself, and only if the task has no subtasks of its own. */
+function validParent_(tasks, id, parentId) {
+  parentId = String(parentId || '');
+  if (!parentId || parentId === String(id)) return '';
+  const parent = tasks.filter(function (t) { return String(t.id) === parentId; })[0];
+  if (!parent || String(parent.parentId || '')) return ''; // subtasks go one level deep
+  const hasSubs = id && tasks.some(function (t) { return String(t.parentId || '') === String(id); });
+  return hasSubs ? '' : parentId;
+}
+
+function lastSort_(tasks, parentId) {
+  let last = 0;
+  tasks.forEach(function (t) {
+    if (String(t.parentId || '') === String(parentId) && sortNum_(t.sort) != null) last = Math.max(last, sortNum_(t.sort));
+  });
+  return last;
+}
+
+/** Numbers the named tasks 1, 2, 3… in the order given; others keep their own numbers. */
+function setTaskOrder_(ids) {
+  const sh = sheet_('Tasks');
+  const vals = sh.getDataRange().getValues();
+  const col = vals[0].indexOf('sort');
+  if (col < 0) return;
+  const rank = {};
+  ids.forEach(function (id, i) { rank[String(id)] = i + 1; });
+  const out = [];
+  let changed = false;
+  for (let i = 1; i < vals.length; i++) {
+    const r = rank[String(vals[i][0])];
+    if (r != null && vals[i][col] !== r) changed = true;
+    out.push([r != null ? r : vals[i][col]]);
+  }
+  if (changed && out.length) sh.getRange(2, col + 1, out.length, 1).setValues(out);
+}
+
 function deleteTask_(id) {
-  removeRowsWhere_('Tasks', function (r) { return String(r[0]) === String(id); });
-  removeRowsWhere_('Completions', function (r) { return String(r[0]) === String(id); });
+  // A task's subtasks go with it.
+  const ids = [String(id)];
+  rows_('Tasks').forEach(function (t) { if (String(t.parentId || '') === String(id)) ids.push(String(t.id)); });
+  removeRowsWhere_('Tasks', function (r) { return ids.indexOf(String(r[0])) >= 0; });
+  removeRowsWhere_('Completions', function (r) { return ids.indexOf(String(r[0])) >= 0; });
 }
 
 function toggleTask_(id, by) {

@@ -279,6 +279,8 @@ label.f {
 .addform { display: grid; gap: var(--space-2); margin-bottom: var(--space-5); }
 .addrow { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
 .addrow > select, .addrow > input[type=date] { flex: 1 1 120px; width: auto; min-width: 0; }
+.addrow > input[type=time] { flex: 1 1 104px; width: auto; min-width: 0; }
+.addrow > .ghost { flex: 0 0 auto; padding: 8px 14px; }
 .addrow > input[type=number] { width: 72px; }
 .addrow .grow { flex: 1; min-width: 0; }
 .daypick { display: flex; gap: var(--space-1); flex-wrap: wrap; }
@@ -303,6 +305,16 @@ details.later > summary {
 details.later > summary::-webkit-details-marker { display: none; }
 details.later > summary::before { content: "\25B8"; color: var(--ink-faint); font-size: 11px; }
 details.later[open] > summary::before { content: "\25BE"; }
+
+/* a task's title is the way into editing it */
+.task .tedit {
+  align-self: stretch; text-align: left; background: none; border: 0; padding: 0;
+  font: inherit; color: inherit; cursor: pointer; border-radius: var(--radius-sm);
+}
+.task .tedit:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* a subtask sits under its parent, indented past the parent's tick */
+.task.sub { margin-left: 30px; }
+.task.sub .ttl { font-size: 15px; }
 
 /* a reminder's subtasks, folded under it and indented past its tick and dot */
 .task.has-subs { border-bottom: 0; }
@@ -349,10 +361,28 @@ details.subs .task:last-child { border-bottom: 0; }
 }
 .grip-space { flex: 0 0 28px; margin-left: calc(var(--space-2) * -1); }
 .grocery-list .task { transition: transform .15s ease; }
-.grocery-list .task.dragging {
+.grocery-list .task.dragging, .task.dragging {
   transition: none; position: relative; z-index: 5; cursor: grabbing;
   background: var(--paper-sheet); box-shadow: var(--shadow-raise); border-radius: var(--radius-sm);
 }
+.task.dragging[data-tid] { opacity: .92; } /* the drop line and target show through */
+.task.dragging-sub { position: relative; z-index: 4; background: var(--paper-sheet); opacity: .85; }
+.task.drop-into { background: var(--field-tint); border-radius: var(--radius-sm); }
+.drop-line { position: absolute; z-index: 6; height: 3px; margin-top: -2px; border-radius: 2px; background: var(--field); pointer-events: none; }
+/* while a task is dragged: where it can go, and what dropping it would do */
+.td-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 40; background: var(--paper-sheet); box-shadow: var(--shadow-bar);
+  padding: calc(var(--space-2) + env(safe-area-inset-top)) var(--space-4) var(--space-3);
+}
+.td-hint { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ink-muted); min-height: 18px; margin-bottom: var(--space-2); }
+.td-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
+.td-chip {
+  min-height: 44px; display: flex; align-items: center; justify-content: center; text-align: center;
+  border: 1px dashed var(--rule-strong); border-radius: var(--radius-md);
+  font-size: 13px; line-height: 17px; font-weight: 600; color: var(--ink-muted);
+}
+.td-chip.on { background: var(--field-tint); border: 1px solid var(--field); color: var(--field); }
+.td-chip.off { opacity: .4; }
 @media (prefers-reduced-motion: reduce) { .grocery-list .task { transition: none; } }
 .lineup .recipes { margin-top: var(--space-1); }
 
@@ -549,7 +579,7 @@ function restoreDraft() {
 }
 function clearDraft(key) { localStorage.removeItem(key); }
 function hasUnsavedEdits() {
-  if (DRAG) return true; // mid-drag: a background refresh would pull the row out from under the finger
+  if (DRAG || TD) return true; // mid-drag: a background refresh would pull the row out from under the finger
   const key = draftKey();
   if (!key) return false;
   if (document.activeElement && document.activeElement.closest && document.activeElement.closest("#main") &&
@@ -601,12 +631,27 @@ function eventRow(e) {
     <span class="time">${esc(time)}</span>
     <span class="etitle">${esc(e.title)}<span class="cal">${esc(e.cal)}</span></span></div>`;
 }
+const GRIP_SVG = `<svg width="12" height="18" viewBox="0 0 12 18" aria-hidden="true" fill="currentColor">
+  <circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/><circle cx="3" cy="9" r="1.6"/>
+  <circle cx="9" cy="9" r="1.6"/><circle cx="3" cy="15" r="1.6"/><circle cx="9" cy="15" r="1.6"/></svg>`;
+/* A task and its subtasks, under it, as one run of rows. (Not taskRow(t, i): it's used with .map.) */
 function taskRow(t) {
-  return `<div class="task ${t.completed ? "done" : ""}">
-    <input type="checkbox" ${t.completed ? "checked" : ""} onchange="toggleTask('${esc(t.id)}')" aria-label="${esc(t.title)}">
+  return taskLine(t, false) + (isSub(t) ? "" : subsOf(t.id).sort(subOrder).map(s => taskLine(s, true)).join(""));
+}
+function taskLine(t, sub) {
+  const id = esc(t.id);
+  // Dragging lives on the Tasks screen, where the rows sit in order.
+  const grip = VIEW !== "tasks" ? ""
+    : t.completed || String(t.id).startsWith("tmp-") ? `<span class="grip-space"></span>`
+    : `<button class="grip" data-tgrip="${id}" aria-label="Move ${esc(t.title)} (arrow keys; right makes it a subtask, left takes it out)"
+        onpointerdown="tdStart(event, '${id}')" onpointermove="tdMove(event)"
+        onpointerup="tdEnd(false)" onpointercancel="tdEnd(true)" onkeydown="tdKey(event, '${id}')">${GRIP_SVG}</button>`;
+  return `<div class="task ${t.completed ? "done" : ""} ${sub ? "sub" : ""}" data-tid="${id}" ${sub ? `data-parent="${esc(t.parentId)}"` : ""}>
+    ${grip}
+    <input type="checkbox" ${t.completed ? "checked" : ""} onchange="toggleTask('${id}')" aria-label="${esc(t.title)}">
     ${chip(t.assignee)}
-    <span class="ttl">${esc(t.title)}${t.completed && t.completedBy ? ` <span class="tiny">by ${esc(t.completedBy)}</span>` : ""}${taskMeta(t)}</span>
-    <button class="del" onclick="deleteTask('${esc(t.id)}')" aria-label="Delete">×</button>
+    <button type="button" class="ttl tedit" onclick="openTaskEdit('${id}')" aria-label="Edit ${esc(t.title)}">${esc(t.title)}${t.completed && t.completedBy ? ` <span class="tiny">by ${esc(t.completedBy)}</span>` : ""}${taskMeta(t)}</button>
+    <button class="del" onclick="deleteTask('${id}')" aria-label="Delete">×</button>
   </div>`;
 }
 
@@ -666,20 +711,47 @@ function dueInfo(due) {
 function taskMeta(t) {
   const due = dueInfo(t.due), parts = [];
   if (due) {
-    const late = due.days < 0 && !t.completed;
+    const late = isLate(t);
     // a repeating task ticked today has already moved on to its next date
-    const text = t.completed && t.repeat ? "Next: " + due.text : due.text;
+    const text = (t.completed && t.repeat ? "Next: " : "") + due.text + (t.time ? " · " + fmtTime(t.time) : "");
     parts.push(`<span class="${late ? "overdue" : ""}">${esc(text)}${late ? " · overdue" : ""}</span>`);
   }
   if (t.repeat) parts.push(`<span>↻ ${esc(describeRepeat(t.repeat, t.due))}</span>`);
   if (t.badRepeat) parts.push(`<span class="overdue">Can't read the repeat "${esc(t.badRepeat)}" — fix it in the Sheet</span>`);
+  const subs = isSub(t) ? [] : subsOf(t.id);
+  if (subs.length) parts.push(`<span>${subs.filter(x => x.completed).length} of ${subs.length} subtasks done</span>`);
   return parts.length ? `<span class="meta">${parts.join(" &nbsp;")}</span>` : "";
 }
 function isDailyRepeat(t) {
   const r = t.repeat && parseRepeat(t.repeat);
   return !!r && r.unit === "day" && r.n === 1;
 }
-const byDue = (a, b) => a.due.localeCompare(b.due) || String(a.title).localeCompare(String(b.title));
+/* ---------- due times, subtasks and order ---------- */
+function fmtTime(t) {
+  const m = /^(\d{2}):(\d{2})$/.exec(t || "");
+  if (!m) return "";
+  const h = Number(m[1]);
+  return `${h % 12 || 12}:${m[2]} ${h < 12 ? "AM" : "PM"}`;
+}
+function timeMin(t) { const m = /^(\d{2}):(\d{2})$/.exec(t || ""); return m ? Number(m[1]) * 60 + Number(m[2]) : -1; }
+function nowHM() { const d = new Date(); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+/* Late: a day gone by, or today's time gone by. A task with no time is late only after its day. */
+function isLate(t) {
+  if (!t.due || t.completed) return false;
+  const today = todayStr();
+  return t.due < today || (t.due === today && !!t.time && t.time < nowHM());
+}
+const taskById = id => DATA.tasks.find(t => t.id === id);
+const isSub = t => !!t.parentId && !!taskById(t.parentId); // a subtask whose parent is gone stands as a task of its own
+const subsOf = id => DATA.tasks.filter(t => t.parentId === id);
+const tops = () => DATA.tasks.filter(t => !isSub(t));
+const sortKey = t => t.sort == null ? 1e9 : t.sort;
+/* Subtasks: open ones first, then the order they were put in. */
+const subOrder = (a, b) => !!a.completed - !!b.completed || sortKey(a) - sortKey(b);
+/* Tasks by day, then time (no time first, like an all-day event), then the order set by dragging. */
+const cmpTask = (a, b) => (a.due || "9").localeCompare(b.due || "9") || (a.time || "").localeCompare(b.time || "") ||
+  sortKey(a) - sortKey(b) || String(a.title).localeCompare(String(b.title));
+const byDue = cmpTask;
 
 /* ============ views ============ */
 const VIEWS = {
@@ -691,6 +763,7 @@ const VIEWS = {
 };
 
 function render() {
+  if (TD) return; // mid-drag: the rows stay put under the finger; the drop renders
   const v = VIEWS[VIEW];
   document.getElementById("viewTitle").textContent = v.title();
   document.getElementById("todayEyebrow").textContent =
@@ -711,12 +784,13 @@ function renderToday() {
   const dayIdx = (new Date().getDay() + 6) % 7;
   const dinner = (DATA.meals[DAYS[dayIdx]] || {}).meal;
   const todaysEvents = DATA.events.filter(e => e.date === t);
-  const daily = DATA.tasks.filter(x => x.recurrence === "daily" || isDailyRepeat(x));
+  // Subtasks show under their parents, so only top-level tasks are sorted into these lists.
+  const top = tops();
+  const daily = top.filter(x => x.recurrence === "daily" || isDailyRepeat(x));
   // Dated tasks once they're due (overdue first); undated one-offs as before.
-  const oneOff = DATA.tasks.filter(x => !x.completed && !isDailyRepeat(x) &&
-      (x.due ? x.due <= t : x.recurrence === "once"))
-    .sort((a, b) => (a.due || "9") .localeCompare(b.due || "9"));
-  const onDeck = DATA.tasks.filter(x => ["weekly", "monthly", "quarterly", "yearly"].includes(x.recurrence) && !x.completed);
+  const oneOff = top.filter(x => !x.completed && !isDailyRepeat(x) &&
+      (x.due ? x.due <= t : x.recurrence === "once")).sort(cmpTask);
+  const onDeck = top.filter(x => ["weekly", "monthly", "quarterly", "yearly"].includes(x.recurrence) && !x.completed);
 
   const tonight = mealParts(dinner);
   let h = `<div class="lineup"><span class="marker now">Tonight</span>
@@ -951,32 +1025,51 @@ const REPEAT_PRESETS = [
   ["every 1 week", "Weekly"], ["every 2 weeks", "Every 2 weeks"], ["every 1 month", "Monthly"],
   ["every 3 months", "Every 3 months"], ["every 6 months", "Every 6 months"], ["every 1 year", "Yearly"], ["custom", "Custom…"],
 ];
+/* The repeat picker, shared by the add form (ids "new…") and the edit screen ("ed…"). */
+function repeatSelect(p) {
+  return `<select id="${p}Repeat" aria-label="Repeat" onchange="repeatUI('${p}')">${REPEAT_PRESETS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`;
+}
+function repeatCustom(p) {
+  return `<div class="addrow hidden" id="${p}Custom">
+      <span class="muted">Every</span>
+      <input type="number" id="${p}RepN" min="1" max="99" value="1" aria-label="How many" oninput="repeatUI('${p}')">
+      <select id="${p}RepUnit" aria-label="Days, weeks, months or years" onchange="repeatUI('${p}')">
+        <option value="day">day(s)</option><option value="week" selected>week(s)</option>
+        <option value="month">month(s)</option><option value="year">year(s)</option></select>
+      <div class="daypick" id="${p}RepDays">${WD.map((d, i) => `<label><input type="checkbox" value="${d}" onchange="this.closest('.daypick').dataset.touched = 1; repeatUI('${p}')"><span aria-label="${WD_LONG[i]}">${WD_LONG[i][0]}</span></label>`).join("")}</div>
+      <select id="${p}RepOn" aria-label="Which day of the month" onchange="repeatUI('${p}')"></select>
+    </div>`;
+}
+/* Top-level tasks a task could go under: open ones (and its own parent, even if ticked), not itself, not one still saving. */
+function parentOptions(selected, except) {
+  return `<option value="">Not a subtask</option>` + tops().filter(x => x.id !== except && (!x.completed || x.id === selected) && !String(x.id).startsWith("tmp-"))
+    .sort(cmpTask).map(x => `<option value="${esc(x.id)}" ${x.id === selected ? "selected" : ""}>${esc(x.title)}</option>`).join("");
+}
 function renderTasks() {
   const options = FAMILY.map(f => `<option>${f}</option>`).join("");
   let h = `<div class="addform">
     <input type="text" id="newTitle" placeholder="New task…">
     <div class="addrow">
-      <select id="newWho" aria-label="Who">${options}</select>
       <input type="date" id="newDue" aria-label="Due date" onchange="repeatUI()">
-      <select id="newRepeat" aria-label="Repeat" onchange="repeatUI()">${REPEAT_PRESETS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>
-    </div>
-    <div class="addrow hidden" id="customRepeat">
-      <span class="muted">Every</span>
-      <input type="number" id="repN" min="1" max="99" value="1" aria-label="How many" oninput="repeatUI()">
-      <select id="repUnit" aria-label="Days, weeks, months or years" onchange="repeatUI()">
-        <option value="day">day(s)</option><option value="week" selected>week(s)</option>
-        <option value="month">month(s)</option><option value="year">year(s)</option></select>
-      <div class="daypick" id="repDays">${WD.map((d, i) => `<label><input type="checkbox" value="${d}" onchange="this.closest('.daypick').dataset.touched = 1; repeatUI()"><span aria-label="${WD_LONG[i]}">${WD_LONG[i][0]}</span></label>`).join("")}</div>
-      <select id="repOn" aria-label="Which day of the month" onchange="repeatUI()"></select>
+      <input type="time" id="newTime" aria-label="Due time" onchange="repeatUI()">
     </div>
     <div class="addrow">
-      <span class="tiny grow" id="repeatText"></span>
+      <select id="newWho" aria-label="Who">${options}</select>
+      ${repeatSelect("new")}
+    </div>
+    <div class="addrow">
+      <select id="newParent" aria-label="Subtask of">${parentOptions("", "")}</select>
+    </div>
+    ${repeatCustom("new")}
+    <div class="addrow">
+      <span class="tiny grow" id="newRepeatText"></span>
       <button class="primary" onclick="addTask()">Add</button>
     </div>
   </div>`;
   // Dated tasks, like Apple Reminders: overdue, today, the coming week, then later.
+  // Subtasks go with their parents, so only top-level tasks sort into sections.
   const today = todayStr(), week = isoPlus(today, 7), shown = new Set();
-  const dated = DATA.tasks.filter(x => x.due);
+  const dated = tops().filter(x => x.due);
   const take = list => { list.forEach(x => shown.add(x.id)); return list.sort(byDue); };
   const overdue = take(dated.filter(x => x.due < today && !x.completed));
   const todays = take(dated.filter(x => !shown.has(x.id) && (x.due === today || (x.repeat && x.completed))));
@@ -994,7 +1087,7 @@ function renderTasks() {
   const nLater = later.length + rLater.length;
   if (nLater) h += `<details class="later" data-sec="later" ontoggle="secToggle(this)" ${REM.open.has("later") ? "open" : ""}><summary>Later · ${nLater} task${nLater > 1 ? "s" : ""}</summary><div class="block">${mixRows(later, rLater).join("")}</div></details>`;
   RECURS.forEach(r => {
-    const group = DATA.tasks.filter(t => t.recurrence === r && !shown.has(t.id));
+    const group = tops().filter(t => t.recurrence === r && !shown.has(t.id)).sort(cmpTask);
     if (!group.length) return;
     const hint = { once: "", daily: " · resets every day", weekly: " · resets Mondays", monthly: " · resets on the 1st", quarterly: " · resets each quarter", yearly: " · resets Jan 1" }[r];
     h += `<h2>${RECUR_LABEL[r]}${hint ? `<span class="hint">${hint}</span>` : ""}</h2>
@@ -1087,12 +1180,13 @@ async function tickReminder(key, on) {
   } catch (e) { note("Save failed — offline?"); }
 }
 const openFirst = (a, b) => !!a.ticked - !!b.ticked;
-/* Hub tasks and reminders in one list: open before done, then by date and
-   time. An undated Hub task sorts after the dated ones ("9" > any date). */
+/* Hub tasks and reminders in one list: open before done, then by date, time
+   and the order set by dragging. An undated Hub task sorts after the dated
+   ones ("9" > any date); a task with no time sorts before timed ones. */
 function mixRows(tasks, rems) {
-  const rows = tasks.map(t => ({ done: !!t.completed, due: t.due || "9", min: -1, title: String(t.title), html: () => taskRow(t) }))
-    .concat(rems.map(r => ({ done: !!r.ticked, due: r.due, min: remMinutes(r.time), title: r.title, html: () => reminderRow(r) })));
-  return rows.sort((a, b) => a.done - b.done || a.due.localeCompare(b.due) || a.min - b.min || a.title.localeCompare(b.title))
+  const rows = tasks.map(t => ({ done: !!t.completed, due: t.due || "9", min: timeMin(t.time), ord: sortKey(t), title: String(t.title), html: () => taskRow(t) }))
+    .concat(rems.map(r => ({ done: !!r.ticked, due: r.due, min: remMinutes(r.time), ord: 2e9, title: r.title, html: () => reminderRow(r) })));
+  return rows.sort((a, b) => a.done - b.done || a.due.localeCompare(b.due) || a.min - b.min || a.ord - b.ord || a.title.localeCompare(b.title))
     .map(x => x.html());
 }
 /* Undated reminders have no section to sort into, so each list gets its own,
@@ -1150,50 +1244,77 @@ function isoPlus(iso, days) {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 const val = id => (document.getElementById(id) || {}).value || "";
-/* The repeat the form describes, in the stored text form. */
-function currentRepeat() {
-  const preset = val("newRepeat");
+/* The repeat a form describes ("new" adds, "ed" edits), in the stored text form. */
+function currentRepeat(p = "new") {
+  const preset = val(p + "Repeat");
   if (preset !== "custom") return preset;
-  const n = Math.max(1, Math.min(99, parseInt(val("repN"), 10) || 1)), unit = val("repUnit");
+  const n = Math.max(1, Math.min(99, parseInt(val(p + "RepN"), 10) || 1)), unit = val(p + "RepUnit");
   let rule = `every ${n} ${unit}${n > 1 ? "s" : ""}`;
   if (unit === "week") {
-    const days = [...document.querySelectorAll("#repDays input:checked")].map(i => i.value);
+    const days = [...document.querySelectorAll(`#${p}RepDays input:checked`)].map(i => i.value);
     if (days.length) rule += " on " + days.join(",");
   }
-  if ((unit === "month" || unit === "year") && val("repOn")) rule += " on " + val("repOn");
+  if ((unit === "month" || unit === "year") && val(p + "RepOn")) rule += " on " + val(p + "RepOn");
   return rule;
 }
 /* Shows the custom controls that fit, and says in words what will happen. */
-function repeatUI() {
-  const box = document.getElementById("customRepeat");
+function repeatUI(p = "new") {
+  const box = document.getElementById(p + "Custom");
   if (!box) return;
-  const custom = val("newRepeat") === "custom", unit = val("repUnit");
-  const due = val("newDue") || todayStr(), d = new Date(due + "T12:00:00");
+  const custom = val(p + "Repeat") === "custom", unit = val(p + "RepUnit");
+  const due = val(p + "Due") || todayStr(), d = new Date(due + "T12:00:00");
   box.classList.toggle("hidden", !custom);
-  document.getElementById("repDays").classList.toggle("hidden", unit !== "week");
+  const dayBox = document.getElementById(p + "RepDays");
+  dayBox.classList.toggle("hidden", unit !== "week");
   // The due date's weekday, until the days are picked by hand (or all unpicked).
-  const days = [...document.querySelectorAll("#repDays input")];
-  if (!document.getElementById("repDays").dataset.touched || !days.some(i => i.checked)) {
+  const days = [...dayBox.querySelectorAll("input")];
+  if (!dayBox.dataset.touched || !days.some(i => i.checked)) {
     days.forEach((i, n) => { i.checked = n === d.getDay(); });
   }
   // "On the same date" or "on the third Saturday" (and "last", when it is), from the due date
-  const on = document.getElementById("repOn"), keep = on.value, k = Math.ceil(d.getDate() / 7), wd = WD[d.getDay()];
+  const on = document.getElementById(p + "RepOn"), keep = on.value, k = Math.ceil(d.getDate() / 7), wd = WD[d.getDay()];
   const isLast = d.getDate() + 7 > new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
   const choices = [["", `On day ${d.getDate()}`], [`${NTH_CODE[k]} ${wd}`, `On the ${NTH_WORD[k]} ${WD_LONG[d.getDay()]}`]]
     .concat(isLast && k !== 5 ? [[`last ${wd}`, `On the last ${WD_LONG[d.getDay()]}`]] : []);
   on.innerHTML = choices.map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
   if (choices.some(c => c[0] === keep)) on.value = keep;
   on.classList.toggle("hidden", unit !== "month" && unit !== "year");
-  const rule = currentRepeat(), info = dueInfo(due);
-  say("repeatText", rule ? `↻ ${describeRepeat(rule, due)}, starting ${info.text.toLowerCase() === "today" ? "today" : info.text}`
-    : val("newDue") ? `Due ${info.text}` : "");
+  // A time with no day means today.
+  const rule = currentRepeat(p), info = dueInfo(due), time = val(p + "Time");
+  const when = (info.text.toLowerCase() === "today" ? "today" : info.text) + (time ? " at " + fmtTime(time) : "");
+  say(p + "RepeatText", rule ? `↻ ${describeRepeat(rule, due)}, starting ${when}`
+    : val(p + "Due") || time ? `Due ${when}` : "");
+}
+/* Puts a stored repeat back into the picker: a preset when it is one, otherwise the custom controls. */
+function fillRepeat(p, text) {
+  const sel = document.getElementById(p + "Repeat"), r = parseRepeat(text);
+  if (!text || !r) { sel.value = ""; repeatUI(p); return; }
+  if ([...sel.options].some(o => o.value === text)) { sel.value = text; repeatUI(p); return; }
+  sel.value = "custom";
+  document.getElementById(p + "RepN").value = r.n;
+  document.getElementById(p + "RepUnit").value = r.unit;
+  if (r.days) {
+    const box = document.getElementById(p + "RepDays");
+    box.dataset.touched = 1;
+    box.querySelectorAll("input").forEach((i, n) => { i.checked = r.days.includes(n); });
+  }
+  repeatUI(p); // builds the "on the third Saturday" choices from the due date
+  if (r.nth) { document.getElementById(p + "RepOn").value = `${NTH_CODE[r.nth.k]} ${WD[r.nth.wd]}`; repeatUI(p); }
+}
+/* Due date and time as a form gives them: a time alone means today, a repeat needs a day, and no day means no time. */
+function formWhen(p, repeat) {
+  let due = val(p + "Due"), time = val(p + "Time");
+  if (!due && (time || repeat)) due = todayStr();
+  return { due, time: due ? time : "" };
 }
 function addTask() {
   const title = document.getElementById("newTitle").value.trim();
   if (!title) return;
-  const repeat = currentRepeat(), due = val("newDue") || (repeat ? todayStr() : "");
-  const body = { action: "addTask", title, recurrence: "once", due, repeat, assignee: val("newWho"), by: cfg.user };
-  DATA.tasks.push({ id: "tmp-" + Date.now(), title, recurrence: repeat ? "repeat" : "once", repeat, due, assignee: body.assignee, completed: false });
+  const repeat = currentRepeat(), { due, time } = formWhen("new", repeat), parentId = val("newParent");
+  const body = { action: "addTask", title, recurrence: "once", due, time, repeat, parentId, assignee: val("newWho"), by: cfg.user };
+  const last = Math.max(0, ...subsOf(parentId).map(x => x.sort || 0));
+  DATA.tasks.push({ id: "tmp-" + Date.now(), title, recurrence: repeat ? "repeat" : "once", repeat, due, time, parentId,
+    sort: parentId ? last + 1 : null, assignee: body.assignee, completed: false });
   clearDraft("fd_draft_task");
   send(body);
 }
@@ -1204,9 +1325,258 @@ function toggleTask(id) {
   send({ action: "toggleTask", id, by: cfg.user });
 }
 function deleteTask(id) {
-  if (!confirm("Delete this task?")) { render(); return; }
-  DATA.tasks = DATA.tasks.filter(x => x.id !== id);
+  const n = subsOf(id).length;
+  if (!confirm(n ? `Delete this task and its ${n} subtask${n > 1 ? "s" : ""}?` : "Delete this task?")) { render(); return; }
+  closeOverlay();
+  DATA.tasks = DATA.tasks.filter(x => x.id !== id && x.parentId !== id);
   send({ action: "deleteTask", id });
+}
+/* Edits go one at a time, in order, so a quick run of moves can't land out of order. */
+let TASK_Q = Promise.resolve();
+function sendTask(body) { TASK_Q = TASK_Q.then(() => send(body)); return TASK_Q; }
+
+/* ----- Editing a task -----
+   Tap a task's title. Everything the add form sets can be changed, and a
+   task can be put under another one (or taken out) as a subtask. */
+function openTaskEdit(id) {
+  const t = taskById(id);
+  if (!t || String(id).startsWith("tmp-")) return; // still saving
+  const subs = subsOf(id), who = FAMILY.includes(t.assignee) ? FAMILY : [""].concat(FAMILY);
+  overlayHtml(`
+    <header><span class="eyebrow">Edit task</span></header>
+    <label class="f" for="edTitle">Task</label>
+    <input type="text" id="edTitle" value="${esc(t.title)}" maxlength="200" onkeydown="if (event.key === 'Enter') saveTaskEdit('${esc(id)}')">
+    <label class="f" for="edWho">Who</label>
+    <select id="edWho">${who.map(f => `<option value="${esc(f)}" ${f === (t.assignee || "") ? "selected" : ""}>${esc(f || "Anyone")}</option>`).join("")}</select>
+    <label class="f" for="edDue">Due</label>
+    <div class="addrow">
+      <input type="date" id="edDue" value="${esc(t.due || "")}" aria-label="Due date" onchange="repeatUI('ed')">
+      <input type="time" id="edTime" value="${esc(t.time || "")}" aria-label="Due time" onchange="repeatUI('ed')">
+      <button type="button" class="ghost" onclick="clearWhen()">Clear</button>
+    </div>
+    <label class="f" for="edRepeat">Repeat</label>
+    <div class="addrow">${repeatSelect("ed")}</div>
+    ${repeatCustom("ed")}
+    <div class="tiny" id="edRepeatText" style="margin-top:var(--space-2)"></div>
+    <label class="f" for="edParent">Subtask of</label>
+    <select id="edParent" ${subs.length ? "disabled" : ""}>${parentOptions(isSub(t) ? t.parentId : "", id)}</select>
+    ${subs.length ? `<div class="tiny" style="margin-top:var(--space-2)">It has ${subs.length} subtask${subs.length > 1 ? "s" : ""} of its own, so it can't go under another task.</div>` : ""}
+    <div class="actions">
+      <button class="primary" onclick="saveTaskEdit('${esc(id)}')">Save</button>
+      <button class="ghost" onclick="closeOverlay()">Cancel</button>
+      <button class="danger" onclick="deleteTask('${esc(id)}')">Delete</button>
+    </div>
+    <div class="tiny" style="margin-top:var(--space-5)">On the Tasks screen, drag a task by its handle: onto another task to make it a subtask, between tasks to move it, or onto Today, Tomorrow, Next week or No date.</div>`);
+  fillRepeat("ed", t.repeat || "");
+}
+function clearWhen() {
+  document.getElementById("edDue").value = "";
+  document.getElementById("edTime").value = "";
+  document.getElementById("edRepeat").value = "";
+  repeatUI("ed");
+}
+function saveTaskEdit(id) {
+  const t = taskById(id);
+  if (!t) { closeOverlay(); return; }
+  const title = val("edTitle").trim();
+  if (!title) { document.getElementById("edTitle").focus(); return; }
+  const repeat = currentRepeat("ed"), { due, time } = formWhen("ed", repeat);
+  const parentId = subsOf(id).length ? "" : val("edParent");
+  const body = { action: "updateTask", id, title, assignee: val("edWho"), due, time, repeat, parentId };
+  // Show it straight away; the save answers with what the Sheet now holds.
+  if (parentId !== (t.parentId || "")) t.sort = parentId ? Math.max(0, ...subsOf(parentId).map(x => x.sort || 0)) + 1 : null;
+  if (t.repeat && (due !== t.due || repeat !== t.repeat)) t.completed = false;
+  Object.assign(t, { title, assignee: body.assignee, due, time, repeat, parentId,
+    recurrence: repeat ? "repeat" : t.recurrence === "repeat" ? "once" : t.recurrence });
+  closeOverlay();
+  render();
+  sendTask(body);
+}
+
+/* ----- Dragging tasks -----
+   Press a task's handle and drag. Where it's dropped decides what happens:
+   - onto the middle of a task: it becomes that task's last subtask
+   - between tasks: it goes there, taking that spot's day and time
+     (beside a subtask, it becomes a subtask of the same parent)
+   - onto Today, Tomorrow, Next week or No date in the bar that appears: a new day
+   Subtasks go one level deep. Arrow keys on the handle do the same moves. */
+let TD = null;
+const TD_EDGE = 0.28; // the top and bottom of a row (as a share of its height) place beside it; the middle nests
+const TD_DATES = [["Today", 0], ["Tomorrow", 1], ["Next week", 7], ["No date", null]];
+
+/* What dropping task t beside (or into) task r would do, or null if it can't go there. */
+function planPlace(t, r, where) {
+  if (!r || r.id === t.id || r.completed) return null;
+  const hasSubs = subsOf(t.id).length > 0, ids = list => list.map(x => x.id);
+  const open = x => !x.completed && x.id !== t.id;
+  if (where === "into") {
+    if (hasSubs || isSub(r)) return null;
+    return { parentId: r.id, due: t.due || "", time: t.time || "",
+      order: ids(subsOf(r.id).filter(open).sort(subOrder).concat(t)), hint: `Make it a subtask of “${r.title}”` };
+  }
+  if (isSub(r)) {
+    if (hasSubs) return null;
+    const sibs = subsOf(r.parentId).filter(open).sort(subOrder);
+    sibs.splice(sibs.indexOf(r) + (where === "after" ? 1 : 0), 0, t);
+    return { parentId: r.parentId, due: t.due || "", time: t.time || "", order: ids(sibs),
+      hint: t.parentId === r.parentId ? "Move it here" : `Make it a subtask of “${taskById(r.parentId).title}”` };
+  }
+  // Beside a top-level task: it takes that task's day and time, so it sorts where it's dropped.
+  let due = t.due || "", time = t.time || "";
+  if (r.due) {
+    if (t.recurrence !== "once" && t.recurrence !== "repeat") return null; // the Sheet's own daily/weekly lists keep no date
+    due = r.due; time = r.time || "";
+  } else if (due || t.recurrence !== r.recurrence) return null; // undated lists only reorder
+  const group = tops().filter(x => open(x) && (x.due || "") === due && (x.time || "") === time &&
+    (due || x.recurrence === t.recurrence)).sort(cmpTask);
+  group.splice(group.indexOf(r) + (where === "after" ? 1 : 0), 0, t);
+  return { parentId: "", due, time, order: ids(group), hint: planHint(t, due, time) || "Move it here" };
+}
+/* What dropping task t on a day in the bar would do. */
+function planDate(t, due) {
+  if (t.recurrence !== "once" && t.recurrence !== "repeat") return null;
+  if (!due && t.repeat) return null; // a repeating task always has a next date
+  const time = due ? t.time || "" : "";
+  const group = tops().filter(x => !x.completed && x.id !== t.id && (x.due || "") === due && (x.time || "") === time &&
+    (due || x.recurrence === "once")).sort(cmpTask).concat(t);
+  return { parentId: "", due, time, order: group.map(x => x.id), hint: planHint(t, due, time) || "Leave it where it is" };
+}
+function planHint(t, due, time) {
+  const parts = [];
+  if (isSub(t)) parts.push("Take it out of “" + taskById(t.parentId).title + "”");
+  if (due !== (t.due || "") || time !== (t.time || "")) {
+    parts.push(due ? "Due " + dueInfo(due).text + (time ? " · " + fmtTime(time) : "") : "No due date");
+  }
+  return parts.join(" · ");
+}
+/* Saves a move: the new day, time and parent, and the order of the list it joined. */
+function commitPlan(t, plan) {
+  const body = { action: "updateTask", id: t.id, order: plan.order.filter(id => !String(id).startsWith("tmp-")) };
+  if ((isSub(t) ? t.parentId : "") !== plan.parentId) body.parentId = plan.parentId;
+  if ((t.due || "") !== plan.due) body.due = plan.due;
+  if ((t.time || "") !== plan.time) body.time = plan.time;
+  if (t.repeat && "due" in body) t.completed = false;
+  Object.assign(t, { parentId: plan.parentId, due: plan.due, time: plan.time });
+  plan.order.forEach((id, i) => { const x = taskById(id); if (x) x.sort = i + 1; });
+  render();
+  return sendTask(body);
+}
+
+function tdStart(e, id) {
+  const t = taskById(id);
+  if (TD || DRAG || !t || String(id).startsWith("tmp-")) return;
+  e.preventDefault();
+  const row = e.currentTarget.closest(".task");
+  e.currentTarget.setPointerCapture(e.pointerId);
+  // The task and its subtasks move together, and can't be dropped on themselves.
+  const group = [row, ...document.querySelectorAll(`#main .task[data-parent="${CSS.escape(id)}"]`)];
+  const sy = window.scrollY;
+  const rows = [...document.querySelectorAll("#main .task[data-tid]")].filter(r => !group.includes(r) && !r.classList.contains("done"))
+    .map(r => { const b = r.getBoundingClientRect(); return { el: r, id: r.dataset.tid, parent: r.dataset.parent || "", top: b.top + sy, bottom: b.bottom + sy, left: b.left, width: b.width }; });
+  const bar = document.createElement("div");
+  bar.className = "td-bar";
+  bar.innerHTML = `<div class="td-hint" id="tdHint" role="status">Drop onto a task to make it a subtask</div>
+    <div class="td-chips">${TD_DATES.map(([label, days]) => {
+      const due = days == null ? "" : isoPlus(todayStr(), days);
+      return `<div class="td-chip ${planDate(t, due) ? "" : "off"}" data-due="${due}">${label}</div>`;
+    }).join("")}</div>`;
+  document.body.appendChild(bar);
+  const line = document.createElement("div");
+  line.className = "drop-line hidden";
+  document.body.appendChild(line);
+  TD = { t, group, rows, bar, line, sx: e.clientX, sy: e.clientY, scroll0: sy, x: e.clientX, y: e.clientY, plan: null, into: null, raf: 0 };
+  row.classList.add("dragging");
+  group.slice(1).forEach(r => r.classList.add("dragging-sub"));
+  tdLoop();
+}
+function tdMove(e) {
+  if (!TD) return;
+  TD.x = e.clientX; TD.y = e.clientY;
+  tdUpdate();
+}
+function tdUpdate() {
+  const dy = TD.y - TD.sy + window.scrollY - TD.scroll0, dx = (TD.x - TD.sx) * 0.3;
+  TD.group.forEach(r => { r.style.transform = `translate(${dx}px, ${dy}px)`; });
+  let plan = null, into = null, lineAt = null;
+  // On a day in the bar?
+  TD.bar.querySelectorAll(".td-chip").forEach(c => {
+    const b = c.getBoundingClientRect(), hit = TD.x >= b.left && TD.x <= b.right && TD.y >= b.top && TD.y <= b.bottom;
+    const p = hit && planDate(TD.t, c.dataset.due);
+    c.classList.toggle("on", !!p);
+    if (p) plan = p;
+  });
+  // Over a row?
+  const y = TD.y + window.scrollY, r = !plan && TD.y > TD.bar.getBoundingClientRect().bottom && TD.rows.find(x => y >= x.top && y < x.bottom);
+  if (r) {
+    const f = (y - r.top) / (r.bottom - r.top), target = taskById(r.id);
+    if (r.parent) {
+      const where = f < 0.5 ? "before" : "after";
+      plan = planPlace(TD.t, target, where);
+      lineAt = { r, y: where === "before" ? r.top : r.bottom };
+    } else if (f > TD_EDGE && f < 1 - TD_EDGE) {
+      plan = planPlace(TD.t, target, "into");
+      if (plan) into = r.el;
+    } else {
+      const where = f <= TD_EDGE ? "before" : "after";
+      plan = planPlace(TD.t, target, where);
+      // "After" a task with subtasks means after the last of them.
+      const last = TD.rows.filter(x => x.parent === r.id).pop();
+      lineAt = { r, y: where === "before" ? r.top : (last || r).bottom };
+    }
+  }
+  if (TD.into !== into) {
+    if (TD.into) TD.into.classList.remove("drop-into");
+    if (into) into.classList.add("drop-into");
+    TD.into = into;
+  }
+  const showLine = plan && lineAt;
+  TD.line.classList.toggle("hidden", !showLine);
+  if (showLine) Object.assign(TD.line.style, { top: lineAt.y + "px", left: lineAt.r.left + "px", width: lineAt.r.width + "px" });
+  TD.plan = plan;
+  document.getElementById("tdHint").textContent = plan ? plan.hint
+    : r || TD.bar.contains(document.elementFromPoint(TD.x, TD.y)) ? "It can't go there" : "Drop onto a task to make it a subtask";
+}
+/* Scrolls the page while the finger is held near the top (under the bar) or the bottom. */
+function tdLoop() {
+  if (!TD) return;
+  const top = TD.bar.getBoundingClientRect().bottom, bottom = window.innerHeight - 90; // the nav sits at the bottom
+  const v = TD.y > top && TD.y < top + 60 ? -Math.ceil((top + 60 - TD.y) / 6)
+    : TD.y > bottom ? Math.ceil((TD.y - bottom) / 6) : 0;
+  if (v) { window.scrollBy(0, Math.max(-12, Math.min(12, v))); tdUpdate(); }
+  TD.raf = requestAnimationFrame(tdLoop);
+}
+function tdEnd(cancel) {
+  if (!TD) return;
+  const { t, plan, group, bar, line, into, raf } = TD;
+  TD = null;
+  cancelAnimationFrame(raf);
+  bar.remove(); line.remove();
+  if (into) into.classList.remove("drop-into");
+  group.forEach(r => { r.style.transform = ""; r.classList.remove("dragging", "dragging-sub"); });
+  if (!cancel && plan) commitPlan(t, plan);
+  else render(); // picks up anything a refresh brought in mid-drag
+}
+/* The same moves from the keyboard: up and down within the list, right to go
+   under the task above, left to come out from under its parent. */
+function tdKey(e, id) {
+  const t = taskById(id);
+  if (!t || !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
+  e.preventDefault();
+  if (String(id).startsWith("tmp-") || TD) return;
+  const row = e.currentTarget.closest(".task");
+  const peers = [...row.parentElement.querySelectorAll(".task[data-tid]:not(.done)")]
+    .filter(r => (r.dataset.parent || "") === (row.dataset.parent || ""));
+  const at = peers.indexOf(row), above = peers[at - 1], below = peers[at + 1];
+  let plan = null;
+  if (e.key === "ArrowUp" && above) plan = planPlace(t, taskById(above.dataset.tid), "before");
+  if (e.key === "ArrowDown" && below) plan = planPlace(t, taskById(below.dataset.tid), "after");
+  if (e.key === "ArrowRight" && !row.dataset.parent && above) plan = planPlace(t, taskById(above.dataset.tid), "into");
+  if (e.key === "ArrowLeft" && isSub(t)) plan = planPlace(t, taskById(t.parentId), "after");
+  if (!plan) return;
+  const refocus = () => { const b = document.querySelector(`[data-tgrip="${CSS.escape(id)}"]`); if (b) b.focus(); };
+  note(plan.hint);
+  commitPlan(t, plan).then(refocus);
+  refocus();
 }
 
 /* ----- Check-ins ----- */
