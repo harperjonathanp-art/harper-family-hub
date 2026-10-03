@@ -182,3 +182,12 @@ A subtask of a repeating task (a `repeat`, or a daily/weekly/monthly
 `recurrence`) comes round with it: its tick counts for the parent's current
 turn, so when the parent moves on to its next date the subtasks untick too.
 A subtask with a `repeat` of its own keeps its own schedule.
+
+Ticking a task ticks its open subtasks too, like Apple Reminders (for a
+repeating task, they count for the turn just done). Unticking it leaves the
+subtasks ticked. A subtask with a `repeat` of its own isn't ticked with it.
+
+In the Hub, a task's subtasks fold under it like a reminder's: tap
+"2 of 3 subtasks left" to hide or show them. Each device remembers which
+tasks it has folded (nothing goes to the Sheet). Adding a subtask, or
+dragging one in, opens its parent's fold.

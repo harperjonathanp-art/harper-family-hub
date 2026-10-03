@@ -408,19 +408,43 @@ function toggleTask_(id, by) {
   const tasks = rows_('Tasks');
   const task = tasks.filter(function (t) { return String(t.id) === String(id); })[0];
   if (!task) return;
-  if (parseRepeat_(task.repeat)) { toggleRepeat_(task, by); return; }
-  const pk = subPeriod_(task, tasks, today_()) || periodKey_(task.recurrence);
-  const existed = removeRowsWhere_('Completions', function (r) {
-    return String(r[0]) === String(id) && periodKeys_(r[1]).indexOf(pk) >= 0;
-  });
-  if (!existed) {
-    sheet_('Completions').appendRow([String(id), pk, by || '', new Date().toISOString()]);
+  let ticked;
+  if (parseRepeat_(task.repeat)) ticked = toggleRepeat_(task, by);
+  else {
+    const pk = subPeriod_(task, tasks, today_()) || periodKey_(task.recurrence);
+    ticked = !removeRowsWhere_('Completions', function (r) {
+      return String(r[0]) === String(id) && periodKeys_(r[1]).indexOf(pk) >= 0;
+    });
+    if (ticked) sheet_('Completions').appendRow([String(id), pk, by || '', new Date().toISOString()]);
   }
+  if (ticked) tickSubtasks_(id, by);
+}
+
+/**
+ * Ticking a task ticks its open subtasks too, like Apple Reminders. Unticking
+ * it leaves them be. A subtask with a repeat of its own keeps its own schedule.
+ */
+function tickSubtasks_(id, by) {
+  const tasks = rows_('Tasks'); // read again: a repeating parent has just moved on
+  const subs = tasks.filter(function (t) { return String(t.parentId || '') === String(id) && !parseRepeat_(t.repeat); });
+  if (!subs.length) return;
+  const done = {};
+  rows_('Completions').forEach(function (c) {
+    periodKeys_(c.periodKey).forEach(function (k) { done[c.taskId + '|' + k] = true; });
+  });
+  const today = today_(), stamp = new Date().toISOString(), add = [];
+  subs.forEach(function (t) {
+    const pk = subPeriod_(t, tasks, today) || periodKey_(t.recurrence);
+    if (!done[t.id + '|' + pk]) add.push([String(t.id), pk, by || '', stamp]);
+  });
+  if (!add.length) return;
+  const sh = sheet_('Completions');
+  sh.getRange(sh.getLastRow() + 1, 1, add.length, add[0].length).setValues(add);
 }
 
 /**
  * Ticking a repeating task moves it to its next date, like Apple Reminders.
- * Unticking it the same day puts it back where it was.
+ * Unticking it the same day puts it back where it was. Returns whether it was ticked.
  */
 function toggleRepeat_(task, by) {
   const today = today_();
@@ -430,11 +454,12 @@ function toggleRepeat_(task, by) {
     removeRowsWhere_('Completions', function (r) {
       return String(r[0]) === String(task.id) && dateStr_(r[1]) === prevDue;
     });
-    return;
+    return false;
   }
   const due = dateStr_(task.due) || today;
   updateRow_('Tasks', task.id, { due: nextDue_(task.repeat, due, today), lastDone: today, prevDue: due });
   sheet_('Completions').appendRow([String(task.id), due, by || '', new Date().toISOString()]);
+  return true;
 }
 
 /** Sets named columns on the row whose first cell is id. */

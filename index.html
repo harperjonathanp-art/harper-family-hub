@@ -329,6 +329,10 @@ details.subs > summary::before { content: "\25B8"; color: var(--ink-faint); font
 details.subs[open] > summary::before { content: "\25BE"; }
 details.subs .task { padding: var(--space-2) 0; }
 details.subs .task:last-child { border-bottom: 0; }
+/* a Hub task's subtasks fold the same way; its rows keep their own indent */
+details.subs.tsubs { padding-left: 0; }
+details.subs.tsubs > summary { padding-left: 30px; }
+details.subs.tsubs .task.sub { padding: var(--space-2) 0; }
 
 .meal .d {
   flex: 0 0 44px;
@@ -366,7 +370,7 @@ details.subs .task:last-child { border-bottom: 0; }
   background: var(--paper-sheet); box-shadow: var(--shadow-raise); border-radius: var(--radius-sm);
 }
 .task.dragging[data-tid] { opacity: .92; } /* the drop line and target show through */
-.task.dragging-sub { position: relative; z-index: 4; background: var(--paper-sheet); opacity: .85; }
+.task.dragging-sub, details.subs.dragging-sub { position: relative; z-index: 4; background: var(--paper-sheet); opacity: .85; }
 .task.drop-into { background: var(--field-tint); border-radius: var(--radius-sm); }
 .drop-line { position: absolute; z-index: 6; height: 3px; margin-top: -2px; border-radius: 2px; background: var(--field); pointer-events: none; }
 /* while a task is dragged: where it can go, and what dropping it would do */
@@ -650,11 +654,25 @@ function eventRow(e) {
 const GRIP_SVG = `<svg width="12" height="18" viewBox="0 0 12 18" aria-hidden="true" fill="currentColor">
   <circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/><circle cx="3" cy="9" r="1.6"/>
   <circle cx="9" cy="9" r="1.6"/><circle cx="3" cy="15" r="1.6"/><circle cx="9" cy="15" r="1.6"/></svg>`;
-/* A task and its subtasks, under it, as one run of rows. (Not taskRow(t, i): it's used with .map.) */
+/* A task and its subtasks, folded under it like Jon's reminders. (Not taskRow(t, i): it's used with .map.) */
 function taskRow(t) {
-  return taskLine(t, false) + (isSub(t) ? "" : subsOf(t.id).sort(subOrder).map(s => taskLine(s, true)).join(""));
+  const subs = isSub(t) ? [] : subsOf(t.id).sort(subOrder);
+  if (!subs.length) return taskLine(t, false, false);
+  const id = esc(t.id), left = subs.filter(x => !x.completed).length;
+  const label = left === subs.length ? `${left} subtask${left === 1 ? "" : "s"}` : left ? `${left} of ${subs.length} subtasks left` : "All subtasks done";
+  return taskLine(t, false, true) + `<details class="subs tsubs" data-for="${id}" ontoggle="foldTask(this.dataset.for, !this.open)" ${FOLDED.has(t.id) ? "" : "open"}>
+    <summary>${label}</summary>${subs.map(s => taskLine(s, true, false)).join("")}</details>`;
 }
-function taskLine(t, sub) {
+/* Folded tasks, remembered on this device. Open is the default, as in Reminders. */
+const FOLDED = new Set((() => { try { return JSON.parse(localStorage.getItem("fd_task_folded") || "[]"); } catch (e) { return []; } })());
+function foldTask(id, folded) {
+  if (FOLDED.has(id) === folded) return;
+  folded ? FOLDED.add(id) : FOLDED.delete(id);
+  // forget tasks that are gone, so the list doesn't grow forever
+  [...FOLDED].forEach(x => { if (!taskById(x)) FOLDED.delete(x); });
+  try { localStorage.setItem("fd_task_folded", JSON.stringify([...FOLDED])); } catch (e) {}
+}
+function taskLine(t, sub, hasSubs) {
   const id = esc(t.id);
   // Dragging lives on the Tasks screen, where the rows sit in order.
   const grip = VIEW !== "tasks" ? ""
@@ -662,7 +680,7 @@ function taskLine(t, sub) {
     : `<button class="grip" data-tgrip="${id}" aria-label="Move ${esc(t.title)} (arrow keys; right makes it a subtask, left takes it out)"
         onpointerdown="tdStart(event, '${id}')" onpointermove="tdMove(event)"
         onpointerup="tdEnd(false)" onpointercancel="tdEnd(true)" onkeydown="tdKey(event, '${id}')">${GRIP_SVG}</button>`;
-  return `<div class="task ${t.completed ? "done" : ""} ${sub ? "sub" : ""}" data-tid="${id}" ${sub ? `data-parent="${esc(t.parentId)}"` : ""}>
+  return `<div class="task ${t.completed ? "done" : ""} ${sub ? "sub" : ""} ${hasSubs ? "has-subs" : ""}" data-tid="${id}" ${sub ? `data-parent="${esc(t.parentId)}"` : ""}>
     ${grip}
     <input type="checkbox" ${t.completed ? "checked" : ""} onchange="toggleTask('${id}')" aria-label="${esc(t.title)}">
     ${chip(t.assignee)}
@@ -734,8 +752,6 @@ function taskMeta(t) {
   }
   if (t.repeat) parts.push(`<span>↻ ${esc(describeRepeat(t.repeat, t.due))}</span>`);
   if (t.badRepeat) parts.push(`<span class="overdue">Can't read the repeat "${esc(t.badRepeat)}" — fix it in the Sheet</span>`);
-  const subs = isSub(t) ? [] : subsOf(t.id);
-  if (subs.length) parts.push(`<span>${subs.filter(x => x.completed).length} of ${subs.length} subtasks done</span>`);
   return parts.length ? `<span class="meta">${parts.join(" &nbsp;")}</span>` : "";
 }
 function isDailyRepeat(t) {
@@ -1331,6 +1347,7 @@ function addTask() {
   const repeat = currentRepeat(), { due, time } = formWhen("new", repeat), parentId = val("newParent");
   const body = { action: "addTask", title, recurrence: "once", due, time, repeat, parentId, assignee: val("newWho"), by: cfg.user };
   const last = Math.max(0, ...subsOf(parentId).map(x => x.sort || 0));
+  if (parentId) foldTask(parentId, false);
   DATA.tasks.push({ id: "tmp-" + Date.now(), title, recurrence: repeat ? "repeat" : "once", repeat, due, time, parentId,
     sort: parentId ? last + 1 : null, assignee: body.assignee, completed: false });
   clearDraft("fd_draft_task");
@@ -1340,6 +1357,11 @@ function toggleTask(id) {
   if (id.startsWith("tmp")) { render(); return; } // still saving
   const t = DATA.tasks.find(x => x.id === id);
   if (t) { t.completed = !t.completed; t.completedBy = t.completed ? cfg.user : null; }
+  // Ticking a task ticks its open subtasks too (the server does the same); unticking leaves them.
+  // A subtask with a repeat of its own keeps its own schedule.
+  if (t && t.completed && !isSub(t)) subsOf(id).forEach(s => {
+    if (!s.completed && s.recurrence !== "repeat") Object.assign(s, { completed: true, completedBy: cfg.user });
+  });
   send({ action: "toggleTask", id, by: cfg.user });
 }
 function deleteTask(id) {
@@ -1403,6 +1425,7 @@ function saveTaskEdit(id) {
   const body = { action: "updateTask", id, title, assignee: val("edWho"), due, time, repeat, parentId };
   // Show it straight away; the save answers with what the Sheet now holds.
   if (parentId !== (t.parentId || "")) t.sort = parentId ? Math.max(0, ...subsOf(parentId).map(x => x.sort || 0)) + 1 : null;
+  if (parentId) foldTask(parentId, false);
   if (t.repeat && (due !== t.due || repeat !== t.repeat)) t.completed = false;
   Object.assign(t, { title, assignee: body.assignee, due, time, repeat, parentId,
     recurrence: repeat ? "repeat" : t.recurrence === "repeat" ? "once" : t.recurrence });
@@ -1471,6 +1494,7 @@ function planHint(t, due, time) {
 function commitPlan(t, plan) {
   const body = { action: "updateTask", id: t.id, order: plan.order.filter(id => !String(id).startsWith("tmp-")) };
   if ((isSub(t) ? t.parentId : "") !== plan.parentId) body.parentId = plan.parentId;
+  if (plan.parentId) foldTask(plan.parentId, false);
   if ((t.due || "") !== plan.due) body.due = plan.due;
   if ((t.time || "") !== plan.time) body.time = plan.time;
   if (t.repeat && "due" in body) t.completed = false;
@@ -1486,11 +1510,15 @@ function tdStart(e, id) {
   e.preventDefault();
   const row = e.currentTarget.closest(".task");
   e.currentTarget.setPointerCapture(e.pointerId);
-  // The task and its subtasks move together, and can't be dropped on themselves.
-  const group = [row, ...document.querySelectorAll(`#main .task[data-parent="${CSS.escape(id)}"]`)];
+  // The task and its fold of subtasks move together, and can't be dropped on themselves.
+  const fold = r => r.nextElementSibling && r.nextElementSibling.matches("details.tsubs") ? r.nextElementSibling : null;
+  const group = [row, fold(row)].filter(Boolean);
   const sy = window.scrollY;
-  const rows = [...document.querySelectorAll("#main .task[data-tid]")].filter(r => !group.includes(r) && !r.classList.contains("done"))
-    .map(r => { const b = r.getBoundingClientRect(); return { el: r, id: r.dataset.tid, parent: r.dataset.parent || "", top: b.top + sy, bottom: b.bottom + sy, left: b.left, width: b.width }; });
+  const rows = [...document.querySelectorAll("#main .task[data-tid]")]
+    .filter(r => !group.some(g => g.contains(r)) && !r.classList.contains("done") && !r.closest("details:not([open])")) // nor a folded subtask
+    .map(r => { const b = r.getBoundingClientRect(), f = fold(r);
+      return { el: r, id: r.dataset.tid, parent: r.dataset.parent || "", top: b.top + sy, bottom: b.bottom + sy, left: b.left, width: b.width,
+        end: (f ? f.getBoundingClientRect().bottom : b.bottom) + sy }; });
   const bar = document.createElement("div");
   bar.className = "td-bar";
   bar.innerHTML = `<div class="td-hint" id="tdHint" role="status">Drop onto a task to make it a subtask</div>
@@ -1537,9 +1565,8 @@ function tdUpdate() {
     } else {
       const where = f <= TD_EDGE ? "before" : "after";
       plan = planPlace(TD.t, target, where);
-      // "After" a task with subtasks means after the last of them.
-      const last = TD.rows.filter(x => x.parent === r.id).pop();
-      lineAt = { r, y: where === "before" ? r.top : (last || r).bottom };
+      // "After" a task with subtasks means after its fold of them, open or not.
+      lineAt = { r, y: where === "before" ? r.top : r.end };
     }
   }
   if (TD.into !== into) {
