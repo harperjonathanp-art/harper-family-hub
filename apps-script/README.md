@@ -9,6 +9,7 @@ Change it here, then paste it into the editor and publish a new version.
 | `Code.gs` | The web app: tasks, meals, calendar, check-ins |
 | `Notify.gs` | Notifications: what to send, to whom, and when |
 | `Reminders.gs` | Jon's Apple Reminders, read from his daily snapshot email |
+| `Notion.gs` | Optional: the week's dinners, read from the Notion meal plan |
 | `appsscript.json` | Project settings (time zone, web app access, the permissions the script asks for, the Gmail service) |
 
 ## Script Properties
@@ -27,6 +28,8 @@ Anything private stays out of this public repo. Add these under
 | `PUSH_WORKER_URL`  | The push relay's address, e.g. `https://harper-family-hub.<name>.workers.dev` |
 | `PUSH_SECRET`      | The shared secret from `push-worker/keys.html`         |
 | `VAPID_PUBLIC_KEY` | The public key from `push-worker/keys.html`            |
+| `NOTION_TOKEN`     | Optional. The Notion integration's secret (see "Meal plan from Notion") |
+| `NOTION_MEALS_SOURCE` | Optional. The Meal Plan database's data source ID |
 | `REMINDERS_HIDE_LISTS` | Optional. Reminders lists the Hub never receives, comma separated. Left unset it hides `Work` (student names). Set it to a different list to change that, e.g. `Work, Finance` |
 
 A calendar whose property is missing is left out of the Hub.
@@ -67,6 +70,49 @@ The meal-plan alert goes once every day has a dinner and the plan has sat
 unchanged for 10 minutes (`MEALS_SETTLE_MIN` in `Notify.gs`). It isn't
 sent to whoever saved the plan in the Hub. A plan changed straight in the
 Sheet goes to everyone.
+
+## Meal plan from Notion
+
+Optional. With it on, the Hub's dinners come from the **Meal Plan** database
+in Notion, so a plan made there doesn't have to be typed into the Hub too.
+`Notion.gs` reads Notion every 10 minutes and writes today's dinner and the
+next six days' into the Meals tab. Today, Dinner, the dinner nudge and the
+meal-plan alert all keep working from that tab.
+
+- **One way, Notion to Hub.** Nothing is written to Notion. While it's on, the
+  Hub's Dinner page is read-only and starts from today, and anything typed
+  into the Meals tab is replaced at the next sync. Remove `NOTION_TOKEN` to go
+  back to planning in the Hub.
+- **What's read.** Rows whose `Meal Type` is Dinner (or blank), by `Date`.
+  `Skipped` rows are left out. Two dinners on one date are shown together.
+  `Notes` and `Who Cooks` are shown under the dinner. A linked `Recipe` adds a
+  link: its `Source` address, or its Notion page if it has none. Property names
+  are listed in `NOTION_PROPS` at the top of `Notion.gs`.
+- **Meal-plan alert.** It goes once every day of the coming week has a
+  dinner and the plan has been unchanged for 10 minutes. When the week only
+  moves on a day, with nothing changed in Notion, the alert isn't sent again.
+- **If Notion can't be reached**, the Hub keeps the last plan and says so.
+
+### Setup
+
+1. In Notion, go to **Settings → Connections → Develop or manage
+   integrations** (notion.so/profile/integrations), make a new **internal**
+   integration named "Family Hub" with **Read content** only, and copy its
+   secret.
+2. Open the **Meal Plan** database, then **••• → Connections → Family Hub**.
+   Do the same for **Recipes**, so recipe links come through. Without it,
+   dinners still show, just without their links.
+3. Copy the Meal Plan's data source ID: in the database, **••• → Manage data
+   sources → ••• → Copy data source ID**.
+4. Add `NOTION_TOKEN` (the secret) and `NOTION_MEALS_SOURCE` (the ID) under
+   Script Properties.
+5. Add a script file named `Notion` (**+ → Script**), paste `Notion.gs` into
+   it, and replace `Code.gs` and `Notify.gs` with this folder's copies.
+6. Pick **setupNotionMeals** in the function menu and press **Run**. It sets
+   the 10-minute timer and syncs once. The execution log lists the week it
+   read, e.g. `Tue  Sheet-Pan Sausage https://…  [20 min.]`. An error such as
+   `Notion 404: Could not find data_source…` means step 2 or 3 needs another look.
+7. Publish a new version (above).
 
 ## Reminders
 

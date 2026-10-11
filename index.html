@@ -344,6 +344,9 @@ details.subs.tsubs .task.sub { padding: var(--space-2) 0; }
 .meal { align-items: flex-start; }
 .meal .d { margin-top: 15px; } /* centred on the 44px field, even with a recipe link below it */
 .meal .mealbody { flex: 1; min-width: 0; }
+.meal.ro .d { margin-top: 3px; } /* read-only rows (Notion plan): level with the name, not a field */
+.meal .mname { font-size: 16px; line-height: 22px; font-weight: 500; }
+.meal .mname.none { color: var(--ink-faint); font-weight: 400; }
 .recipe {
   display: inline-flex; align-items: center; min-height: 32px; max-width: 100%;
   font-size: 12.5px; line-height: 17px; font-weight: 500; color: var(--field);
@@ -546,6 +549,7 @@ async function refresh(quiet) {
     if (!d.ok) { note(d.error === "bad_pin" ? "Wrong PIN — check Settings" : "Sync error"); return; }
     DATA = { tasks: d.tasks || [], meals: d.meals || {}, events: d.events || [], checkins: d.checkins || [],
              groceries: d.groceries, // undefined until the backend has the grocery list
+             mealsFrom: d.mealsFrom, // set when the dinners come from the Notion meal plan
              reminders: REM.show ? d.reminders : undefined }; // never kept on a device that hides them
     localStorage.setItem("fd_cache", JSON.stringify(DATA));
     noteBackend(d.tasks);
@@ -815,6 +819,7 @@ function renderToday() {
   const t = todayStr();
   const dayIdx = (new Date().getDay() + 6) % 7;
   const dinner = (DATA.meals[DAYS[dayIdx]] || {}).meal;
+  const dinnerNote = (DATA.meals[DAYS[dayIdx]] || {}).note;
   const todaysEvents = DATA.events.filter(e => e.date === t);
   // Subtasks show under their parents, so only top-level tasks are sorted into these lists.
   const top = tops();
@@ -827,7 +832,8 @@ function renderToday() {
   const tonight = mealParts(dinner);
   let h = `<div class="lineup"><span class="marker now">Tonight</span>
     <h3>${dinner ? esc(tonight.name || "Tonight's recipe") : "Dinner isn't planned yet"}</h3>${recipeLinks(tonight.links)}
-    ${dinner ? "" : `<div class="muted">Tap Dinner below to fill in the week.</div>`}</div>`;
+    ${dinnerNote ? `<div class="muted">${esc(dinnerNote)}</div>` : ""}
+    ${dinner ? "" : `<div class="muted">${fromNotion() ? "Nothing in the Notion meal plan for tonight." : "Tap Dinner below to fill in the week."}</div>`}</div>`;
 
   h += `<h2>Today's schedule</h2>`;
   h += todaysEvents.length ? `<div class="block">${todaysEvents.map(eventRow).join("")}</div>`
@@ -858,7 +864,9 @@ function renderCalendar() {
 }
 
 /* ----- Meals ----- */
+function fromNotion() { return !!(DATA.mealsFrom && DATA.mealsFrom.source === "notion"); }
 function renderMeals() {
+  if (fromNotion()) return renderNotionMeals();
   const dayIdx = (new Date().getDay() + 6) % 7;
   const rows = DAYS.map((d, i) => {
     const m = DATA.meals[d] || {};
@@ -876,6 +884,32 @@ function renderMeals() {
       <button class="primary" onclick="saveMeals()">Save week</button>
       <span class="tiny">Also editable straight from the Google Sheet.</span>
     </div>
+    ${renderGroceries()}`;
+}
+/* Planned in Notion: today and the six days after it, read-only. */
+function renderNotionMeals() {
+  clearDraft("fd_draft_meals"); // nothing here to edit, so an old draft can't hold back a refresh
+  const rows = [0, 1, 2, 3, 4, 5, 6].map(i => {
+    const date = new Date(); date.setDate(date.getDate() + i);
+    const d = DAYS[(date.getDay() + 6) % 7];
+    const m = DATA.meals[d] || {};
+    const parts = mealParts(m.meal);
+    return `<div class="meal ro ${i === 0 ? "today" : ""}">
+      <span class="d">${d}<br>${date.getDate()}</span>
+      <div class="mealbody">
+        ${m.meal ? `<div class="mname">${esc(parts.name || "Recipe")}</div>` : `<div class="mname none">Not planned yet</div>`}
+        ${recipeLinks(parts.links)}
+        ${m.note ? `<div class="muted">${esc(m.note)}</div>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+  const f = DATA.mealsFrom;
+  const at = f.syncedAt ? new Date(f.syncedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+  const status = f.error
+    ? `<span class="tiny" style="color:var(--warn)">Couldn't reach Notion at the last check, so this is the last plan it sent.</span>`
+    : `<span class="tiny">From the Notion meal plan${at ? `, checked ${esc(at)}` : ""}. Change it in Notion and the Hub catches up within 10 minutes.</span>`;
+  return `<div class="block">${rows}</div>
+    <div class="actions">${status}</div>
     ${renderGroceries()}`;
 }
 function saveMeals() {
