@@ -10,6 +10,7 @@
  *  1. Project Settings > Script Properties > add FAMILY_PIN, SHEET_ID and
  *     the CAL_* calendar IDs (calendars must be shared with this account).
  *     Jon's Reminders come from Reminders.gs (own setup steps).
+ *     Dinners can come from the Notion meal plan instead (Notion.gs).
  *  2. Deploy > New deployment > Web app > Execute as: Me > Access: Anyone.
  *  3. Notifications live in Notify.gs, with their own setup steps.
  */
@@ -61,6 +62,8 @@ function doGet(e) {
     now: new Date().toISOString(),
     tasks: getTasks_(),
     meals: getMeals_(),
+    // Set when the dinners come from Notion (Notion.gs); the Hub then shows them read-only.
+    mealsFrom: typeof notionMealsInfo_ === 'function' ? notionMealsInfo_() : null,
     events: getEvents_(),
     checkins: getCheckins_(10),
     groceries: getGroceries_(),
