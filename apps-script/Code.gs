@@ -11,6 +11,7 @@
  *     the CAL_* calendar IDs (calendars must be shared with this account).
  *     Jon's Reminders come from Reminders.gs (own setup steps).
  *     Dinners can come from the Notion meal plan instead (Notion.gs).
+ *     Check-ins can be copied to Notion (NotionCheckins.gs).
  *  2. Deploy > New deployment > Web app > Execute as: Me > Access: Anyone.
  *  3. Notifications live in Notify.gs, with their own setup steps.
  */
