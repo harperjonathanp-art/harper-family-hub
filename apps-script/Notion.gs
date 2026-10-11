@@ -138,8 +138,10 @@ function fetchDinners_(today) {
   const out = {};
   Object.keys(byDate).forEach(function (date) {
     const d = byDate[date];
-    // Recipe links go after the name, the way they're typed into the Hub, so it shows them the same way.
-    out[date] = { meal: [d.names.join(' + ')].concat(d.links).join(' ').trim(), note: d.notes.join(' · ') };
+    // Recipe links go after the name, the way they're typed into the Hub, so it shows them the same way:
+    // "Pad Thai | https://…". The Hub drops the " | " when it shows the name.
+    const name = d.names.join(' + ');
+    out[date] = { meal: [name, d.links.join(' ')].filter(String).join(' | '), note: d.notes.join(' · ') };
   });
   return out;
 }
