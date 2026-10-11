@@ -10,6 +10,7 @@ Change it here, then paste it into the editor and publish a new version.
 | `Notify.gs` | Notifications: what to send, to whom, and when |
 | `Reminders.gs` | Jon's Apple Reminders, read from his daily snapshot email |
 | `Notion.gs` | Optional: the week's dinners, read from the Notion meal plan |
+| `NotionCheckins.gs` | Optional: check-ins copied to the Weekly Check-Ins database in Notion (needs `Notion.gs` too) |
 | `appsscript.json` | Project settings (time zone, web app access, the permissions the script asks for, the Gmail service) |
 
 ## Script Properties
@@ -30,6 +31,7 @@ Anything private stays out of this public repo. Add these under
 | `VAPID_PUBLIC_KEY` | The public key from `push-worker/keys.html`            |
 | `NOTION_TOKEN`     | Optional. The Notion integration's secret (see "Meal plan from Notion") |
 | `NOTION_MEALS_SOURCE` | Optional. The Meal Plan database's data source ID |
+| `NOTION_CHECKINS_SOURCE` | Optional. The Weekly Check-Ins database's data source ID (see "Check-ins to Notion") |
 | `REMINDERS_HIDE_LISTS` | Optional. Reminders lists the Hub never receives, comma separated. Left unset it hides `Work` (student names). Set it to a different list to change that, e.g. `Work, Finance` |
 
 A calendar whose property is missing is left out of the Hub.
@@ -113,6 +115,48 @@ meal-plan alert all keep working from that tab.
    read, e.g. `Tue  Sheet-Pan Sausage https://…  [20 min.]`. An error such as
    `Notion 404: Could not find data_source…` means step 2 or 3 needs another look.
 7. Publish a new version (above).
+
+## Check-ins to Notion
+
+Optional. With it on, every check-in saved in the Hub, Family Huddle and
+Jon & Maggie alike, gets a page in the **Weekly Check-Ins** database in Notion
+(under Harper Life Dashboard → Daily Rhythm). Each page is titled like
+`Family Huddle · Oct 11, 2026`, has `Date` and `Type` filled in, and lists
+each question as a heading with the answer under it.
+
+- **One way, Hub to Notion.** Check-ins are still saved and shown in the Hub
+  as before; the Sheet stays the record. `NotionCheckins.gs` copies new ones
+  every 30 minutes (`CHECKINS_SYNC_MIN`). The first run copies every
+  check-in already in the Sheet, 25 at a time.
+- **Deleting.** Delete a check-in in the Hub and its page goes to Notion's
+  trash at the next sync. A page deleted only in Notion comes back, because
+  the Sheet still has the check-in.
+- **Editing in Notion.** Pages aren't changed once made, so notes or comments
+  added in Notion stay. Leave the `Hub ID` property alone: it's how the sync
+  knows which check-in a page belongs to.
+- **The questions.** Headings come from `CHECKINS_QUESTIONS` in
+  `NotionCheckins.gs`, which mirrors `HUDDLE_FIELDS` and `COUPLES_QUESTIONS` in
+  `index.html`. Change both together.
+
+### Setup
+
+1. In Notion's integrations page (notion.so/profile/integrations), open
+   **Family Hub** → **Capabilities** and also tick **Insert content** and
+   **Update content** (update is what trashes the page of a deleted check-in).
+   The meal-plan sync still only reads.
+2. Open the **Weekly Check-Ins** database, then **••• → Connections → Family Hub**.
+3. Copy its data source ID: **••• → Manage data sources → ••• → Copy data source ID**.
+4. Add it under Script Properties as `NOTION_CHECKINS_SOURCE`. `NOTION_TOKEN`
+   is the same one the meal plan uses.
+5. Add a script file named `NotionCheckins` (**+ → Script**) and paste
+   `NotionCheckins.gs` into it. `Notion.gs` must be in the project too.
+6. Pick **setupNotionCheckins** in the function menu and press **Run**. It
+   sets the timer and copies once. The log says what it did, e.g.
+   `Check-ins to Notion: updated — 12 copied, 0 trashed`. An error such as
+   `Notion 404: Could not find data_source…` means step 2 or 3 needs another
+   look; `Notion 403` means step 1.
+
+Nothing needs publishing: the Hub itself doesn't change.
 
 ## Reminders
 
