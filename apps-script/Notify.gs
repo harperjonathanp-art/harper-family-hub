@@ -184,25 +184,6 @@ function mealsEdited_(meals, by) {
   }
 }
 
-/**
- * The Notion meal plan's week moved on a day, with nothing in Notion changed
- * (Notion.gs). A plan already announced stays announced, so the shift isn't
- * told as news. A change still waiting to be announced is left to wait.
- */
-function mealsMoved_(meals) {
-  try {
-    const state = loadState_();
-    const m = state.meals;
-    if (!m || m.plan !== m.announced) return;
-    m.plan = m.announced = mealPlan_(meals || {});
-    m.since = Date.now();
-    m.editors = [];
-    saveState_(state);
-  } catch (err) {
-    console.warn('mealsMoved_: ' + err);
-  }
-}
-
 // ---------- the timer's work ----------
 
 function dueNotifications_(now) {

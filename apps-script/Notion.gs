@@ -3,9 +3,11 @@
  *
  * When NOTION_TOKEN and NOTION_MEALS_SOURCE are set in Script Properties, the
  * week's dinners come from the Meal Plan database in Notion instead of being
- * typed into the Hub. A timer reads the Dinner rows for today and the six days
- * after it, and writes them into the Meals tab, so Today, Dinner, the dinner
- * nudge and the meal-plan alert all work as before.
+ * typed into the Hub. A timer reads the Dinner rows for this week's plan
+ * (Saturday to Friday, the way it's planned in Notion) and writes them into the
+ * Meals tab, so Today, Dinner, the dinner nudge and the meal-plan alert all work
+ * as before. The week stays put until Saturday, so a dinner moved to another
+ * night, or one that's past, is still there to see.
  *
  * One way only: Notion -> Hub. Nothing here writes to Notion, and while the
  * sync is on, the Hub shows the dinners read-only. Anything typed into the
@@ -20,7 +22,7 @@
 // ======================= CONFIG =======================
 const NOTION_SYNC_MIN = 10;          // how often the timer reads Notion
 const NOTION_VERSION = '2025-09-03';
-const NOTION_LOOK_AHEAD = 14;        // days read each sync; the Hub shows the first 7
+const NOTION_WEEK_START = 'Sat';     // the plan week runs Saturday to Friday
 const NOTION_RECIPE_CACHE_S = 21600; // a recipe's link is looked up at most every 6 hours
 // The Meal Plan database's property names, as they read in Notion.
 const NOTION_PROPS = {
@@ -34,7 +36,7 @@ const NOTION_RECIPE_LINK = 'Source';
 const NOTION_WHO = { Jon: 'Jon cooks', Maggie: 'Maggie cooks', Together: 'Cooking together' };
 // ======================================================
 
-const NOTION_STATE_ = 'NOTION_MEALS_STATE'; // { at, error, from, dinners: { 'yyyy-MM-dd': text } }
+const NOTION_STATE_ = 'NOTION_MEALS_STATE'; // { at, error, week: 'yyyy-MM-dd' }
 
 /** Whether the dinners come from Notion. */
 function notionOn_() {
@@ -45,7 +47,7 @@ function notionOn_() {
 function notionMealsInfo_() {
   if (!notionOn_()) return null;
   const s = loadNotionState_();
-  return { source: 'notion', syncedAt: s.at || 0, error: s.error || '' };
+  return { source: 'notion', syncedAt: s.at || 0, error: s.error || '', weekStarts: NOTION_WEEK_START };
 }
 
 // ---------- setup & timer ----------
@@ -69,11 +71,10 @@ function setupNotionMeals() {
 /** Timer entry point. Never throws: a failed read leaves the last good plan alone. */
 function syncNotionMeals() {
   if (!notionOn_()) return { status: 'off', message: 'add NOTION_TOKEN and NOTION_MEALS_SOURCE in Script Properties' };
-  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  let dinners, meals;
+  const week = weekStart_(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'));
+  let meals;
   try {
-    dinners = fetchDinners_(today);
-    meals = weekOfDinners_(dinners, today);
+    meals = weekOfDinners_(fetchDinners_(week), week);
   } catch (err) {
     const message = String(err && err.message || err).slice(0, 200);
     const s = loadNotionState_();
@@ -87,14 +88,9 @@ function syncNotionMeals() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { status: 'busy' };
   try {
-    const s = loadNotionState_();
     const changed = !sameMeals_(getMeals_(), meals);
-    if (changed) {
-      saveMeals_(meals);
-      // The week moved on a day but nothing in Notion changed: not a new plan to announce.
-      if (s.from && sameOverlap_(s.from, s.dinners || {}, today, dinners)) mealsMoved_(meals);
-    }
-    saveNotionState_({ at: Date.now(), error: '', from: today, dinners: dinners });
+    if (changed) saveMeals_(meals);
+    saveNotionState_({ at: Date.now(), error: '', week: week });
     return { status: changed ? 'updated' : 'current', meals: meals };
   } finally {
     lock.releaseLock();
@@ -103,13 +99,13 @@ function syncNotionMeals() {
 
 // ---------- reading Notion ----------
 
-/** Each date's dinner from today on, as the Hub writes it: { 'yyyy-MM-dd': { meal, note } }. */
-function fetchDinners_(today) {
+/** Each date's dinner in the week from `week`, as the Hub writes it: { 'yyyy-MM-dd': { meal, note } }. */
+function fetchDinners_(week) {
   const P = NOTION_PROPS;
   const body = {
     filter: { and: [
-      { property: P.date, date: { on_or_after: today } },
-      { property: P.date, date: { on_or_before: isoAdd_(today, NOTION_LOOK_AHEAD - 1) } },
+      { property: P.date, date: { on_or_after: week } },
+      { property: P.date, date: { on_or_before: isoAdd_(week, 6) } },
     ] },
     sorts: [{ timestamp: 'created_time', direction: 'ascending' }],
     page_size: 100,
@@ -146,11 +142,11 @@ function fetchDinners_(today) {
   return out;
 }
 
-/** The Hub's Mon–Sun week, filled from today and the six days after it. */
-function weekOfDinners_(dinners, today) {
+/** The Meals tab's seven days, filled from the plan week that starts on `week`. */
+function weekOfDinners_(dinners, week) {
   const meals = {};
   for (let i = 0; i < 7; i++) {
-    const date = isoAdd_(today, i);
+    const date = isoAdd_(week, i);
     const d = dinners[date] || {};
     meals[isoDay_(date)] = { meal: d.meal || '', note: d.note || '' };
   }
@@ -207,6 +203,11 @@ function isoAdd_(iso, days) {
   return Utilities.formatDate(new Date(Date.UTC(p[0], p[1] - 1, p[2] + days)), 'UTC', 'yyyy-MM-dd');
 }
 
+/** The plan week's first day (NOTION_WEEK_START) on or before `iso`. */
+function weekStart_(iso) {
+  return isoAdd_(iso, -((DAYS.indexOf(isoDay_(iso)) - DAYS.indexOf(NOTION_WEEK_START) + 7) % 7));
+}
+
 function isoDay_(iso) {
   const p = iso.split('-').map(Number);
   return DAYS[(new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay() + 6) % 7];
@@ -217,18 +218,6 @@ function sameMeals_(a, b) {
     const x = a[d] || {}, y = b[d] || {};
     return String(x.meal || '') === String(y.meal || '') && String(x.note || '') === String(y.note || '');
   });
-}
-
-/** Whether two reads of Notion agree on every date both of them covered. */
-function sameOverlap_(fromA, a, fromB, b) {
-  const start = fromA > fromB ? fromA : fromB;
-  const endA = isoAdd_(fromA, NOTION_LOOK_AHEAD - 1), endB = isoAdd_(fromB, NOTION_LOOK_AHEAD - 1);
-  const end = endA < endB ? endA : endB;
-  const text = function (d) { return JSON.stringify([(d || {}).meal || '', (d || {}).note || '']); };
-  for (let date = start; date <= end; date = isoAdd_(date, 1)) {
-    if (text(a[date]) !== text(b[date])) return false;
-  }
-  return true;
 }
 
 function loadNotionState_() {
