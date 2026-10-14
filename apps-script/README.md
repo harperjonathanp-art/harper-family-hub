@@ -77,22 +77,26 @@ Sheet goes to everyone.
 
 Optional. With it on, the Hub's dinners come from the **Meal Plan** database
 in Notion, so a plan made there doesn't have to be typed into the Hub too.
-`Notion.gs` reads Notion every 10 minutes and writes today's dinner and the
-next six days' into the Meals tab. Today, Dinner, the dinner nudge and the
+`Notion.gs` reads Notion every 10 minutes and writes this plan week's dinners,
+Saturday to Friday, into the Meals tab. Today, Dinner, the dinner nudge and the
 meal-plan alert all keep working from that tab.
 
 - **One way, Notion to Hub.** Nothing is written to Notion. While it's on, the
-  Hub's Dinner page is read-only and starts from today, and anything typed
+  Hub's Dinner page is read-only, and anything typed
   into the Meals tab is replaced at the next sync. Remove `NOTION_TOKEN` to go
   back to planning in the Hub.
+- **The week stays put.** The Dinner page shows Saturday to Friday and only
+  turns over on Saturday, so earlier nights stay on it (dimmed) and a dinner
+  moved to another night is still there to find. The first day is
+  `NOTION_WEEK_START` at the top of `Notion.gs`.
 - **What's read.** Rows whose `Meal Type` is Dinner (or blank), by `Date`.
   `Skipped` rows are left out. Two dinners on one date are shown together.
   `Notes` and `Who Cooks` are shown under the dinner. A linked `Recipe` adds a
   link: its `Source` address, or its Notion page if it has none. Property names
   are listed in `NOTION_PROPS` at the top of `Notion.gs`.
-- **Meal-plan alert.** It goes once every day of the coming week has a
-  dinner and the plan has been unchanged for 10 minutes. When the week only
-  moves on a day, with nothing changed in Notion, the alert isn't sent again.
+- **Meal-plan alert.** It goes once every night of the plan week has a
+  dinner and the plan has been unchanged for 10 minutes: on Saturday when the
+  new week comes in, and again if the week's plan changes after that.
 - **If Notion can't be reached**, the Hub keeps the last plan and says so.
 
 ### Setup

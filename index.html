@@ -345,6 +345,7 @@ details.subs.tsubs .task.sub { padding: var(--space-2) 0; }
 .meal .d { margin-top: 15px; } /* centred on the 44px field, even with a recipe link below it */
 .meal .mealbody { flex: 1; min-width: 0; }
 .meal.ro .d { margin-top: 3px; } /* read-only rows (Notion plan): level with the name, not a field */
+.meal.past { opacity: .7; } /* earlier in this plan week */
 .meal .mname { font-size: 16px; line-height: 22px; font-weight: 500; }
 .meal .mname.none { color: var(--ink-faint); font-weight: 400; }
 .recipe {
@@ -887,15 +888,18 @@ function renderMeals() {
     </div>
     ${renderGroceries()}`;
 }
-/* Planned in Notion: today and the six days after it, read-only. */
+/* Planned in Notion: this plan week (Saturday to Friday), read-only. The week
+   stays put until it ends, so a dinner moved to another night is still there. */
 function renderNotionMeals() {
   clearDraft("fd_draft_meals"); // nothing here to edit, so an old draft can't hold back a refresh
+  const first = DAYS.indexOf(DATA.mealsFrom.weekStarts || "Sat");
+  const back = ((new Date().getDay() + 6) % 7 - first + 7) % 7; // days since the week began
   const rows = [0, 1, 2, 3, 4, 5, 6].map(i => {
-    const date = new Date(); date.setDate(date.getDate() + i);
+    const date = new Date(); date.setDate(date.getDate() - back + i);
     const d = DAYS[(date.getDay() + 6) % 7];
     const m = DATA.meals[d] || {};
     const parts = mealParts(m.meal);
-    return `<div class="meal ro ${i === 0 ? "today" : ""}">
+    return `<div class="meal ro ${i === back ? "today" : i < back ? "past" : ""}">
       <span class="d">${d}<br>${date.getDate()}</span>
       <div class="mealbody">
         ${m.meal ? `<div class="mname">${esc(parts.name || "Recipe")}</div>` : `<div class="mname none">Not planned yet</div>`}
