@@ -626,15 +626,19 @@ function getEvents_() {
     try { cal = CalendarApp.getCalendarById(id); } catch (err) { return; }
     if (!cal) return;
     cal.getEvents(start, end).forEach(function (ev) {
+      // An all-day event's start time is midnight in its calendar's zone (the Family calendar
+      // is UTC, so that's 8pm the night before here); its all-day date is the day itself.
+      const allDay = ev.isAllDayEvent();
+      const day = allDay ? ev.getAllDayStartDate() : ev.getStartTime();
       out.push({
         cal: c.name,
         color: c.color,
         title: ev.getTitle(),
-        allDay: ev.isAllDayEvent(),
-        date: Utilities.formatDate(ev.getStartTime(), tz, 'yyyy-MM-dd'),
+        allDay: allDay,
+        date: Utilities.formatDate(day, tz, 'yyyy-MM-dd'),
         start: Utilities.formatDate(ev.getStartTime(), tz, 'h:mm a'),
         end: Utilities.formatDate(ev.getEndTime(), tz, 'h:mm a'),
-        sort: ev.getStartTime().getTime(),
+        sort: day.getTime(),
       });
     });
   });
