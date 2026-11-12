@@ -9,7 +9,7 @@
  * SETUP (see README.md next to this file):
  *  1. Project Settings > Script Properties > add FAMILY_PIN, SHEET_ID and
  *     the CAL_* calendar IDs (calendars must be shared with this account).
- *     Jon's Reminders come from Reminders.gs (own setup steps).
+ *     Jon's Todoist tasks come from Todoist.gs (own setup steps).
  *     Dinners can come from the Notion meal plan instead (Notion.gs).
  *     Check-ins can be copied to Notion (NotionCheckins.gs).
  *  2. Deploy > New deployment > Web app > Execute as: Me > Access: Anyone.
@@ -69,9 +69,9 @@ function doGet(e) {
     checkins: getCheckins_(10),
     groceries: getGroceries_(),
   };
-  // Jon's Apple Reminders go only to a device that asks (its settings say to show them).
+  // Jon's Todoist tasks go only to a device that asks (its settings say to show them).
   if (p.reminders === '1') {
-    try { out.reminders = getReminders_(); } catch (err) { out.reminders = { status: 'error', items: [], lists: [] }; }
+    try { out.reminders = getReminders_(); } catch (err) { out.reminders = { status: 'error', error: 'backend error', items: [], lists: [] }; }
   }
   return json_(out);
 }

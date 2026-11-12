@@ -265,7 +265,7 @@ function summaryMsg_(person, data, clock) {
       : 'nothing today'),
   ];
   if (mine.length) lines.push('Yours: ' + list_(mine.map(function (t) { return t.title; })));
-  // Jon's Apple Reminders go in his summary only (Reminders.gs).
+  // Jon's Todoist tasks go in his summary only (Todoist.gs).
   const reminders = typeof remindersLine_ === 'function' && person === REMINDERS_OWNER ? remindersLine_(clock.today) : null;
   if (reminders) lines.push(reminders);
   if (kids.length) lines.push('Kids: ' + list_(kids.map(function (t) { return t.title + ' (' + t.assignee + ')'; })));
