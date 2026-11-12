@@ -552,7 +552,7 @@ async function refresh(quiet) {
     DATA = { tasks: d.tasks || [], meals: d.meals || {}, events: d.events || [], checkins: d.checkins || [],
              groceries: d.groceries, // undefined until the backend has the grocery list
              mealsFrom: d.mealsFrom, // set when the dinners come from the Notion meal plan
-             reminders: REM.show ? d.reminders : undefined }; // never kept on a device that hides them
+             reminders: REM.show ? keepGoodReminders(d.reminders) : undefined }; // never kept on a device that hides them
     localStorage.setItem("fd_cache", JSON.stringify(DATA));
     noteBackend(d.tasks);
     note("Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
@@ -1170,11 +1170,11 @@ function renderTasks() {
   if (!DATA.tasks.length && !rems.length) h += `<div class="block"><div class="empty">No tasks yet — add the first one above.</div></div>`;
   return h + remFresh();
 }
-/* ----- Jon's Apple Reminders -----
-   Read-only. The backend reads the snapshot email Jon's iPhone sends each
-   morning and replaces its copy with every new one, so a reminder ticked off
-   on the phone leaves here at the next sync. Nothing here goes back to Apple
-   Reminders. Rows are never merged or deduplicated: titles repeat. */
+/* ----- Jon's Todoist tasks -----
+   Read-only. The backend reads Jon's open Todoist tasks every few minutes and
+   keeps the last good copy, so a task done in Todoist leaves here at the next
+   read. Nothing here goes back to Todoist. Rows are keyed by Todoist's task ID
+   and never merged or deduplicated: titles repeat. */
 const REM = {
   get show() { const v = localStorage.getItem("fd_rem_show"); return v == null ? ["Jon", "Maggie"].includes(cfg.user) : v === "1"; },
   get hidden() { try { return JSON.parse(localStorage.getItem("fd_rem_hidden") || "[]"); } catch (e) { return []; } },
@@ -1185,15 +1185,21 @@ function reminderItems() {
   const rm = DATA.reminders;
   return rm && Array.isArray(rm.items) ? rm.items.filter(r => !REM.hidden.includes(r.list)) : [];
 }
-/* Reminders as the views place them: each subtask under its parent (same list
-   first, then any), so only the parents sort into the date sections. A subtask
-   whose parent isn't in the snapshot stays a row of its own. */
+/* Tasks as the views place them: each subtask folds under its top-level task
+   (by Todoist's parent ID, never by title), so only top-level tasks sort into
+   the date sections. A subtask of a subtask goes in the same fold, saying which
+   one it's under. One whose parent isn't here stays a row of its own. */
 function reminderTops() {
-  const all = reminderItems(), tops = all.filter(r => !r.parent).map(r => ({ ...r, subs: [] }));
-  const find = r => tops.find(p => p.list === r.list && p.title === r.parent) || tops.find(p => p.title === r.parent);
-  const orphans = [];
-  all.filter(r => r.parent).forEach(r => { const p = find(r); p ? p.subs.push(r) : orphans.push({ ...r, subs: [] }); });
-  return tops.concat(orphans);
+  const all = reminderItems(), byKey = new Map(all.map(r => [r.key, r]));
+  const topOf = r => { const seen = new Set(); while (r.parentKey && byKey.has(r.parentKey) && !seen.has(r.key)) { seen.add(r.key); r = byKey.get(r.parentKey); } return r; };
+  const tops = new Map();
+  all.forEach(r => { if (topOf(r) === r) tops.set(r.key, { ...r, subs: [] }); });
+  all.forEach(r => {
+    const top = topOf(r), into = top !== r && tops.get(top.key);
+    if (into) into.subs.push(r.parentKey === top.key ? r : { ...r, under: byKey.get(r.parentKey).title });
+    else if (top !== r) tops.set(r.key, { ...r, subs: [] }); // a broken parent link: show it on its own
+  });
+  return [...tops.values()];
 }
 function remMinutes(t) {
   const m = /^(\d+):(\d+) ([AP]M)$/.exec(t || "");
@@ -1201,29 +1207,33 @@ function remMinutes(t) {
 }
 const byRemDue = (a, b) => a.due.localeCompare(b.due) || remMinutes(a.time) - remMinutes(b.time);
 function remStamp(rm) {
-  return new Date(rm.generated).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  // `generated`: what a backend from before Todoist sends
+  return new Date(rm.syncedAt || rm.generated).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
-/* Says how fresh the list is. Yesterday's snapshot is shown, but never as current. */
+/* Says how fresh the list is. An old copy is shown, but never as current. */
 function remStatus(rm) {
-  if (rm.status === "stale") return `<div class="tiny" style="color:var(--warn);margin:var(--space-2) 0">Not today's list — the iPhone last sent one ${esc(remStamp(rm))}. Showing that.</div>`;
-  if (rm.status === "fresh") return `<div class="tiny" style="margin:var(--space-2) 0">From Jon's iPhone, ${esc(remStamp(rm))}.</div>`;
+  if (rm.status === "stale") return `<div class="tiny" style="color:var(--warn);margin:var(--space-2) 0">Couldn't reach Todoist — showing Jon's tasks as of ${esc(remStamp(rm))}.</div>`;
+  if (rm.status === "fresh") return `<div class="tiny" style="margin:var(--space-2) 0">From Jon's Todoist, ${esc(remStamp(rm))}.</div>`;
   return "";
 }
 function remEmpty(rm) {
-  if (rm.status === "none") return `<div class="empty">Nothing synced yet — Jon's iPhone emails its reminders each morning.</div>`;
-  if (rm.status === "error") return `<div class="empty">Couldn't read the reminders email. Check the Apps Script log.</div>`;
+  if (rm.status === "none") return `<div class="empty">Nothing synced from Todoist yet.</div>`;
+  if (rm.status === "error") return `<div class="empty">Couldn't read Jon's Todoist. Check the Apps Script log.</div>`;
   return "";
 }
 function reminderRow(r, asSub) {
-  const due = dueInfo(r.due), parts = asSub ? [] : [`<span>${esc(r.list)}</span>`];
-  if (r.parent && !asSub) parts.push(`<span>Subtask of ${esc(r.parent)}</span>`);
+  const due = dueInfo(r.due), parts = [];
+  if (!asSub) parts.push(`<span>${esc(r.list)}${r.section ? " · " + esc(r.section) : ""}</span>`);
+  if (asSub && r.under) parts.push(`<span>Under ${esc(r.under)}</span>`);
+  if (r.parentKey && !asSub) parts.push(`<span>Subtask of ${esc(r.parent || "a task not shown")}</span>`);
   if (due) {
     const late = due.days < 0 && !r.ticked;
     parts.push(`<span class="${late ? "overdue" : ""}">${esc(due.text)}${r.time ? " · " + esc(r.time) : ""}${late ? " · overdue" : ""}</span>`);
   } else if (r.dueText) parts.push(`<span>${esc(r.dueText)}</span>`);
-  if (r.priority && r.priority !== "None") parts.push(`<span>${esc(r.priority)} priority</span>`);
+  if (r.recurring) parts.push(`<span>↻ ${esc(r.repeat || "repeats")}</span>`);
+  if (r.priority && r.priority !== "P4") parts.push(`<span>${esc(r.priority)}</span>`);
   if (r.notes) parts.push(`<span>${esc(r.notes.length > 120 ? r.notes.slice(0, 117) + "…" : r.notes)}</span>`);
-  if (r.ticked) parts.push(`<span>Ticked here${r.tickedBy ? " by " + esc(r.tickedBy) : ""} — tick it on the iPhone too</span>`);
+  if (r.ticked) parts.push(`<span>Ticked here${r.tickedBy ? " by " + esc(r.tickedBy) : ""} — tick it in Todoist too</span>`);
   const subs = !asSub && r.subs && r.subs.length ? r.subs : null;
   const row = `<div class="task ${r.ticked ? "done" : ""} ${subs ? "has-subs" : ""}">
     <input type="checkbox" ${r.ticked ? "checked" : ""} data-key="${esc(r.key)}" onchange="tickReminder(this.dataset.key, this.checked)" aria-label="${esc(r.title)}">
@@ -1237,9 +1247,9 @@ function reminderRow(r, asSub) {
   return row + `<details class="subs" data-key="${esc(r.key)}" ontoggle="REM.subOpen.set(this.dataset.key, this.open)" ${open ? "open" : ""}>
     <summary>${label}</summary>${subs.slice().sort(openFirst).map(x => reminderRow(x, true)).join("")}</details>`;
 }
-/* A tick here hides a reminder on every device until the next snapshot from
-   the iPhone settles it: gone from the snapshot, it was done there; still in
-   one made after the tick, it comes back. Nothing goes back to the iPhone. */
+/* Just for fun: a tick here marks a task on every device, but nothing goes to
+   Todoist. The tick lasts until the task is done in Todoist or its due date
+   moves (a repeating task's next turn), then it's dropped. */
 async function tickReminder(key, on) {
   const r = reminderItems().find(x => x.key === key);
   if (!r) return;
@@ -1253,7 +1263,7 @@ async function tickReminder(key, on) {
   } catch (e) { note("Save failed — offline?"); }
 }
 const openFirst = (a, b) => !!a.ticked - !!b.ticked;
-/* Hub tasks and reminders in one list: open before done, then by date, time
+/* Hub tasks and Todoist tasks in one list: open before done, then by date, time
    and the order set by dragging. An undated Hub task sorts after the dated
    ones ("9" > any date); a task with no time sorts before timed ones. */
 function mixRows(tasks, rems) {
@@ -1262,8 +1272,8 @@ function mixRows(tasks, rems) {
   return rows.sort((a, b) => a.done - b.done || a.due.localeCompare(b.due) || a.min - b.min || a.ord - b.ord || a.title.localeCompare(b.title))
     .map(x => x.html());
 }
-/* Undated reminders have no section to sort into, so each list gets its own,
-   folded until opened, in the order the iPhone listed them. */
+/* Undated tasks have no section to sort into, so each project gets its own,
+   folded until opened, in Todoist's order. */
 function renderUndatedReminders(items) {
   const lists = [];
   items.forEach(r => { if (!lists.includes(r.list)) lists.push(r.list); });
@@ -1273,8 +1283,8 @@ function renderUndatedReminders(items) {
       <summary>${esc(l)} · ${n}<span class="tiny">no due date</span></summary><div class="block">${mine.map(reminderRow).join("")}</div></details>`;
   }).join("");
 }
-/* Where reminders sit among tasks, these lines say how fresh they are. A stale
-   list goes at the top so its dates are never taken as current. */
+/* Where Todoist tasks sit among the Hub's, these lines say how fresh they are.
+   A stale copy's note goes at the top so its dates are never taken as current. */
 function remStale() {
   const rm = REM.show && DATA.reminders;
   if (!rm) return "";
@@ -1285,6 +1295,14 @@ function remFresh() {
   const rm = REM.show && DATA.reminders;
   return rm && rm.status === "fresh" ? remStatus(rm) : "";
 }
+/* If the backend has nothing to send but this device holds an earlier copy,
+   keep showing that copy (marked stale with its time) rather than an empty list. */
+function keepGoodReminders(next) {
+  const prev = DATA && DATA.reminders;
+  if (next && (next.status === "none" || next.status === "error") && prev && prev.syncedAt && Array.isArray(prev.items) && prev.items.length)
+    return { ...prev, status: "stale" };
+  return next;
+}
 function secToggle(el) { el.open ? REM.open.add(el.dataset.sec) : REM.open.delete(el.dataset.sec); }
 
 function remSettingsHtml() {
@@ -1292,9 +1310,9 @@ function remSettingsHtml() {
   const row = (id, attrs, label, hint) => `<div class="nrow"><label class="ncheck"><input type="checkbox" ${id} ${attrs}>
     <span class="ttl">${esc(label)}${hint ? `<span class="tiny">${esc(hint)}</span>` : ""}</span></label></div>`;
   let h = row(`onchange="setRemShow(this.checked)"`, REM.show ? "checked" : "", "Show Jon's reminders on this device",
-    "Read from the morning email Jon's iPhone sends. Chosen per device. Lists the backend hides (Work, unless changed) are never sent.");
+    "Read from Jon's Todoist. Chosen per device. Projects the backend hides (Work, unless changed) are never sent.");
   if (REM.show && lists.length) h += lists.map(l =>
-    row(`data-list="${esc(l)}" onchange="setRemList(this.dataset.list, this.checked)"`, REM.hidden.includes(l) ? "" : "checked", l, "Show this list here")).join("");
+    row(`data-list="${esc(l)}" onchange="setRemList(this.dataset.list, this.checked)"`, REM.hidden.includes(l) ? "" : "checked", l, "Show this project here")).join("");
   else if (REM.show && rm === undefined) h += `<div class="empty">Waiting for the backend — paste the latest Apps Script files and publish a new version.</div>`;
   return h;
 }
@@ -1785,7 +1803,7 @@ function openSettings() {
       <button class="ghost" onclick="closeOverlay()">Cancel</button>
     </div>
     <div class="tiny" style="margin-top:var(--space-5)">Data refreshes every 60 seconds and whenever the app is reopened.</div>
-    <h2>Reminders<span class="hint">on this device</span></h2>
+    <h2>Todoist<span class="hint">on this device</span></h2>
     <div id="remBox"><div class="block">${remSettingsHtml()}</div></div>
     <h2>Notifications<span class="hint">for ${esc(cfg.user)}</span></h2>
     <div id="notifyBox"><div class="empty">Loading…</div></div>`);
@@ -1795,7 +1813,7 @@ function openSettings() {
 /* ============ notifications ============ */
 let NOTIFY = null; // { publicKey, ready, lastTick, parents, prefs, devices } from the server
 const NOTIFY_ROWS = [
-  ["summary", "Morning summary", "Your to-dos, the kids', today's calendar and dinner", "time"], // Jon's adds his reminders
+  ["summary", "Morning summary", "Your to-dos, the kids', today's calendar and dinner", "time"], // Jon's adds his Todoist tasks
   ["dinner", "Dinner nudge", "Only if tonight's dinner isn't planned", "time"],
   ["huddle", "Family Huddle reminder", "Skipped once this week's huddle is saved", "day"],
   ["couples", "Weekly Check-In reminder", "Skipped once this week's check-in is saved", "day"],
@@ -1822,7 +1840,7 @@ async function loadNotify() {
   const rows = NOTIFY_ROWS.filter(([k]) => k !== "couples" || NOTIFY.parents.includes(cfg.user)).map(([k, label, hint, when]) => {
     const day = when === "day" ? `<select id="n-${k}-day" aria-label="${esc(label)} day">${DAYS.map(d =>
       `<option ${d === p[k].day ? "selected" : ""}>${d}</option>`).join("")}</select>` : "";
-    if (k === "summary" && cfg.user === "Jon") hint = hint.replace(" and dinner", ", dinner and your reminders");
+    if (k === "summary" && cfg.user === "Jon") hint = hint.replace(" and dinner", ", dinner and your Todoist tasks");
     return `<div class="nrow">
       <label class="ncheck"><input type="checkbox" id="n-${k}-on" ${p[k].on ? "checked" : ""}>
         <span class="ttl">${label}<span class="tiny">${hint}</span></span></label>

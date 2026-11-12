@@ -8,10 +8,10 @@ Change it here, then paste it into the editor and publish a new version.
 |------|--------------|
 | `Code.gs` | The web app: tasks, meals, calendar, check-ins |
 | `Notify.gs` | Notifications: what to send, to whom, and when |
-| `Reminders.gs` | Jon's Apple Reminders, read from his daily snapshot email |
+| `Todoist.gs` | Jon's Todoist tasks, read-only, from the Todoist API |
 | `Notion.gs` | Optional: the week's dinners, read from the Notion meal plan |
 | `NotionCheckins.gs` | Optional: check-ins copied to the Weekly Check-Ins database in Notion (needs `Notion.gs` too) |
-| `appsscript.json` | Project settings (time zone, web app access, the permissions the script asks for, the Gmail service) |
+| `appsscript.json` | Project settings (time zone, web app access, the permissions the script asks for) |
 
 ## Script Properties
 
@@ -32,11 +32,13 @@ Anything private stays out of this public repo. Add these under
 | `NOTION_TOKEN`     | Optional. The Notion integration's secret (see "Meal plan from Notion") |
 | `NOTION_MEALS_SOURCE` | Optional. The Meal Plan database's data source ID |
 | `NOTION_CHECKINS_SOURCE` | Optional. The Weekly Check-Ins database's data source ID (see "Check-ins to Notion") |
-| `REMINDERS_HIDE_LISTS` | Optional. Reminders lists the Hub never receives, comma separated. Left unset it hides `Work` (student names). Set it to a different list to change that, e.g. `Work, Finance` |
+| `TODOIST_TOKEN` | Jon's Todoist API token (see "Todoist"). Never put it anywhere else |
+| `REMINDERS_HIDE_LISTS` | Optional. Todoist projects the Hub never receives, comma separated. Left unset it hides `Work` (student names). Set it to change that, e.g. `Work, Personal` |
 
 A calendar whose property is missing is left out of the Hub.
-`NOTIFY_STATE` appears there too once notifications run. It's the
-notifications' own bookkeeping, so leave it alone.
+`NOTIFY_STATE` appears there too once notifications run, and `TODOIST_META`,
+`TODOIST_DATA_…` and `TODOIST_TICKS` once Todoist is set up. They're the
+script's own bookkeeping, so leave them alone.
 
 ## Publishing a change
 
@@ -62,7 +64,7 @@ does the Web Push encryption Apps Script can't. Set that up first (see
    **Turn on notifications**, and **Send a test**.
 
 What gets sent, and when, is set per person in the Hub's Settings: the
-morning summary (Jon's also lists his Apple Reminders that are due today or
+morning summary (Jon's also lists his Todoist tasks that are due today or
 overdue, minus any ticked in the Hub; nobody else's does), the dinner nudge, the Family Huddle and Weekly Check-In
 reminders, new to-dos, the meal plan being ready, and quiet hours. Quiet
 hours hold back new to-do and meal-plan alerts until they end. The
@@ -162,82 +164,77 @@ each question as a heading with the answer under it.
 
 Nothing needs publishing: the Hub itself doesn't change.
 
-## Reminders
+## Todoist
 
-Apple Reminders has no public API and lives only on Jon's iPhone, so the Hub
-reads the **REMINDERS SNAPSHOT** email an iPhone Shortcuts automation sends
-(daily around 4:40 AM Eastern, plus any manual runs). `Reminders.gs` finds it
-with the Gmail API, **read-only**, and keeps the newest snapshot.
+Jon keeps his own to-dos in Todoist. `Todoist.gs` reads his open tasks, with
+their projects (Maintenance, Clean, Work, Personal, Inbox…) and sections, from
+the Todoist API (v1, `api.todoist.com/api/v1`) every 10 minutes, and keeps the
+last good copy. A device that asks for the tasks also triggers a fresh read if
+the copy is more than 5 minutes old.
 
-- **One way, phone to Hub.** Nothing flows back to Apple Reminders, and the Hub
-  never writes to Gmail. Each snapshot is every open reminder, so it replaces
-  the last one: what was ticked off or deleted on the phone leaves the Hub at the
-  next sync.
-- **No credentials in the repo.** The script runs as the account that deployed
-  it, so Google's own consent screen grants the `gmail.readonly` permission.
-  Snapshot bodies are never logged or sent anywhere but the Hub, and the saved
-  copy lives only in Script Properties.
-- **Freshness.** The first line of the email says when it was generated. If the
-  newest snapshot is not from today (Eastern), the Hub keeps showing it, says
-  when it was generated, and never calls it current.
-- **Which email.** `subject:"REMINDERS SNAPSHOT" from:me newer_than:1d`. The
-  `from:me` stops anyone else from mailing the same subject line onto the Hub.
-  If the Shortcut ever sends from another address, change `REMINDERS_QUERY`.
+- **Read-only.** Nothing completes, edits or creates anything in Todoist.
+- **The token stays in Script Properties.** `TODOIST_TOKEN` is read only by the
+  backend. It's never in the Hub's pages, this repo, or a log, and errors are
+  logged by status code only, never with task text.
+- **Keyed by Todoist's task IDs.** Titles repeat ("Counters" more than once)
+  and can hold a pipe ("LinkedIn | Alumni"), so the Hub never matches,
+  merges or de-duplicates tasks by title.
+- **If Todoist can't be reached**, the Hub keeps showing the last good copy and
+  says when it was read ("Couldn't reach Todoist — showing Jon's tasks as of
+  Nov 12, 9:40 AM"). It never swaps it for an empty list.
 
 ### Setup
 
-1. Replace `Code.gs` and `appsscript.json` with this folder's copies, and add a
-   script file named `Reminders` (**+ → Script**) with `Reminders.gs` pasted in.
-   To edit `appsscript.json`, turn on **Project Settings → Show
-   "appsscript.json" manifest file in editor**. Its `oauthScopes` list names every
-   permission the project uses, Gmail read-only included.
-2. Check **Services** (the **+** beside it) lists **Gmail API** (v1). The
-   manifest adds it; add it by hand if it isn't there.
-3. Pick **setupReminders** in the function menu and press **Run**. Google asks
-   for permission once ("View your email messages and settings" is the
-   read-only Gmail permission). It then sets a daily timer shortly after 4:45 AM and an
-   hourly one for manual re-runs, and syncs once. The execution log says what
-   it found, for example `Reminders: updated (snapshot 10/1/26, 9:40 AM, 42 open)`.
-   Run it **before** publishing: a web app can't ask for new permissions itself.
-4. Publish a new version (above).
-5. On each device, open ⚙ Settings → **Reminders** and choose what that device shows.
+1. In Todoist: **Settings → Integrations → Developer → API token**. Copy it.
+2. In Script Properties, add `TODOIST_TOKEN` and paste the token as its value.
+   Don't paste it anywhere else.
+3. Replace `Code.gs`, `Notify.gs` and `appsscript.json` with this folder's
+   copies. Add a script file named `Todoist` (**+ → Script**) with `Todoist.gs`
+   pasted in, and **delete the old `Reminders` file**. To edit `appsscript.json`,
+   turn on **Project Settings → Show "appsscript.json" manifest file in editor**.
+   The Gmail service and Gmail permission are gone from it; if **Services** still
+   lists **Gmail API**, remove it.
+4. Pick **setupTodoist** in the function menu and press **Run**. It removes the
+   old Reminders email timers and the old saved snapshot, sets a timer every 10
+   minutes, and reads Todoist once. The execution log says what it found, for
+   example `Todoist: updated (57 open tasks)`.
+5. Publish a new version (above).
+6. Turn off the iPhone Shortcut that emails "REMINDERS SNAPSHOT"; nothing reads
+   it any more.
 
-If the log says `no_email`, check the Gmail filter still labels
-"Reminders Snapshot" and that the Shortcut ran. A filter that skips the inbox is
-fine: the search covers all mail.
+If the log says `Todoist 401: check TODOIST_TOKEN`, the token is wrong or was
+reset in Todoist: paste the new one into Script Properties.
 
 ### Who sees what
 
-Reminders go only to a device that asks for them. A device belonging to Jon or
+The tasks go only to a device that asks for them. A device belonging to Jon or
 Maggie shows them until switched off; Clayton's and Heidi's devices don't.
-That is a per-device choice in Settings, plus a per-list one, and a family
-member can change it on their own device, so it is a courtesy, not a lock.
-What *is* a lock is `REMINDERS_HIDE_LISTS`: those lists never leave the script.
-`Work` is hidden by default because its reminders name students. The email also
-carries financial reminders (HOA dues, tithe); to keep a whole list off every
-phone, add it to `REMINDERS_HIDE_LISTS`.
+That is a per-device choice in Settings (⚙ → **Todoist**), plus a per-project
+one, and a family member can change it on their own device, so it is a
+courtesy, not a lock. What *is* a lock is `REMINDERS_HIDE_LISTS`: those
+projects never leave the script. `Work` is hidden by default because its tasks
+name students.
 
-New lists appear on their own, since list names are free text.
+New projects appear on their own.
 
 ### What the Hub shows
 
-Reminders sit among the Hub's own tasks, each row naming its list. On
-**Today**, those due today or overdue join the to-dos. On **Tasks**, dated
-ones sort into Overdue, Today, Next 7 days and Later; undated ones get a
-folded section per list, at the bottom.
+Todoist tasks sit among the Hub's own tasks, each row naming its project and
+section, with its due date and time, its repeat (↻ every Tue), its priority
+(P1–P3; P4 isn't shown) and the start of its description. A task due on a date
+with no time is all-day. On **Today**, those due today or overdue join the
+to-dos. On **Tasks**, dated ones sort into Overdue, Today, Next 7 days and
+Later; undated ones get a folded section per project, in Todoist's order.
 
-**Subtasks.** The Shortcut writes a subtask with its parent in the title:
-`Counters (Subtask of Tuesday)`. The Hub splits that off and folds each subtask
-under its parent (Tuesday, Fall…), so only the parent sorts by date. A parent
-due today or overdue shows its subtasks open; later ones start folded. Each
-subtask has its own tick. A subtask whose parent isn't in the snapshot is
-shown as a row of its own, saying what it belongs to. A tick in the
-Hub hides a reminder on every device, but the iPhone has the final say. The
-tick lasts until the next snapshot. If the reminder is gone from it, it was
-done on the phone and the tick is dropped. If it is still there in a snapshot
-made after the tick, it comes back, as a nudge to tick it on the phone. Nothing
-goes back to Apple Reminders. Titles repeat in Reminders ("Counters" more than once), so the Hub never merges
-or de-duplicates them.
+**Subtasks** fold under their top-level task, found by Todoist's parent ID, so
+only the top-level task sorts by date. A subtask of a subtask goes in the same
+fold and says which one it's under. A parent due today or overdue shows its
+subtasks open; later ones start folded.
+
+**Ticks are just for fun.** A tick in the Hub marks a task on every device but
+does nothing in Todoist. It lasts until the task is done in Todoist (it leaves
+the list) or its due date moves (a repeating task's next turn, or a reschedule);
+then it's dropped.
 
 ## Tasks: due dates and repeats
 
