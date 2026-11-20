@@ -1,7 +1,9 @@
 # The Hub's Worker
 
-One Cloudflare Worker, named `harper-family-hub`, deployed from this repo on
-every push to `main` (`wrangler.jsonc` at the repo root).
+One Cloudflare Worker, named `family-hub-push`: the Worker that already runs
+the push relay, so its address and keys stay as they are. Once it is connected
+to this repo (step 1 below), every push to `main` deploys it
+(`wrangler.jsonc` at the repo root).
 
 | Path | File | What it does |
 |------|------|--------------|
@@ -45,10 +47,31 @@ still has the PIN saved goes back to using it when it's signed out.
 
 ## Setup
 
-About 30 minutes, once. The names in Google's console move around; the steps
+About 40 minutes, once. The names in the two consoles move around; the steps
 are the same.
 
-### 1. Google: an OAuth client
+### 1. Cloudflare: connect the repo
+
+Until this is done, nothing in `worker/` is running: the Worker is still the
+copy of the push relay pasted into the dashboard.
+
+1. In the Cloudflare dashboard, open **Workers & Pages → `family-hub-push` →
+   Settings → Builds** and choose **Connect** (a Git repository).
+2. Pick GitHub and the `harper-family-hub` repo. Cloudflare may ask GitHub for
+   access to it first.
+3. Branch `main`, root directory `/`, no build command, deploy command
+   `npx wrangler deploy` (the defaults).
+4. Save, then start a deployment (or push anything to `main`). The build log
+   should end with the Worker's address.
+5. Open that address. It should still say *Family Hub push relay is running.*
+   Then open it with `/auth/me` on the end: `{"ok":false,"error":"signed_out"}`
+   means the new code is live. In the Hub, ⚙ → **Send a test** should still
+   arrive.
+
+The relay's keys (`VAPID_…`, `PUSH_SECRET`) are kept: `wrangler.jsonc` says to
+keep the dashboard's variables, and secrets are always kept.
+
+### 2. Google: an OAuth client
 
 1. Go to [console.cloud.google.com](https://console.cloud.google.com) and make
    a project, e.g. "Family Hub".
@@ -61,18 +84,18 @@ are the same.
 4. Under **Clients**, create a client of type **Web application**. Add one
    **Authorized redirect URI**: the Worker's address followed by
    `/auth/callback`, e.g.
-   `https://harper-family-hub.<name>.workers.dev/auth/callback`.
+   `https://family-hub-push.<name>.workers.dev/auth/callback`.
 5. Copy the **Client ID** and **Client secret**.
 
-### 2. Cloudflare: the Worker's variables
+### 3. Cloudflare: the Worker's variables
 
-In the dashboard, open the `harper-family-hub` Worker's **Settings → Variables
+In the dashboard, open the `family-hub-push` Worker's **Settings → Variables
 and Secrets** and add:
 
 | Name | Type | Value |
 |------|------|-------|
-| `GOOGLE_CLIENT_ID` | Text | from step 1 |
-| `GOOGLE_CLIENT_SECRET` | Secret | from step 1 |
+| `GOOGLE_CLIENT_ID` | Text | from step 2 |
+| `GOOGLE_CLIENT_SECRET` | Secret | from step 2 |
 | `FAMILY_ACCOUNTS` | Secret | Who each Google account is: `Jon=…@gmail.com, Maggie=…@gmail.com`. Add `Clayton=…` or `Heidi=…` only if they have accounts of their own |
 | `APPS_SCRIPT_URL` | Secret | The Apps Script web app's address (`…/exec`), as in the Hub's Settings today |
 | `FAMILY_PIN` | Secret | The same PIN as the `FAMILY_PIN` Script Property |
@@ -81,7 +104,7 @@ None of these belong in this repo, which is public.
 
 The push relay's own variables (`VAPID_…`, `PUSH_SECRET`) stay as they are.
 
-### 3. The database
+### 4. The database
 
 Nothing to do. `wrangler.jsonc` asks for a D1 database bound as `DB` without
 naming one, so the first deploy creates it and links it to the Worker. The
@@ -91,10 +114,10 @@ dashboard → **Storage & Databases → D1**.
 If a deploy ever fails on the database, the previous version of the Worker
 keeps running, so the push relay isn't interrupted.
 
-### 4. Try it on one phone
+### 5. Try it on one phone
 
 1. Open the Hub from its Home Screen icon, tap ⚙, and under **Sign in** paste
-   the Worker's address (`https://harper-family-hub.<name>.workers.dev`).
+   the Worker's address (`https://family-hub-push.<name>.workers.dev`).
 2. Tap **Sign in with Google**, pick your account, check the code matches, and
    tap **Sign in**.
 3. Go back to the Hub. Within a few seconds Settings shows *Signed in*.

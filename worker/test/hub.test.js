@@ -45,7 +45,7 @@ before(async () => {
   mf = new Miniflare({
     modules: true, modulesRoot: root, scriptPath: path.join(root, "worker/index.js"),
     modulesRules: [{ type: "ESModule", include: ["**/*.js"] }],
-    compatibilityDate: "2025-06-01",
+    compatibilityDate: "2026-07-01",
     d1Databases: ["DB"],
     bindings: {
       GOOGLE_CLIENT_ID: "client-id", GOOGLE_CLIENT_SECRET: "client-secret",
