@@ -5,6 +5,7 @@
  *   /send     the push relay, unchanged (push-worker/worker.js)
  *   /auth/…   sign-in with Google, or by a parent's say-so (auth.js)
  *   /api      the Hub's data, for a signed-in device (proxy.js)
+ * and, every five minutes, the timer's work (hub/api.js).
  *
  * Cloudflare deploys this file on every push to main (wrangler.jsonc).
  * See README.md next to this file.
@@ -12,7 +13,8 @@
 
 import relay from "../push-worker/worker.js";
 import { handleAuth, sessionFor } from "./auth.js";
-import { handleApi } from "./proxy.js";
+import { handleApi, moved } from "./proxy.js";
+import { tick } from "./hub/api.js";
 import { json, cors } from "./util.js";
 
 export default {
@@ -28,10 +30,16 @@ export default {
       if (isAuth) return await handleAuth(request, env, url, headers);
       const session = await sessionFor(request, env);
       if (!session) return json({ ok: false, error: "signed_out" }, 401, headers);
-      return await handleApi(request, env, url, session, headers);
+      return await handleApi(request, env, url, session, headers, ctx);
     } catch (err) {
       console.error(String(err && err.stack || err).slice(0, 500));
       return json({ ok: false, error: "server_error" }, 500, headers);
     }
+  },
+
+  /** Every five minutes (wrangler.jsonc): what the Apps Script timers did, once the core has moved. */
+  async scheduled(event, env, ctx) {
+    if (!env.DB || !moved(env, "core")) return;
+    await tick(env);
   },
 };

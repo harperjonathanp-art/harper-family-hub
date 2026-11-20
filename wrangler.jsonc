@@ -10,5 +10,7 @@
   // Keep the text variables set in the Cloudflare dashboard (secrets are always kept).
   "keep_vars": true,
   // The Hub's database. With no ID given, the first deploy made it and linked it.
-  "d1_databases": [{ "binding": "DB" }]
+  "d1_databases": [{ "binding": "DB" }],
+  // The timer: every five minutes. It does nothing until worker/moved.js names "core".
+  "triggers": { "crons": ["*/5 * * * *"] }
 }

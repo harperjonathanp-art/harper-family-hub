@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash, randomBytes } from "node:crypto";
 import { Miniflare, Response as MfResponse } from "miniflare";
+export { MfResponse };
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 export const HUB = "https://hub.example";
@@ -19,10 +20,15 @@ export async function startHub(vars) {
   const h = {
     upstream: [],                                   // what the Worker sent to Apps Script
     appsScript: () => ({ ok: true, tasks: [] }),    // what Apps Script answers; tests replace it
+    site: null,                                     // other sites the Worker calls; a test sets it
   };
 
   async function outbound(request) {
     const url = new URL(request.url);
+    if (h.site) { // a test's own pretend sites (push services, Todoist, Notion)
+      const answer = await h.site(request, url);
+      if (answer) return answer;
+    }
     if (url.host === "oauth2.googleapis.com") {
       const form = new URLSearchParams(await request.text());
       assert.equal(form.get("client_secret"), "client-secret");
@@ -56,14 +62,15 @@ export async function startHub(vars) {
   }, vars || {});
   Object.keys(bindings).forEach(k => { if (bindings[k] === undefined) delete bindings[k]; }); // { MOVED: undefined }: as deployed, no variable at all
 
-  h.mf = new Miniflare({
+  h.options = {
     modules: true, modulesRoot: root, scriptPath: path.join(root, "worker/index.js"),
     modulesRules: [{ type: "ESModule", include: ["**/*.js"] }],
     compatibilityDate: "2026-07-01",
     d1Databases: ["DB"],
     bindings,
     outboundService: outbound,
-  });
+  };
+  h.mf = new Miniflare(h.options); // a test can change a variable later with h.mf.setOptions
   h.db = await h.mf.getD1Database("DB");
 
   h.call = (p, init) => h.mf.dispatchFetch(HUB + p, Object.assign({ redirect: "manual" }, init));

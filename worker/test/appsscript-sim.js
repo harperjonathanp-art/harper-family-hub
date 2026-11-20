@@ -59,7 +59,8 @@ export function appsScriptSim(files, props, opts) {
     constructor(...a) { if (a.length === 0 && clock) super(clock.now); else super(...a); }
     static now() { return clock ? clock.now : Date.now(); }
   }
-  const tabs = {};
+  const tabs = {}, cache = {};
+  const lock = { tryLock: () => true, waitLock: () => {}, releaseLock: () => {} };
   const properties = Object.assign({ FAMILY_PIN: "4321", SHEET_ID: "sheet" }, props || {});
   const context = vm.createContext({
     console, JSON, Date: ScriptDate, Math, Object, Array, String, Number, isNaN, Infinity,
@@ -70,12 +71,27 @@ export function appsScriptSim(files, props, opts) {
     PropertiesService: { getScriptProperties: () => ({
       getProperty: k => (k in properties ? properties[k] : null),
       setProperty: (k, v) => { properties[k] = String(v); },
+      setProperties: o => { Object.keys(o).forEach(k => { properties[k] = String(o[k]); }); },
       getProperties: () => Object.assign({}, properties),
       deleteProperty: k => { delete properties[k]; },
     }) },
-    Utilities: { getUuid: opts.uuid || (() => randomUUID()), formatDate },
+    Utilities: { formatDate },
     Session: { getScriptTimeZone: () => "America/New_York" },
+    // The outside world: opts.http(method, url, headers, body) -> { status, body } stands in for every site.
+    UrlFetchApp: { fetch: (url, o) => {
+      o = o || {};
+      const r = opts.http(String(o.method || "get").toUpperCase(), url, o.headers || {}, o.payload);
+      return { getResponseCode: () => r.status, getContentText: () => (typeof r.body === "string" ? r.body : JSON.stringify(r.body)) };
+    } },
+    CacheService: { getScriptCache: () => ({
+      get: k => (cache[k] && cache[k].until > ScriptDate.now() ? cache[k].value : null),
+      put: (k, v, seconds) => { cache[k] = { value: String(v), until: ScriptDate.now() + seconds * 1000 }; },
+    }) },
+    LockService: { getScriptLock: () => lock, getUserLock: () => lock },
+    Logger: { log: () => {} },
   });
+  context.Utilities.sleep = () => {};
+  context.Utilities.getUuid = opts.uuid || (() => randomUUID());
   Object.assign(context, opts.globals || {}); // stand-ins a test wants the scripts to see
   files.forEach(f => vm.runInContext(fs.readFileSync(path.join(dir, f), "utf8"), context, { filename: f }));
   return {
