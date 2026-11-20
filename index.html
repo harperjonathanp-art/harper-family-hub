@@ -528,7 +528,7 @@ function oldBackendHtml() {
 let VIEW = "today";
 let POLL = null;
 
-// The Hub's Worker, e.g. "https://harper-family-hub.<name>.workers.dev". While this is blank,
+// The Hub's Worker, e.g. "https://family-hub-push.<name>.workers.dev". While this is blank,
 // a device can be given the address in Settings to try signing in (see worker/README.md).
 const HUB = "";
 
@@ -1884,7 +1884,7 @@ async function renderSignin(msg) {
   if (!cfg.hub) {
     box.innerHTML = `<div class="tiny">Sign in with Google instead of typing the PIN. Paste the Hub Worker's address to try it on this device.</div>
       <div class="addrow" style="margin-top:var(--space-2)">
-        <input type="url" id="setHub" class="grow" placeholder="https://harper-family-hub.….workers.dev" data-nodraft="1">
+        <input type="url" id="setHub" class="grow" placeholder="https://family-hub-push.….workers.dev" data-nodraft="1">
         <button class="ghost" onclick="saveHub()">Use it</button>
       </div>`;
     return;

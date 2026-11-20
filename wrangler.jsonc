@@ -1,10 +1,12 @@
-// Cloudflare Workers Builds deploys the Hub's Worker from this repo on every
-// push to main. Only worker/ and push-worker/worker.js are deployed; the rest
-// of the repo is the GitHub Pages site. See worker/README.md.
+// Once the family-hub-push Worker is connected to this repo in Cloudflare
+// (Workers Builds; worker/README.md, "Connect the repo"), every push to main
+// deploys it. Only worker/ and push-worker/worker.js are deployed; the rest of
+// the repo is the GitHub Pages site.
 {
-  "name": "harper-family-hub",
+  // The name of the Worker already running the push relay, so its address and keys stay as they are.
+  "name": "family-hub-push",
   "main": "worker/index.js",
-  "compatibility_date": "2025-06-01",
+  "compatibility_date": "2026-09-21", // what the relay has been running on
   // Keep the text variables set in the Cloudflare dashboard (secrets are always kept).
   "keep_vars": true,
   // The Hub's database. With no ID given, the first deploy makes it and links it.
