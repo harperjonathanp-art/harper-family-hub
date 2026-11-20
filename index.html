@@ -196,12 +196,14 @@ h2 + .block { border-top: 0; }
 .marker.ceremony { background: var(--brass-tint); color: var(--brass); }
 
 /* ---------- buttons ---------- */
-button.primary, button.ghost, button.danger {
+button.primary, button.ghost, button.danger, a.primary {
   font-family: var(--font-grotesk); font-size: 14px; line-height: 20px; font-weight: 500;
   border-radius: var(--radius-md); padding: 11px 18px; min-height: 44px;
   cursor: pointer; border: 1px solid transparent; background: none;
 }
-button.primary { background: var(--field); color: var(--on-field); }
+button.primary, a.primary { background: var(--field); color: var(--on-field); }
+a.primary { display: inline-flex; align-items: center; text-decoration: none; }
+.signcode { font-family: var(--font-grotesk); font-size: 28px; line-height: 36px; font-weight: 700; letter-spacing: 0.18em; }
 button.ghost { border-color: var(--rule-strong); color: var(--ink); }
 button.danger { border-color: var(--crit); color: var(--crit); }
 button[disabled] { opacity: .45; cursor: default; }
@@ -526,29 +528,61 @@ function oldBackendHtml() {
 let VIEW = "today";
 let POLL = null;
 
+// The Hub's Worker, e.g. "https://harper-family-hub.<name>.workers.dev". While this is blank,
+// a device can be given the address in Settings to try signing in (see worker/README.md).
+const HUB = "";
+
 const cfg = {
   get api()  { return localStorage.getItem("fd_api") || ""; },
   get pin()  { return localStorage.getItem("fd_pin") || ""; },
   get user() { return localStorage.getItem("fd_user") || "Jon"; },
+  get hub()   { return (HUB || localStorage.getItem("fd_hub") || "").replace(/\/+$/, ""); },
+  get token() { return localStorage.getItem("fd_token") || ""; }, // set once this device has signed in
+  get signedIn()  { return !!(this.hub && this.token); },
+  get connected() { return this.signedIn || !!(this.api && this.pin); },
 };
 
 /* ============ networking ============ */
 async function apiGet(action, withReminders) {
+  if (cfg.signedIn) return hubFetch("/api?action=" + (action || "all") + (withReminders ? "&reminders=1" : ""));
   const r = await fetch(cfg.api + "?action=" + (action || "all") + "&pin=" + encodeURIComponent(cfg.pin) + (withReminders ? "&reminders=1" : ""));
   return r.json();
 }
 async function apiPost(body) {
+  if (cfg.signedIn) return hubFetch("/api", body);
   body.pin = cfg.pin;
   const r = await fetch(cfg.api, { method: "POST", body: JSON.stringify(body) });
   return r.json();
 }
+/* A signed-in device talks to the Hub's Worker, which knows who it is from its token. */
+async function hubFetch(path, body) {
+  const r = await fetch(cfg.hub + path, {
+    method: body ? "POST" : "GET",
+    headers: cfg.token ? { Authorization: "Bearer " + cfg.token } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const d = await r.json();
+  // Signed out from another device: this one goes back to how it was connected before.
+  if (r.status === 401 && d.error === "signed_out") localStorage.removeItem("fd_token");
+  return d;
+}
+const SYNC_ERRORS = {
+  bad_pin: "Wrong PIN — check Settings",
+  signed_out: "Signed out — sign in again in Settings",
+  backend_pin: "The Hub's Worker has the wrong FAMILY_PIN",
+  not_configured: "The Hub's Worker isn't set up yet",
+};
 
 async function refresh(quiet) {
-  if (!cfg.api || !cfg.pin) { showSetup(); return; }
+  if (!cfg.connected) { showSetup(); return; }
   if (!quiet) note("Syncing…");
   try {
     const d = await apiGet("all", REM.show);
-    if (!d.ok) { note(d.error === "bad_pin" ? "Wrong PIN — check Settings" : "Sync error"); return; }
+    if (!d.ok) {
+      note(SYNC_ERRORS[d.error] || "Sync error");
+      if (!cfg.connected) showSetup(); // signed out from elsewhere, with no PIN to fall back on
+      return;
+    }
     DATA = { tasks: d.tasks || [], meals: d.meals || {}, events: d.events || [], checkins: d.checkins || [],
              groceries: d.groceries, // undefined until the backend has the grocery list
              mealsFrom: d.mealsFrom, // set when the dinners come from the Notion meal plan
@@ -1779,7 +1813,9 @@ function showSetup() {
     <input type="password" id="setPin" inputmode="numeric" value="${esc(cfg.pin)}">
     <label class="f">This device belongs to</label>
     <select id="setUser">${FAMILY.slice(0, 4).map(f => `<option ${f === cfg.user ? "selected" : ""}>${f}</option>`).join("")}</select>
-    <div class="actions"><button class="primary" onclick="saveSetup()">Connect</button></div>`);
+    <div class="actions"><button class="primary" onclick="saveSetup()">Connect</button></div>
+    <h2>Or sign in<span class="hint">being tried out</span></h2><div id="signinBox"></div>`);
+  renderSignin();
 }
 function saveSetup() {
   localStorage.setItem("fd_api", document.getElementById("setApi").value.trim());
@@ -1790,8 +1826,10 @@ function saveSetup() {
   syncPush();
 }
 function openSettings() {
-  overlayHtml(`
-    <header><span class="eyebrow">Settings</span></header>
+  // A signed-in device is who its sign-in says it is, so the PIN and "belongs to" are put away.
+  const connection = cfg.signedIn ? `
+    <div id="signinBox"></div>
+    <div class="actions"><button class="primary" onclick="closeOverlay()">Done</button></div>` : `
     <label class="f">Apps Script web app URL</label>
     <input type="url" id="setApi" value="${esc(cfg.api)}">
     <label class="f">Family PIN</label>
@@ -1802,12 +1840,181 @@ function openSettings() {
       <button class="primary" onclick="saveSetup()">Save</button>
       <button class="ghost" onclick="closeOverlay()">Cancel</button>
     </div>
+    <h2>Sign in<span class="hint">instead of the PIN · being tried out</span></h2>
+    <div id="signinBox"></div>`;
+  overlayHtml(`
+    <header><span class="eyebrow">Settings</span></header>${connection}
     <div class="tiny" style="margin-top:var(--space-5)">Data refreshes every 60 seconds and whenever the app is reopened.</div>
     <h2>Todoist<span class="hint">on this device</span></h2>
     <div id="remBox"><div class="block">${remSettingsHtml()}</div></div>
     <h2>Notifications<span class="hint">for ${esc(cfg.user)}</span></h2>
     <div id="notifyBox"><div class="empty">Loading…</div></div>`);
+  renderSignin();
   loadNotify();
+}
+
+/* ============ sign-in ============
+   A device asks the Hub's Worker for a sign-in and is given a short code. It is
+   approved either by signing in with Google in the page the button opens, or by
+   a parent typing the code into their own Hub. This device just keeps asking
+   whether it's been approved, so nothing has to come back from Google's page. */
+let SIGNIN = null;      // the sign-in this device is waiting on: { hub, secret, id, code, until, google }
+let SIGNIN_POLL = null;
+const signinShowing = () => !!document.getElementById("signinBox") && !document.getElementById("overlay").classList.contains("hidden");
+
+function loadSignin() {
+  if (!SIGNIN) { try { SIGNIN = JSON.parse(localStorage.getItem("fd_signin") || "null"); } catch (e) {} }
+  if (SIGNIN && (SIGNIN.until < Date.now() || SIGNIN.hub !== cfg.hub)) dropSignin();
+  return SIGNIN;
+}
+function dropSignin() {
+  SIGNIN = null;
+  localStorage.removeItem("fd_signin");
+  clearInterval(SIGNIN_POLL); SIGNIN_POLL = null;
+}
+function deviceName() {
+  const m = /iPhone|iPad|Android|Macintosh|Windows/.exec(navigator.userAgent);
+  return m ? m[0].replace("Macintosh", "Mac") : "Browser";
+}
+
+async function renderSignin(msg) {
+  const box = document.getElementById("signinBox");
+  if (!box) return;
+  if (cfg.signedIn) { box.innerHTML = signedInHtml(); loadDevices(); return; }
+  if (!cfg.hub) {
+    box.innerHTML = `<div class="tiny">Sign in with Google instead of typing the PIN. Paste the Hub Worker's address to try it on this device.</div>
+      <div class="addrow" style="margin-top:var(--space-2)">
+        <input type="url" id="setHub" class="grow" placeholder="https://harper-family-hub.….workers.dev" data-nodraft="1">
+        <button class="ghost" onclick="saveHub()">Use it</button>
+      </div>`;
+    return;
+  }
+  if (!loadSignin()) {
+    box.innerHTML = `<div class="empty">Getting a sign-in code…</div>`;
+    try {
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      const secret = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+      const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret)));
+      const id = Array.from(hash, b => b.toString(16).padStart(2, "0")).join("");
+      const d = await hubFetch("/auth/begin", { id, device: deviceName() });
+      if (!d.ok) throw new Error(d.error);
+      SIGNIN = { hub: cfg.hub, secret, id, code: d.code, google: d.google, until: Date.now() + (d.minutes || 10) * 60000 };
+      localStorage.setItem("fd_signin", JSON.stringify(SIGNIN));
+    } catch (e) {
+      box.innerHTML = `<div class="empty">Couldn't reach the Hub's Worker to sign in.</div>
+        <div class="actions"><button class="ghost" onclick="renderSignin()">Try again</button>
+        ${HUB ? "" : `<button class="ghost" onclick="saveHub('')">Change its address</button>`}</div>`;
+      return;
+    }
+  }
+  if (!document.getElementById("signinBox") || cfg.signedIn) return; // Settings was redrawn meanwhile
+  const google = SIGNIN.google
+    ? `<div class="actions" style="margin-top:0"><a class="primary" target="_blank" rel="noopener"
+         href="${esc(SIGNIN.hub)}/auth/google?d=${SIGNIN.id}">Sign in with Google</a></div>
+       <div class="tiny" style="margin-top:var(--space-3)">Google will show this code. Check it matches before you tap Sign in there.</div>`
+    : `<div class="tiny">Google sign-in isn't set up on the Hub's Worker yet. A parent who is signed in can still use this code.</div>`;
+  document.getElementById("signinBox").innerHTML = `${google}
+    <div class="signcode" aria-label="Sign-in code">${esc(SIGNIN.code)}</div>
+    <div class="tiny">No Google account? A parent can sign this device in from their own Hub: ⚙, then Sign in another device, with this code.</div>
+    <div class="tiny" id="signinMsg" role="status" style="margin-top:var(--space-2)">${esc(msg || "This finishes by itself once the sign-in is approved.")}</div>`;
+  if (!SIGNIN_POLL) SIGNIN_POLL = setInterval(pollSignin, 2500);
+}
+
+/* Asks whether the sign-in has been approved. Also run when the app comes back to the front. */
+async function pollSignin() {
+  if (!loadSignin()) {
+    clearInterval(SIGNIN_POLL); SIGNIN_POLL = null;
+    // A new code only while someone is looking at the old one.
+    if (signinShowing() && !cfg.signedIn && cfg.hub) renderSignin("That code ran out. Here's a new one.");
+    return;
+  }
+  if (document.visibilityState !== "visible") return;
+  let d;
+  try { d = await hubFetch("/auth/poll", { secret: SIGNIN.secret }); } catch (e) { return; }
+  if (d.ok && d.status === "done") {
+    dropSignin();
+    localStorage.setItem("fd_token", d.token);
+    localStorage.setItem("fd_user", d.person);
+    localStorage.removeItem("fd_push_sync"); // this device's notifications now belong to the person signed in
+    note("Signed in as " + d.person);
+    if (signinShowing()) { if (document.getElementById("notifyBox")) openSettings(); else closeOverlay(); }
+    refresh(true);
+    syncPush();
+  } else if (d.ok && d.status === "expired") {
+    dropSignin();
+    if (signinShowing()) renderSignin("That code ran out. Here's a new one.");
+  }
+}
+
+function saveHub(value) {
+  const v = value != null ? value : document.getElementById("setHub").value.trim();
+  if (v && !/^https:\/\//.test(v)) { alert("The address starts with https://"); return; }
+  if (v) localStorage.setItem("fd_hub", v); else localStorage.removeItem("fd_hub");
+  dropSignin();
+  renderSignin();
+}
+
+function signedInHtml() {
+  const parent = ["Jon", "Maggie"].includes(cfg.user);
+  const who = [cfg.user, "Clayton", "Heidi"];
+  return `<div class="sheet"><span class="marker team">Signed in</span>
+      <div class="muted">This device is ${esc(cfg.user)}'s.</div>
+      <div class="actions"><button class="ghost" onclick="signOut()">Sign out</button></div></div>
+    ${parent ? `<h2>Sign in another device<span class="hint">for someone with no Google account</span></h2>
+    <div class="tiny">On that device, open the Hub. Type the code it shows here.</div>
+    <div class="addrow" style="margin-top:var(--space-2)">
+      <input type="text" id="apCode" inputmode="numeric" maxlength="4" placeholder="Code" aria-label="Sign-in code" style="width:104px" data-nodraft="1">
+      <select id="apWho" aria-label="Whose device">${who.map(p => `<option>${p}</option>`).join("")}</select>
+      <button class="ghost" onclick="approveDevice()">Sign it in</button>
+    </div>
+    <div class="tiny" id="apMsg" role="status" style="margin-top:var(--space-2)"></div>
+    <h2>Signed-in devices</h2>
+    <div id="devBox"><div class="empty">Loading…</div></div>` : ""}`;
+}
+
+async function approveDevice() {
+  const code = document.getElementById("apCode").value.trim(), person = document.getElementById("apWho").value;
+  if (!/^\d{4}$/.test(code)) { say("apMsg", "The code is four digits."); return; }
+  say("apMsg", "Signing it in…");
+  try {
+    const d = await hubFetch("/auth/approve", { code, person });
+    if (d.ok) { document.getElementById("apCode").value = ""; setTimeout(loadDevices, 4000); }
+    say("apMsg", d.ok ? `Done ✓ — that device is now ${person}'s. It finishes within a few seconds.`
+      : d.error === "no_such_code" ? "No device is showing that code. Codes last ten minutes." : "Couldn't sign it in (" + d.error + ").");
+  } catch (e) { say("apMsg", "Couldn't sign it in — offline?"); }
+}
+
+async function loadDevices() {
+  const box = document.getElementById("devBox");
+  if (!box) return;
+  const day = ms => new Date(ms).toLocaleDateString([], { month: "short", day: "numeric" });
+  try {
+    const d = await hubFetch("/auth/devices");
+    if (!d.ok) throw new Error(d.error);
+    box.innerHTML = `<div class="block">${d.devices.map(v => `<div class="nrow"><div class="addrow">
+      <div class="grow"><div style="font-weight:500">${esc(v.person)}${v.device ? " · " + esc(v.device) : ""}${v.here ? " (this one)" : ""}</div>
+        <div class="tiny">Signed in ${day(v.addedAt)}${v.by && v.by !== v.person ? " by " + esc(v.by) : ""} · last used ${day(v.lastSeen)}</div></div>
+      ${v.here ? "" : `<button class="ghost" onclick="signOut('${esc(v.id)}')">Sign out</button>`}
+    </div></div>`).join("")}</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="empty">Couldn't load the devices.</div>`;
+  }
+}
+
+/* Signs this device out, or (a parent) the device named. */
+async function signOut(device) {
+  if (device) {
+    if (!confirm("Sign that device out? It will need signing in again.")) return;
+    try { await hubFetch("/auth/signout", { device }); } catch (e) {}
+    loadDevices();
+    return;
+  }
+  if (!confirm("Sign this device out?")) return;
+  try { await hubFetch("/auth/signout", {}); } catch (e) {}
+  localStorage.removeItem("fd_token");
+  localStorage.removeItem("fd_push_sync");
+  closeOverlay();
+  refresh(); // back to the PIN if this device has one, or to setup
 }
 
 /* ============ notifications ============ */
@@ -1969,7 +2176,7 @@ async function saveNotifyPrefs() {
    server's list stays current even if a subscription rotates. */
 async function syncPush() {
   try {
-    if (!cfg.api || !cfg.pin || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (!cfg.connected || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
     if (Notification.permission !== "granted") return;
     const key = cfg.user + "|" + todayStr();
     if (localStorage.getItem("fd_push_sync") === key) return;
@@ -2002,8 +2209,10 @@ function openFromNotification(d) {
   refresh(true);
   POLL = setInterval(() => { if (document.visibilityState === "visible") refresh(true); }, 60000);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") refresh(true);
+    if (document.visibilityState === "visible") { refresh(true); if (SIGNIN) pollSignin(); }
   });
+  // iOS can reload the app while Google's page is open: pick the sign-in back up.
+  if (!cfg.signedIn && loadSignin()) { pollSignin(); SIGNIN_POLL = setInterval(pollSignin, 2500); }
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
     navigator.serviceWorker.addEventListener("message", e => openFromNotification(e.data));

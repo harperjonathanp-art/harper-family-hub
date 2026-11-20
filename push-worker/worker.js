@@ -1,9 +1,10 @@
 /**
  * HARPER FAMILY HUB — push relay (Cloudflare Worker)
  *
- * Apps Script decides what to send and to whom; this Worker only does the
+ * Apps Script decides what to send and to whom; this file only does the
  * Web Push signing (VAPID) and payload encryption (RFC 8291) that Apps
- * Script can't. It stores nothing.
+ * Script can't. It stores nothing. worker/index.js is what Cloudflare
+ * deploys; it hands /send here.
  *
  *   POST /send   Authorization: Bearer <PUSH_SECRET>
  *     { "subscriptions": [ <PushSubscription JSON>, … ],

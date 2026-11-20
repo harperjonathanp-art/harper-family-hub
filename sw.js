@@ -1,6 +1,6 @@
 // Service worker: makes the app installable, lets the shell open offline,
 // and shows push notifications.
-const CACHE = "family-hub-v11";
+const CACHE = "family-hub-v12";
 const SHELL = ["./index.html", "./manifest.json", "./favicon.svg", "./favicon-32.png",
   "./apple-touch-icon.png", "./icon-192.png", "./icon-512.png", "./icon-512-maskable.png"];
 self.addEventListener("install", e => {
@@ -13,7 +13,7 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
-  if (url.hostname.includes("script.google")) return; // never cache live data
+  if (url.origin !== self.location.origin) return; // live data (Apps Script, the Hub's Worker): never cached
   if (e.request.mode === "navigate") {
     const network = fetch(e.request, { cache: "no-cache" });
     // Save each good copy for offline use; waitUntil keeps the worker alive until it's written.
