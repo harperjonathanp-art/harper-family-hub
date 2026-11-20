@@ -1,0 +1,123 @@
+# The Hub's Worker
+
+One Cloudflare Worker, named `harper-family-hub`, deployed from this repo on
+every push to `main` (`wrangler.jsonc` at the repo root).
+
+| Path | File | What it does |
+|------|------|--------------|
+| `/send` | `../push-worker/worker.js` | The push relay, unchanged. See `push-worker/README.md` |
+| `/auth/…` | `auth.js` | Sign-in: with Google, or by a parent's say-so |
+| `/api` | `proxy.js` | The Hub's data for a signed-in device. For now it is passed straight to Apps Script |
+
+This is the first step of moving the backend off Apps Script. Nothing has
+moved yet: tasks, meals, check-ins, notifications and the rest still run in
+`apps-script/`, and every phone that uses the PIN keeps working exactly as
+before. What's new is that a device can sign in instead of holding the PIN.
+
+## How sign-in works
+
+A device asks the Worker for a sign-in and is shown a four-digit code that
+lasts ten minutes. It is approved in one of two ways:
+
+- **With Google.** *Sign in with Google* opens the Worker's page, which hands
+  over to Google. Google says which account it is; if that account is in
+  `FAMILY_ACCOUNTS`, a confirm page shows the same code and a **Sign in**
+  button. A parent's account can sign the device in as themselves or as either
+  child. A child's account signs in only as that child.
+- **By a parent.** A parent who is already signed in opens ⚙ → *Sign in
+  another device* on their own Hub, types the code and picks whose device it
+  is. For anyone without a Google account.
+
+The device keeps asking the Worker whether it has been approved, so nothing
+has to come back from Google's page to the Hub. That is what makes it work in
+an iPhone Home Screen app, where pop-ups and redirects often don't.
+
+Once approved, the device holds a token of its own. The Worker stores only a
+hash of it, in the `sessions` table of its D1 database. A parent sees every
+signed-in device in Settings and can sign any of them out.
+
+A signed-in device never holds the family PIN: the Worker adds it when it
+passes a request on to Apps Script. Who ticked a task or added one comes from
+the sign-in, not from what the page says.
+
+**Until the PIN is retired, sign-in doesn't lock anything.** A device that
+still has the PIN saved goes back to using it when it's signed out.
+
+## Setup
+
+About 30 minutes, once. The names in Google's console move around; the steps
+are the same.
+
+### 1. Google: an OAuth client
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com) and make
+   a project, e.g. "Family Hub".
+2. Open **Google Auth Platform** (older name: *APIs & Services → OAuth consent
+   screen*). Set it up as **External**, with any app name and your email.
+3. Under **Audience**, leave it in **Testing** and add each family member's
+   Google account as a **test user**. Only those accounts can get through
+   Google at all. (The Hub asks Google only for the account's email address,
+   once, at sign-in, so Testing's seven-day limit never comes into it.)
+4. Under **Clients**, create a client of type **Web application**. Add one
+   **Authorized redirect URI**: the Worker's address followed by
+   `/auth/callback`, e.g.
+   `https://harper-family-hub.<name>.workers.dev/auth/callback`.
+5. Copy the **Client ID** and **Client secret**.
+
+### 2. Cloudflare: the Worker's variables
+
+In the dashboard, open the `harper-family-hub` Worker's **Settings → Variables
+and Secrets** and add:
+
+| Name | Type | Value |
+|------|------|-------|
+| `GOOGLE_CLIENT_ID` | Text | from step 1 |
+| `GOOGLE_CLIENT_SECRET` | Secret | from step 1 |
+| `FAMILY_ACCOUNTS` | Secret | Who each Google account is: `Jon=…@gmail.com, Maggie=…@gmail.com`. Add `Clayton=…` or `Heidi=…` only if they have accounts of their own |
+| `APPS_SCRIPT_URL` | Secret | The Apps Script web app's address (`…/exec`), as in the Hub's Settings today |
+| `FAMILY_PIN` | Secret | The same PIN as the `FAMILY_PIN` Script Property |
+
+None of these belong in this repo, which is public.
+
+The push relay's own variables (`VAPID_…`, `PUSH_SECRET`) stay as they are.
+
+### 3. The database
+
+Nothing to do. `wrangler.jsonc` asks for a D1 database bound as `DB` without
+naming one, so the first deploy creates it and links it to the Worker. The
+Worker makes its own tables the first time it needs them. To look inside:
+dashboard → **Storage & Databases → D1**.
+
+If a deploy ever fails on the database, the previous version of the Worker
+keeps running, so the push relay isn't interrupted.
+
+### 4. Try it on one phone
+
+1. Open the Hub from its Home Screen icon, tap ⚙, and under **Sign in** paste
+   the Worker's address (`https://harper-family-hub.<name>.workers.dev`).
+2. Tap **Sign in with Google**, pick your account, check the code matches, and
+   tap **Sign in**.
+3. Go back to the Hub. Within a few seconds Settings shows *Signed in*.
+
+To go back to the PIN on that phone: ⚙ → **Sign out**.
+
+Once it has been tried on the phones, put the Worker's address in `HUB` near
+the top of the script in `index.html` so no one has to paste it.
+
+## Other settings
+
+| Name | Type | Value |
+|------|------|-------|
+| `HUB_ORIGIN` | Text | Optional. Where the Hub's page is served from, if not GitHub Pages. Only pages from here may read the Worker's answers |
+
+## Tests
+
+```
+cd worker
+npm install
+npm test
+```
+
+They run the Worker in Cloudflare's local simulator with a pretend Google and
+a pretend Apps Script. `package.json` here is only for that; Cloudflare never
+reads it.

@@ -1,0 +1,12 @@
+{
+  "name": "family-hub-worker-tests",
+  "private": true,
+  "type": "module",
+  "description": "Only for running the Worker's tests on a computer. Cloudflare deploys worker/index.js straight from wrangler.jsonc and never reads this file.",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "miniflare": "^4.20251011.0"
+  }
+}

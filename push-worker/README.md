@@ -11,8 +11,10 @@ Cloudflare's free plan covers this many times over.
 
 The Worker is named `harper-family-hub` and is connected to this repo in
 Cloudflare (Workers Builds). `wrangler.jsonc` at the repo root tells it to
-deploy `push-worker/worker.js`, so every push to `main` redeploys the relay
-on its own. Keys added in the dashboard are kept across deploys.
+deploy `worker/index.js`, which hands `/send` to `worker.js` here, so every
+push to `main` redeploys the relay on its own. Keys added in the dashboard are
+kept across deploys. The same Worker also does the Hub's sign-in; see
+`worker/README.md`.
 
 1. **Make the keys.** Open
    [keys.html](https://harperjonathanp-art.github.io/harper-family-hub/push-worker/keys.html).
@@ -38,7 +40,7 @@ on its own. Keys added in the dashboard are kept across deploys.
    `PUSH_SECRET` and `VAPID_PUBLIC_KEY`, then follow the Notifications steps in
    `apps-script/README.md`.
 
-To run it without the repo link instead, create a Worker in the dashboard,
+To run only the relay without the repo link, create a Worker in the dashboard,
 paste `worker.js` into **Edit code**, and deploy. Then do steps 3 to 5.
 
 ## Changing the keys
