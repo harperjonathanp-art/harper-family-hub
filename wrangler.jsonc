@@ -9,6 +9,9 @@
   "compatibility_date": "2026-09-21", // what the relay has been running on
   // Keep the text variables set in the Cloudflare dashboard (secrets are always kept).
   "keep_vars": true,
-  // The Hub's database. With no ID given, the first deploy makes it and links it.
+  // The Hub's database. With no ID given, the first deploy made it and linked it.
   "d1_databases": [{ "binding": "DB" }]
+  // To move a feature out of Apps Script, name it here (worker/README.md, "Moving a feature").
+  // Only once every phone is signed in:
+  // , "vars": { "MOVED": "groceries" }
 }

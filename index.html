@@ -528,15 +528,15 @@ function oldBackendHtml() {
 let VIEW = "today";
 let POLL = null;
 
-// The Hub's Worker, e.g. "https://family-hub-push.<name>.workers.dev". While this is blank,
-// a device can be given the address in Settings to try signing in (see worker/README.md).
-const HUB = "";
+// The Hub's Worker: where a device signs in, and where a signed-in device gets its data
+// (see worker/README.md). It is a public address; what it serves is behind the sign-in.
+const HUB = "https://family-hub-push.harper-jonathan-p.workers.dev";
 
 const cfg = {
   get api()  { return localStorage.getItem("fd_api") || ""; },
   get pin()  { return localStorage.getItem("fd_pin") || ""; },
   get user() { return localStorage.getItem("fd_user") || "Jon"; },
-  get hub()   { return (HUB || localStorage.getItem("fd_hub") || "").replace(/\/+$/, ""); },
+  get hub()   { return (localStorage.getItem("fd_hub") || HUB || "").replace(/\/+$/, ""); }, // fd_hub: one device pointed elsewhere, for testing
   get token() { return localStorage.getItem("fd_token") || ""; }, // set once this device has signed in
   get signedIn()  { return !!(this.hub && this.token); },
   get connected() { return this.signedIn || !!(this.api && this.pin); },

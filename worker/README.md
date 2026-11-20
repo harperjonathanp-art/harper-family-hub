@@ -9,12 +9,14 @@ to this repo (step 1 below), every push to `main` deploys it
 |------|------|--------------|
 | `/send` | `../push-worker/worker.js` | The push relay, unchanged. See `push-worker/README.md` |
 | `/auth/…` | `auth.js` | Sign-in: with Google, or by a parent's say-so |
-| `/api` | `proxy.js` | The Hub's data for a signed-in device. For now it is passed straight to Apps Script |
+| `/api` | `proxy.js` | The Hub's data for a signed-in device: answered here for a feature that has moved, passed to Apps Script for the rest |
+| | `groceries.js` | The grocery list, once it has moved (see "Moving a feature") |
 
-This is the first step of moving the backend off Apps Script. Nothing has
-moved yet: tasks, meals, check-ins, notifications and the rest still run in
+This is the start of moving the backend off Apps Script. Nothing has moved
+yet: tasks, meals, check-ins, notifications and the rest still run in
 `apps-script/`, and every phone that uses the PIN keeps working exactly as
-before. What's new is that a device can sign in instead of holding the PIN.
+before. What's new is that a device can sign in instead of holding the PIN,
+and that the grocery list is ready to move as soon as every phone has.
 
 ## How sign-in works
 
@@ -116,16 +118,34 @@ keeps running, so the push relay isn't interrupted.
 
 ### 5. Try it on one phone
 
-1. Open the Hub from its Home Screen icon, tap ⚙, and under **Sign in** paste
-   the Worker's address (`https://family-hub-push.<name>.workers.dev`).
+1. Open the Hub from its Home Screen icon and tap ⚙. Under **Sign in** there
+   is a four-digit code and a **Sign in with Google** button. (The Worker's
+   address is `HUB`, near the top of the script in `index.html`.)
 2. Tap **Sign in with Google**, pick your account, check the code matches, and
    tap **Sign in**.
 3. Go back to the Hub. Within a few seconds Settings shows *Signed in*.
 
-To go back to the PIN on that phone: ⚙ → **Sign out**.
+For a device whose owner has no Google account, a signed-in parent opens ⚙ →
+**Sign in another device** on their own Hub and types that device's code.
 
-Once it has been tried on the phones, put the Worker's address in `HUB` near
-the top of the script in `index.html` so no one has to paste it.
+To go back to the PIN on a phone: ⚙ → **Sign out**.
+
+## Moving a feature
+
+A feature moves out of Apps Script when the Worker's `MOVED` variable names
+it. `MOVED` is set in `wrangler.jsonc`, so a move is one small commit, and
+taking the name out again undoes it.
+
+| In `MOVED` | What changes |
+|------------|--------------|
+| `groceries` | The grocery list is kept in the Worker's database. The first request after the switch copies the list over from the Sheet, once, keeping every item's id, tick and place. From then on grocery actions never touch Apps Script, and the Sheet's `Groceries` tab is no longer read or written |
+
+**Only move a feature once every phone is signed in.** A phone still on the
+PIN talks to Apps Script directly and would go on seeing the Sheet's copy,
+which stops changing at the move.
+
+Undoing a move sends the Hub back to the Sheet's copy as it was at the move;
+anything added since stays in the Worker's database but isn't shown.
 
 ## Other settings
 
@@ -142,5 +162,7 @@ npm test
 ```
 
 They run the Worker in Cloudflare's local simulator with a pretend Google and
-a pretend Apps Script. `package.json` here is only for that; Cloudflare never
-reads it.
+a pretend Apps Script. For a feature that has moved, they also run the real
+`apps-script/Code.gs` over a pretend Sheet and check the Worker gives the same
+answers, action for action. `package.json` here is only for the tests;
+Cloudflare never reads it.
