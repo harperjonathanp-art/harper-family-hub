@@ -11,6 +11,7 @@ Change it here, then paste it into the editor and publish a new version.
 | `Todoist.gs` | Jon's Todoist tasks, read-only, from the Todoist API |
 | `Notion.gs` | Optional: the week's dinners, read from the Notion meal plan |
 | `NotionCheckins.gs` | Optional: check-ins copied to the Weekly Check-Ins database in Notion (needs `Notion.gs` too) |
+| `Handover.gs` | For the move to the Worker in `worker/`: lets it copy everything out, and tells this script to stop. See "Moving a feature" in `worker/README.md` |
 | `appsscript.json` | Project settings (time zone, web app access, the permissions the script asks for) |
 
 ## Script Properties

@@ -16,7 +16,8 @@ import { json } from "./util.js";
 import { MOVED } from "./moved.js";
 import { appsScript } from "./appsscript.js";
 import { isGroceryAction, groceryAction, listGroceries, groceriesCopied, copyGroceries } from "./groceries.js";
-import { hubGet, hubPost } from "./hub/api.js";
+import { hubGet, hubPost, nowOf } from "./hub/api.js";
+import { ensureCutover } from "./hub/move.js";
 
 // Actions that name whose settings or phone they're about.
 const ABOUT_A_PERSON = ["pushSubscribe", "savePrefs", "pushTest"];
@@ -30,6 +31,13 @@ export function moved(env, feature) {
 export async function handleApi(request, env, url, session, headers, ctx) {
   const reply = (obj, status) => json(obj, status, headers);
   const groceriesHere = moved(env, "groceries"), coreHere = moved(env, "core");
+  if (coreHere) {
+    // The first request after the move takes over from Apps Script. Until that has worked, nothing is answered.
+    try { await ensureCutover(env, nowOf(env)); } catch (err) {
+      console.warn("cutover: " + String(err && err.message || err).slice(0, 200));
+      return reply({ ok: false, error: "moving" }, 503);
+    }
+  }
 
   if (request.method === "GET") {
     const action = url.searchParams.get("action") === "notify" ? "notify" : "all";

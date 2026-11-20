@@ -59,7 +59,7 @@ export function appsScriptSim(files, props, opts) {
     constructor(...a) { if (a.length === 0 && clock) super(clock.now); else super(...a); }
     static now() { return clock ? clock.now : Date.now(); }
   }
-  const tabs = {}, cache = {};
+  const tabs = {}, cache = {}, timers = opts.timers || [];
   const lock = { tryLock: () => true, waitLock: () => {}, releaseLock: () => {} };
   const properties = Object.assign({ FAMILY_PIN: "4321", SHEET_ID: "sheet" }, props || {});
   const context = vm.createContext({
@@ -89,6 +89,13 @@ export function appsScriptSim(files, props, opts) {
     }) },
     LockService: { getScriptLock: () => lock, getUserLock: () => lock },
     Logger: { log: () => {} },
+    ContentService: { MimeType: { JSON: "json" }, createTextOutput: text => ({ setMimeType: () => ({ text }) }) },
+    CalendarApp: { getCalendarById: () => null },
+    ScriptApp: {
+      getProjectTriggers: () => timers.map(fn => ({ getHandlerFunction: () => fn })),
+      deleteTrigger: t => { timers.splice(timers.indexOf(t.getHandlerFunction()), 1); },
+      newTrigger: fn => ({ timeBased: () => ({ everyMinutes: () => ({ create: () => { timers.push(fn); } }) }) }),
+    },
   });
   context.Utilities.sleep = () => {};
   context.Utilities.getUuid = opts.uuid || (() => randomUUID());
@@ -97,6 +104,16 @@ export function appsScriptSim(files, props, opts) {
   return {
     tabs,
     props: properties,
+    timers,
+    Date: ScriptDate, // the kind of Date the scripts see in a date cell
+    /**
+     * A request as the web app would get it: { method: "GET", query } or { method: "POST", body }.
+     * Runs the script's own doGet or doPost and gives its JSON answer.
+     */
+    request: sent => {
+      context.__e = sent.method === "POST" ? { postData: { contents: JSON.stringify(sent.body) } } : { parameter: sent.query || {} };
+      return JSON.parse(vm.runInContext(sent.method === "POST" ? "doPost(__e).text" : "doGet(__e).text", context));
+    },
     /** Runs a line of script, e.g. to swap a function that needs a Google service for a stand-in. */
     eval: code => vm.runInContext(code, context),
     /** Calls one of the script's functions by name. The result is copied out as plain data. */

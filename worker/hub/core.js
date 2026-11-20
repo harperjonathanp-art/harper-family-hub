@@ -354,6 +354,23 @@ function removeWhere(rows, predicate) {
   return removed;
 }
 
+/**
+ * Ticks that can never matter again: for a day, week, month, quarter or year
+ * that is over, or a turn of a repeating task long since passed. They are
+ * history. The store keeps them out of the rows every request loads.
+ */
+export function staleCompletions(c) {
+  const live = {};
+  ["daily", "weekly", "monthly", "quarterly", "yearly", "once"].forEach(function (r) { live[periodKey(r, c.now)] = true; });
+  const now = c.now.getTime(), day = 86400000;
+  return c.tabs.Completions.filter(function (r) {
+    const key = String(r.periodKey), at = Date.parse(r.timestamp), age = isNaN(at) ? Infinity : now - at;
+    if (live[key] || age < 3 * day) return false;         // this period's, or too recent to judge
+    if (key.indexOf("turn:") === 0) return age > 400 * day; // a subtask's tick lasts as long as its parent's turn
+    return true;
+  });
+}
+
 // ---------- meals ----------
 
 /** The Meals tab always holds the seven days. */

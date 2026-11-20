@@ -23,13 +23,14 @@ import * as core from "./core.js";
 import * as notify from "./notify.js";
 import * as todoist from "./todoist.js";
 import * as notion from "./notion.js";
+import { ensureCutover, setAsideOldTicks } from "./move.js";
 
 const CORE = ["Tasks", "Completions", "Meals", "CheckIns"];
 const ALL = CORE.concat(["Devices", "NotifyPrefs"]);
 const EVENTS = "EVENTS"; // the calendar's events as Apps Script last sent them, as JSON
 
 /** The moment a request or timer run happens. (TEST_NOW lets a test pick it.) */
-const nowOf = env => (env.TEST_NOW ? new Date(env.TEST_NOW) : new Date());
+export const nowOf = env => (env.TEST_NOW ? new Date(env.TEST_NOW) : new Date());
 
 /** What the rules need to know beyond the rows. */
 function attach(c, env) {
@@ -154,6 +155,7 @@ async function send(env, outbox, devices) {
  */
 export async function tick(env) {
   const now = nowOf(env), minute = now.getUTCMinutes(), report = {};
+  await ensureCutover(env, now); // the first run after the move takes over from Apps Script; if it can't, nothing runs
   const job = async (name, due, work) => {
     if (!due) return;
     try { report[name] = (await work()) || "ok"; } catch (err) { report[name] = "failed: " + String(err && err.message || err).slice(0, 120); }
@@ -166,6 +168,7 @@ export async function tick(env) {
     const r = await notion.syncNotionCheckins(env, all);
     return r.status + " — " + r.message;
   });
+  await job("old ticks", now.getUTCHours() === 9 && minute < 5, () => setAsideOldTicks(env, now));
   await job("notify", true, async () => {
     const due = await transact(env, ALL, c => {
       attach(c, env);
@@ -181,7 +184,7 @@ export async function tick(env) {
 
 /** The calendar still lives in Apps Script: keep a copy of its events here. */
 async function syncEvents(env) {
-  const up = await appsScript(env, { action: "all" });
+  const up = await appsScript(env, { action: "events" });
   if (up.error) throw new Error(up.error);
   if (up.data.ok !== true || !Array.isArray(up.data.events)) throw new Error("no events in Apps Script's answer");
   const text = JSON.stringify(up.data.events);

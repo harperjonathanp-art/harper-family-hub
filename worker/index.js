@@ -14,14 +14,22 @@
 import relay from "../push-worker/worker.js";
 import { handleAuth, sessionFor } from "./auth.js";
 import { handleApi, moved } from "./proxy.js";
-import { tick } from "./hub/api.js";
+import { tick, nowOf } from "./hub/api.js";
+import { shadowRun } from "./hub/move.js";
 import { json, cors } from "./util.js";
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const isAuth = url.pathname.indexOf("/auth/") === 0, isApi = url.pathname === "/api";
-    if (!isAuth && !isApi) return relay.fetch(request, env, ctx);
+    if (!isAuth && !isApi) {
+      // Once the Worker sends the notifications itself, Apps Script's are refused here,
+      // so a timer left running there can never make a phone buzz twice.
+      if (url.pathname === "/send" && request.method === "POST" && moved(env, "core")) {
+        return json({ results: [], note: "the Worker sends the Hub's notifications now" });
+      }
+      return relay.fetch(request, env, ctx);
+    }
 
     const headers = cors(request, env);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
@@ -39,7 +47,10 @@ export default {
 
   /** Every five minutes (wrangler.jsonc): what the Apps Script timers did, once the core has moved. */
   async scheduled(event, env, ctx) {
-    if (!env.DB || !moved(env, "core")) return;
-    await tick(env);
+    if (!env.DB) return;
+    if (moved(env, "core")) { await tick(env); return; }
+    // Getting ready to move: copy and compare, changing nothing anyone sees (hub/move.js).
+    const now = nowOf(env);
+    if (moved(env, "shadow") && now.getUTCMinutes() % 15 < 5) await shadowRun(env, now);
   },
 };
