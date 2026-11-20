@@ -1,0 +1,107 @@
+/**
+ * HARPER FAMILY HUB — the grocery list
+ *
+ * The first feature to live in the Worker's own database instead of the
+ * Google Sheet. It behaves as the Groceries part of apps-script/Code.gs did:
+ * the same actions, the same answers, the same order.
+ *
+ * It is used only while the Worker's MOVED variable lists "groceries"
+ * (see README.md, "Moving a feature"). The first time it is, the list is
+ * copied over from the Sheet, once, keeping every item's id, tick and place.
+ */
+
+const ACTIONS = ["addGroceries", "toggleGrocery", "deleteGrocery", "clearGroceries", "reorderGroceries"];
+const MAX_AT_ONCE = 50; // items taken from one paste
+const MAX_LENGTH = 200; // characters kept of one item
+const SEEDED = "groceries_copied";
+
+let tablesReady = false;
+
+async function ready(env) {
+  if (tablesReady) return;
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS groceries (
+      id TEXT PRIMARY KEY, item TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0,
+      added_by TEXT NOT NULL DEFAULT '', added_at TEXT NOT NULL DEFAULT '', sort INTEGER NOT NULL DEFAULT 0)`),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"),
+  ]);
+  tablesReady = true;
+}
+
+export function isGroceryAction(action) {
+  return ACTIONS.indexOf(action) >= 0;
+}
+
+/** Whether the Sheet's list has been copied in yet. */
+export async function groceriesCopied(env) {
+  await ready(env);
+  return !!(await env.DB.prepare("SELECT 1 AS x FROM meta WHERE key = ?").bind(SEEDED).first());
+}
+
+/**
+ * Copies the Sheet's list in, as Apps Script last sent it. Safe to run twice:
+ * an item already here is left alone, and after the first copy it does nothing.
+ */
+export async function copyGroceries(env, fromSheet) {
+  await ready(env);
+  const rows = Array.isArray(fromSheet) ? fromSheet : [];
+  const now = new Date().toISOString();
+  const work = rows.filter(r => r && r.id != null && String(r.item || "").trim()).map((r, i) => env.DB.prepare(
+    "INSERT OR IGNORE INTO groceries (id, item, done, added_by, added_at, sort) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(String(r.id), String(r.item).slice(0, MAX_LENGTH), r.done === true ? 1 : 0, String(r.addedBy || ""), now, i + 1));
+  work.push(env.DB.prepare("INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)").bind(SEEDED, now));
+  await env.DB.batch(work); // all of it or none of it
+}
+
+/** The list as the Hub's page expects it, in order. */
+export async function listGroceries(env) {
+  await ready(env);
+  const rows = (await env.DB.prepare("SELECT id, item, done, added_by FROM groceries ORDER BY sort, rowid").all()).results;
+  return rows.map(r => ({ id: r.id, item: r.item, done: r.done === 1, addedBy: r.added_by || "" }));
+}
+
+/** One of the page's grocery actions. Answers with the list as it now stands. */
+export async function groceryAction(env, body, person) {
+  await ready(env);
+  const db = env.DB, id = String(body.id == null ? "" : body.id);
+  switch (body.action) {
+    case "addGroceries": {
+      // One item per line, so a pasted ingredient list becomes separate items.
+      const items = String(body.text || "").split(/\n+/)
+        .map(s => s.replace(/^[\s•*\-–—]+/, "").trim())
+        .filter(Boolean)
+        .slice(0, MAX_AT_ONCE);
+      const now = new Date().toISOString();
+      // Each goes after the last, including the one added just before it in this batch.
+      if (items.length) {
+        await db.batch(items.map(item => db.prepare(
+          `INSERT INTO groceries (id, item, done, added_by, added_at, sort)
+           VALUES (?, ?, 0, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM groceries))`)
+          .bind(crypto.randomUUID().slice(0, 8), item.slice(0, MAX_LENGTH), person, now)));
+      }
+      break;
+    }
+    case "toggleGrocery":
+      await db.prepare("UPDATE groceries SET done = 1 - done WHERE id = ?").bind(id).run();
+      break;
+    case "deleteGrocery":
+      await db.prepare("DELETE FROM groceries WHERE id = ?").bind(id).run();
+      break;
+    case "clearGroceries":
+      await db.prepare("DELETE FROM groceries WHERE done = 1").run();
+      break;
+    case "reorderGroceries": {
+      // The order given, then anything it doesn't name (added meanwhile) in the order it had.
+      if (!Array.isArray(body.ids)) break;
+      const have = (await db.prepare("SELECT id FROM groceries ORDER BY sort, rowid").all()).results.map(r => r.id);
+      const left = new Set(have), order = [];
+      body.ids.forEach(x => { x = String(x); if (left.has(x)) { order.push(x); left.delete(x); } });
+      have.forEach(x => { if (left.has(x)) order.push(x); });
+      if (order.length) {
+        await db.batch(order.map((x, i) => db.prepare("UPDATE groceries SET sort = ? WHERE id = ?").bind(i + 1, x)));
+      }
+      break;
+    }
+  }
+  return { ok: true, groceries: await listGroceries(env) };
+}

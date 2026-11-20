@@ -1,110 +1,14 @@
-// Runs the Worker in Cloudflare's local simulator, with a pretend Google and
-// a pretend Apps Script. From the worker folder: npm install, then npm test.
+// Sign-in and the pass-through to Apps Script. From the worker folder: npm install, then npm test.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { createHash, randomBytes } from "node:crypto";
-import { Miniflare, Response as MfResponse } from "miniflare";
+import { startHub, PAGE } from "./harness.js";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const HUB = "https://hub.example";
-const PAGE = "https://harperjonathanp-art.github.io";
-const upstream = []; // what the Worker sent to Apps Script
-let appsScript = () => ({ ok: true, tasks: [], echo: true });
-let mf, db;
-
-const b64u = s => Buffer.from(s).toString("base64url");
-const idToken = claims => "h." + b64u(JSON.stringify(Object.assign(
-  { iss: "https://accounts.google.com", aud: "client-id", email_verified: true }, claims))) + ".s";
-
-async function outbound(request) {
-  const url = new URL(request.url);
-  if (url.host === "oauth2.googleapis.com") {
-    const form = new URLSearchParams(await request.text());
-    assert.equal(form.get("client_secret"), "client-secret");
-    assert.equal(form.get("redirect_uri"), HUB + "/auth/callback");
-    const code = form.get("code");
-    if (code === "broken") return new MfResponse("no", { status: 400 });
-    const claims = code.startsWith("{") ? JSON.parse(code) : { email: code };
-    return MfResponse.json({ id_token: idToken(claims) });
-  }
-  if (url.host === "script.example") {
-    if (request.method === "POST") {
-      upstream.push({ method: "POST", body: JSON.parse(await request.text()) });
-      return new MfResponse(null, { status: 302, headers: { Location: "https://script.example/result" } });
-    }
-    if (url.pathname !== "/result") upstream.push({ method: "GET", query: Object.fromEntries(url.searchParams) });
-    const out = appsScript();
-    return typeof out === "string" ? new MfResponse(out, { headers: { "Content-Type": "text/html" } }) : MfResponse.json(out);
-  }
-  return new MfResponse("unexpected " + request.url, { status: 599 });
-}
-
+let h, db, call, post, get, begin, poll, toConfirmPage, confirm, signIn, upstream;
 before(async () => {
-  mf = new Miniflare({
-    modules: true, modulesRoot: root, scriptPath: path.join(root, "worker/index.js"),
-    modulesRules: [{ type: "ESModule", include: ["**/*.js"] }],
-    compatibilityDate: "2026-07-01",
-    d1Databases: ["DB"],
-    bindings: {
-      GOOGLE_CLIENT_ID: "client-id", GOOGLE_CLIENT_SECRET: "client-secret",
-      FAMILY_ACCOUNTS: "Jon=jon@example.com, maggie = Maggie@Example.com\nClayton=clayton@example.com, Nobody=x@example.com",
-      APPS_SCRIPT_URL: "https://script.example/exec", FAMILY_PIN: "4321", PUSH_SECRET: "push-secret",
-    },
-    outboundService: outbound,
-  });
-  db = await mf.getD1Database("DB");
+  h = await startHub();
+  ({ db, call, post, get, begin, poll, toConfirmPage, confirm, signIn, upstream } = h);
 });
-after(() => mf.dispose());
-
-const call = (p, init) => mf.dispatchFetch(HUB + p, Object.assign({ redirect: "manual" }, init));
-const post = (p, body, token) => call(p, {
-  method: "POST", body: JSON.stringify(body),
-  headers: Object.assign({ Origin: PAGE }, token ? { Authorization: "Bearer " + token } : {}),
-});
-const get = (p, token) => call(p, { headers: Object.assign({ Origin: PAGE }, token ? { Authorization: "Bearer " + token } : {}) });
-
-/** A device asking to sign in: its secret, the id it gives the Worker, and the code it's shown. */
-async function begin() {
-  const secret = randomBytes(32).toString("base64url");
-  const id = createHash("sha256").update(secret).digest("hex");
-  const d = await (await post("/auth/begin", { id, device: "iPhone" })).json();
-  assert.equal(d.ok, true);
-  assert.match(d.code, /^\d{4}$/);
-  return { secret, id, code: d.code };
-}
-const poll = async s => (await post("/auth/poll", { secret: s.secret })).json();
-
-/** Through Google as far as the confirm page. */
-async function toConfirmPage(s, email) {
-  const start = await call("/auth/google?d=" + s.id);
-  assert.equal(start.status, 302);
-  const to = new URL(start.headers.get("Location"));
-  assert.equal(to.host, "accounts.google.com");
-  assert.equal(to.searchParams.get("redirect_uri"), HUB + "/auth/callback");
-  assert.equal(to.searchParams.get("scope"), "openid email");
-  const cookie = start.headers.get("Set-Cookie").split(";")[0];
-  assert.match(start.headers.get("Set-Cookie"), /HttpOnly; Secure; SameSite=Lax/);
-  const state = to.searchParams.get("state");
-  const back = await call(`/auth/callback?state=${state}&code=${encodeURIComponent(email)}`, { headers: { Cookie: cookie } });
-  return { res: back, html: await back.text(), cookie, state };
-}
-const confirm = (c, person, cookie) => call("/auth/confirm", {
-  method: "POST", headers: { Cookie: cookie == null ? c.cookie : cookie, "Content-Type": "application/x-www-form-urlencoded" },
-  body: new URLSearchParams({ grant: (/name="grant" value="([^"]+)"/.exec(c.html) || [])[1] || "", person }).toString(),
-});
-
-/** Signs a device in with Google, all the way. */
-async function signIn(email, person) {
-  const s = await begin();
-  const c = await toConfirmPage(s, email);
-  assert.equal(c.res.status, 200);
-  assert.equal((await confirm(c, person)).status, 200);
-  const d = await poll(s);
-  assert.equal(d.status, "done");
-  return d.token;
-}
+after(() => h.mf.dispose());
 
 test("the push relay still answers as before", async () => {
   assert.equal(await (await call("/")).text(), "Family Hub push relay is running.\n");
@@ -222,7 +126,7 @@ test("a code stops working after ten minutes", async () => {
 test("the API passes requests to Apps Script as the signed-in person", async () => {
   const kid = await signIn("clayton@example.com", "Clayton");
   upstream.length = 0;
-  appsScript = () => ({ ok: true, tasks: [{ id: "a1" }] });
+  h.appsScript = () => ({ ok: true, tasks: [{ id: "a1" }] });
 
   let r = await get("/api?action=all&reminders=1&pin=0000", kid);
   assert.deepEqual(await r.json(), { ok: true, tasks: [{ id: "a1" }] });
@@ -245,11 +149,11 @@ test("the API passes requests to Apps Script as the signed-in person", async () 
   assert.equal((await call("/api", { method: "POST", body: "nope", headers: { Authorization: "Bearer " + kid } })).status, 400);
   assert.equal(upstream.length, 0);
 
-  appsScript = () => "<html>Script error</html>";
+  h.appsScript = () => "<html>Script error</html>";
   r = await get("/api?action=all", kid);
   assert.equal(r.status, 502);
   assert.deepEqual(await r.json(), { ok: false, error: "backend_error" });
-  appsScript = () => ({ ok: false, error: "bad_pin" });
+  h.appsScript = () => ({ ok: false, error: "bad_pin" });
   assert.deepEqual(await (await get("/api?action=all", kid)).json(), { ok: false, error: "backend_pin" });
 });
 
