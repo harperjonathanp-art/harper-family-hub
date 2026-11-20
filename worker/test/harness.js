@@ -14,7 +14,7 @@ const b64u = s => Buffer.from(s).toString("base64url");
 const idToken = claims => "h." + b64u(JSON.stringify(Object.assign(
   { iss: "https://accounts.google.com", aud: "client-id", email_verified: true }, claims))) + ".s";
 
-/** Starts a Worker. `vars` are extra variables for it, e.g. { MOVED: "groceries" }. */
+/** Starts a Worker with nothing moved, whatever moved.js says. `vars` are extra variables for it, e.g. { MOVED: "groceries" }. */
 export async function startHub(vars) {
   const h = {
     upstream: [],                                   // what the Worker sent to Apps Script
@@ -48,16 +48,20 @@ export async function startHub(vars) {
     return new MfResponse("unexpected " + request.url, { status: 599 });
   }
 
+  const bindings = Object.assign({
+    MOVED: "",
+    GOOGLE_CLIENT_ID: "client-id", GOOGLE_CLIENT_SECRET: "client-secret",
+    FAMILY_ACCOUNTS: "Jon=jon@example.com, maggie = Maggie@Example.com\nClayton=clayton@example.com, Nobody=x@example.com",
+    APPS_SCRIPT_URL: "https://script.example/exec", FAMILY_PIN: "4321", PUSH_SECRET: "push-secret",
+  }, vars || {});
+  Object.keys(bindings).forEach(k => { if (bindings[k] === undefined) delete bindings[k]; }); // { MOVED: undefined }: as deployed, no variable at all
+
   h.mf = new Miniflare({
     modules: true, modulesRoot: root, scriptPath: path.join(root, "worker/index.js"),
     modulesRules: [{ type: "ESModule", include: ["**/*.js"] }],
     compatibilityDate: "2026-07-01",
     d1Databases: ["DB"],
-    bindings: Object.assign({
-      GOOGLE_CLIENT_ID: "client-id", GOOGLE_CLIENT_SECRET: "client-secret",
-      FAMILY_ACCOUNTS: "Jon=jon@example.com, maggie = Maggie@Example.com\nClayton=clayton@example.com, Nobody=x@example.com",
-      APPS_SCRIPT_URL: "https://script.example/exec", FAMILY_PIN: "4321", PUSH_SECRET: "push-secret",
-    }, vars || {}),
+    bindings,
     outboundService: outbound,
   });
   h.db = await h.mf.getD1Database("DB");

@@ -12,19 +12,20 @@
  * SETUP — the Worker's Settings > Variables and Secrets:
  *   APPS_SCRIPT_URL  secret  the web app's address (…/exec)
  *   FAMILY_PIN       secret  the same PIN as the FAMILY_PIN Script Property
- * and in wrangler.jsonc:
- *   MOVED            which features this Worker now keeps itself, comma
- *                    separated. So far it can only say "groceries".
+ * Which features are answered here is the list in moved.js.
  */
 
 import { json } from "./util.js";
+import { MOVED } from "./moved.js";
 import { isGroceryAction, groceryAction, listGroceries, groceriesCopied, copyGroceries } from "./groceries.js";
 
 // Actions that name whose settings or phone they're about.
 const ABOUT_A_PERSON = ["pushSubscribe", "savePrefs", "pushTest"];
 
+/** Whether a feature lives here. A MOVED variable on the Worker, if there is one, replaces the list in moved.js. */
 function moved(env, feature) {
-  return String(env.MOVED || "").split(",").map(s => s.trim().toLowerCase()).indexOf(feature) >= 0;
+  const list = env.MOVED != null ? String(env.MOVED).split(",") : MOVED;
+  return list.map(s => s.trim().toLowerCase()).indexOf(feature) >= 0;
 }
 
 export async function handleApi(request, env, url, session, headers) {
