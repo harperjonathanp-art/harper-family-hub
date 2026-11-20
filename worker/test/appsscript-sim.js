@@ -31,12 +31,37 @@ class Sheet {
   }
 }
 
-/** files: which .gs files to load, e.g. ["Code.gs"]. props: the Script Properties. */
-export function appsScriptSim(files, props) {
+/** Utilities.formatDate, for the patterns the scripts use. */
+function formatDate(date, tz, pattern) {
+  const p = {};
+  new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", weekday: "long", year: "numeric", month: "2-digit",
+    day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(date).forEach(x => { p[x.type] = x.value; });
+  const H = Number(p.hour), months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const out = { yyyy: p.year, MMM: months[Number(p.month) - 1], MM: p.month, dd: p.day, d: String(Number(p.day)),
+    HH: p.hour, H: String(H), h: String((H % 12) || 12), mm: p.minute, m: String(Number(p.minute)), ss: p.second,
+    a: H < 12 ? "AM" : "PM", EEEE: p.weekday, u: String(days.indexOf(p.weekday) + 1) };
+  return pattern.replace(/yyyy|MMM|MM|dd|d|HH|H|h|mm|m|ss|EEEE|a|u/g, t => out[t]);
+}
+
+/**
+ * files: which .gs files to load, e.g. ["Code.gs"]. props: the Script Properties.
+ * opts.clock: { now } in milliseconds, read whenever the script asks the time.
+ * opts.uuid: makes the ids, so a test can give the Worker's version the same ones.
+ * The scripts use a Date's local time as Apps Script's time zone, so tests that
+ * depend on the day must run with TZ=America/New_York (set at the top of the test).
+ */
+export function appsScriptSim(files, props, opts) {
+  opts = opts || {};
+  const clock = opts.clock;
+  class ScriptDate extends Date {
+    constructor(...a) { if (a.length === 0 && clock) super(clock.now); else super(...a); }
+    static now() { return clock ? clock.now : Date.now(); }
+  }
   const tabs = {};
   const properties = Object.assign({ FAMILY_PIN: "4321", SHEET_ID: "sheet" }, props || {});
   const context = vm.createContext({
-    console, JSON, Date, Math, Object, Array, String, Number, isNaN, Infinity,
+    console, JSON, Date: ScriptDate, Math, Object, Array, String, Number, isNaN, Infinity,
     SpreadsheetApp: { openById: () => ({
       getSheetByName: name => tabs[name] || null,
       insertSheet: name => (tabs[name] = new Sheet()),
@@ -47,7 +72,7 @@ export function appsScriptSim(files, props) {
       getProperties: () => Object.assign({}, properties),
       deleteProperty: k => { delete properties[k]; },
     }) },
-    Utilities: { getUuid: () => randomUUID() },
+    Utilities: { getUuid: opts.uuid || (() => randomUUID()), formatDate },
     Session: { getScriptTimeZone: () => "America/New_York" },
   });
   files.forEach(f => vm.runInContext(fs.readFileSync(path.join(dir, f), "utf8"), context, { filename: f }));
