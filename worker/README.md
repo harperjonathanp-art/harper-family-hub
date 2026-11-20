@@ -10,7 +10,10 @@ to this repo (step 1 below), every push to `main` deploys it
 | `/send` | `../push-worker/worker.js` | The push relay, unchanged. See `push-worker/README.md` |
 | `/auth/…` | `auth.js` | Sign-in: with Google, or by a parent's say-so |
 | `/api` | `proxy.js` | The Hub's data for a signed-in device: answered here for a feature that has moved, passed to Apps Script for the rest |
-| | `groceries.js` | The grocery list, once it has moved (see "Moving a feature") |
+| | `groceries.js` | The grocery list |
+| | `hub/` | Everything else, once it has moved: `core.js` (tasks, dinners, check-ins), `notify.js` (what to send and when), `todoist.js`, `notion.js`, `api.js` (requests and the timer), `move.js` (the move itself), `time.js` (what day it is at home) |
+| | `store.js`, `push.js` | Where the rows are kept and how two savers at once are kept apart; sending notifications |
+| every 5 min | `index.js` → `hub/api.js` | The timer: what the Apps Script timers did |
 
 This is the start of moving the backend off Apps Script. Only the grocery
 list has moved: tasks, meals, check-ins, notifications and the rest still run
@@ -139,6 +142,8 @@ it's deleted: `none` moves everything back at once.)
 
 | In `moved.js` | Since | What changes |
 |---------------|-------|--------------|
+| `shadow` | | A rehearsal that changes nothing anyone sees. Every 15 minutes the Worker copies everything from Apps Script, works out what it would send the Hub, and compares that with what Apps Script sends. The result is the `SHADOW` row of the `props` table: `ok`, `differences`, `cleanRuns` (in a row), `missing` (settings the Worker still needs), and an `error` if it couldn't run |
+| `core` | | Tasks, dinners, check-ins, notification sign-ups and settings, the notifications themselves, Todoist and both Notion syncs: they read each other, so they move together. The first request tells Apps Script to stop, takes a last copy, and the Worker is the backend from then on. The calendar stays in Apps Script; the timer keeps a copy of its events here |
 | `groceries` | 20 Nov 2026 | The grocery list is kept in the Worker's database. The first request after the switch copies the list over from the Sheet, once, keeping every item's id, tick and place. From then on grocery actions never touch Apps Script, and the Sheet's `Groceries` tab is no longer read or written |
 
 **A phone has to be signed in to see a moved feature.** A phone still on the
@@ -146,7 +151,28 @@ PIN talks to Apps Script directly and goes on seeing the Sheet's copy, which
 stops changing at the move. Signing it in fixes that.
 
 Undoing a move sends the Hub back to the Sheet's copy as it was at the move;
-anything added since stays in the Worker's database but isn't shown.
+anything added since stays in the Worker's database but isn't shown. To undo
+`core`, also run `handover_(false)` in the Apps Script editor: it puts the
+timers back and lets the script answer the Hub again.
+
+### Before `core`
+
+1. In Apps Script, add a script file named `Handover` with
+   `apps-script/Handover.gs`, replace `Code.gs` with the repo's copy, and
+   publish a new version. Nothing changes: it only lets the Worker ask.
+2. Give the Worker its own copy of the settings Apps Script uses, as
+   **Secrets** (Settings → Variables and Secrets), with the same values as the
+   Script Properties of the same names: `TODOIST_TOKEN`, `NOTION_TOKEN`,
+   `NOTION_MEALS_SOURCE`, `NOTION_CHECKINS_SOURCE`, and `REMINDERS_HIDE_LISTS`
+   if it is set there.
+3. Leave `shadow` on until `SHADOW` says `ok` with nothing `missing`, for a
+   day or so of `cleanRuns`.
+4. Sign in every phone.
+
+What `core` does that Apps Script didn't: the Jon & Maggie check-ins and Jon's
+Todoist tasks go only to a parent's device, and the Todoist projects in
+`REMINDERS_HIDE_LISTS` (Work, unless it says otherwise) are dropped as they
+are read, so they are never stored.
 
 ## Other settings
 
@@ -163,7 +189,9 @@ npm test
 ```
 
 They run the Worker in Cloudflare's local simulator with a pretend Google and
-a pretend Apps Script. For a feature that has moved, they also run the real
-`apps-script/Code.gs` over a pretend Sheet and check the Worker gives the same
-answers, action for action. `package.json` here is only for the tests;
-Cloudflare never reads it.
+a pretend Apps Script. For everything that moves, they also run the real
+`apps-script/*.gs` files over a pretend Sheet (`test/appsscript-sim.js`) and
+check the Worker gives the same answers: action for action for tasks and
+groceries, timer run for timer run for notifications, and through a whole
+move with the Sheet's cells turned into dates the way Google Sheets does it.
+`package.json` here is only for the tests; Cloudflare never reads it.

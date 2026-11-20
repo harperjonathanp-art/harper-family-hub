@@ -9,31 +9,49 @@
  * Who is asking comes from the session, not from what the page says: `by`
  * (who ticked, who added) and `person` (whose notifications) are set here.
  *
- * SETUP — the Worker's Settings > Variables and Secrets:
- *   APPS_SCRIPT_URL  secret  the web app's address (…/exec)
- *   FAMILY_PIN       secret  the same PIN as the FAMILY_PIN Script Property
  * Which features are answered here is the list in moved.js.
  */
 
 import { json } from "./util.js";
 import { MOVED } from "./moved.js";
+import { appsScript } from "./appsscript.js";
 import { isGroceryAction, groceryAction, listGroceries, groceriesCopied, copyGroceries } from "./groceries.js";
+import { hubGet, hubPost, nowOf } from "./hub/api.js";
+import { ensureCutover } from "./hub/move.js";
 
 // Actions that name whose settings or phone they're about.
 const ABOUT_A_PERSON = ["pushSubscribe", "savePrefs", "pushTest"];
 
 /** Whether a feature lives here. A MOVED variable on the Worker, if there is one, replaces the list in moved.js. */
-function moved(env, feature) {
+export function moved(env, feature) {
   const list = env.MOVED != null ? String(env.MOVED).split(",") : MOVED;
   return list.map(s => s.trim().toLowerCase()).indexOf(feature) >= 0;
 }
 
-export async function handleApi(request, env, url, session, headers) {
+export async function handleApi(request, env, url, session, headers, ctx) {
   const reply = (obj, status) => json(obj, status, headers);
-  const groceriesHere = moved(env, "groceries");
+  const groceriesHere = moved(env, "groceries"), coreHere = moved(env, "core");
+  if (coreHere) {
+    // The first request after the move takes over from Apps Script. Until that has worked, nothing is answered.
+    try { await ensureCutover(env, nowOf(env)); } catch (err) {
+      console.warn("cutover: " + String(err && err.message || err).slice(0, 200));
+      return reply({ ok: false, error: "moving" }, 503);
+    }
+  }
 
   if (request.method === "GET") {
     const action = url.searchParams.get("action") === "notify" ? "notify" : "all";
+    if (coreHere) { // nothing is asked of Apps Script
+      const data = await hubGet(env, session, action, url.searchParams.get("reminders") === "1");
+      if (action === "all" && groceriesHere) {
+        if (!(await groceriesCopied(env))) { // only if the grocery list somehow never came over
+          const first = await appsScript(env, { action: "all" });
+          if (!first.error && first.data.ok === true) await copyGroceries(env, first.data.groceries);
+        }
+        if (await groceriesCopied(env)) data.groceries = await listGroceries(env);
+      }
+      return reply(data);
+    }
     const query = { action };
     if (url.searchParams.get("reminders") === "1") query.reminders = "1";
     const up = await appsScript(env, query);
@@ -60,6 +78,13 @@ export async function handleApi(request, env, url, session, headers) {
       return reply(await groceryAction(env, body, session.person)); // Apps Script isn't asked at all
     }
 
+    if (coreHere) {
+      const data = await hubPost(env, session, body, p => { if (ctx && ctx.waitUntil) ctx.waitUntil(p); });
+      // After a save the Hub is sent the whole state, grocery list included.
+      if (data.tasks && groceriesHere && (await groceriesCopied(env))) data.groceries = await listGroceries(env);
+      return reply(data);
+    }
+
     body.by = session.person;
     if (ABOUT_A_PERSON.indexOf(body.action) >= 0) body.person = session.person;
     const up = await appsScript(env, null, body);
@@ -72,37 +97,4 @@ export async function handleApi(request, env, url, session, headers) {
   }
 
   return reply({ ok: false, error: "not_found" }, 404);
-}
-
-/**
- * Asks Apps Script: a GET with `query`, or a POST of `body`. The PIN is added here.
- * Gives { data } (its JSON answer) or { error, status }.
- */
-async function appsScript(env, query, body) {
-  const base = String(env.APPS_SCRIPT_URL || "").trim(), pin = String(env.FAMILY_PIN || "").trim();
-  if (!base || !pin) return { error: "not_configured", status: 503 };
-  let res;
-  try {
-    if (body) {
-      // Apps Script answers a POST with a redirect to where the result waits; fetch follows it.
-      res = await fetch(base, { method: "POST", body: JSON.stringify(Object.assign({}, body, { pin })) });
-    } else {
-      const to = new URL(base);
-      Object.keys(query).forEach(k => to.searchParams.set(k, query[k]));
-      to.searchParams.set("pin", pin);
-      res = await fetch(to.toString());
-    }
-  } catch (err) {
-    return { error: "backend_unreachable", status: 502 };
-  }
-  // Apps Script reports its own trouble as a web page, not JSON.
-  let data;
-  try { data = JSON.parse(await res.text()); } catch (err) {
-    console.warn("apps script answered " + res.status + " without JSON");
-    return { error: "backend_error", status: 502 };
-  }
-  if (!data || typeof data !== "object") return { error: "backend_error", status: 502 };
-  // The PIN is this Worker's to get right, not the device's: don't tell the page its PIN is wrong.
-  if (data.ok === false && data.error === "bad_pin") return { error: "backend_pin", status: 503 };
-  return { data };
 }

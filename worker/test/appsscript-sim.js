@@ -31,12 +31,39 @@ class Sheet {
   }
 }
 
-/** files: which .gs files to load, e.g. ["Code.gs"]. props: the Script Properties. */
-export function appsScriptSim(files, props) {
-  const tabs = {};
+/** Utilities.formatDate, for the patterns the scripts use. */
+function formatDate(date, tz, pattern) {
+  const p = {};
+  new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", weekday: "long", year: "numeric", month: "2-digit",
+    day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(date).forEach(x => { p[x.type] = x.value; });
+  const H = Number(p.hour), months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const out = { yyyy: p.year, MMM: months[Number(p.month) - 1], MM: p.month, dd: p.day, d: String(Number(p.day)),
+    HH: p.hour, H: String(H), h: String((H % 12) || 12), mm: p.minute, m: String(Number(p.minute)), ss: p.second,
+    a: H < 12 ? "AM" : "PM", EEEE: p.weekday, u: String(days.indexOf(p.weekday) + 1) };
+  return pattern.replace(/yyyy|MMM|MM|dd|d|HH|H|h|mm|m|ss|EEEE|a|u/g, t => out[t]);
+}
+
+/**
+ * files: which .gs files to load, e.g. ["Code.gs"]. props: the Script Properties.
+ * opts.clock: { now } in milliseconds, read whenever the script asks the time.
+ * opts.uuid: makes the ids, so a test can give the Worker's version the same ones.
+ * opts.globals: extra names the scripts can see (see eval below).
+ * The scripts use a Date's local time as Apps Script's time zone, so tests that
+ * depend on the day must run with TZ=America/New_York (set at the top of the test).
+ */
+export function appsScriptSim(files, props, opts) {
+  opts = opts || {};
+  const clock = opts.clock;
+  class ScriptDate extends Date {
+    constructor(...a) { if (a.length === 0 && clock) super(clock.now); else super(...a); }
+    static now() { return clock ? clock.now : Date.now(); }
+  }
+  const tabs = {}, cache = {}, timers = opts.timers || [];
+  const lock = { tryLock: () => true, waitLock: () => {}, releaseLock: () => {} };
   const properties = Object.assign({ FAMILY_PIN: "4321", SHEET_ID: "sheet" }, props || {});
   const context = vm.createContext({
-    console, JSON, Date, Math, Object, Array, String, Number, isNaN, Infinity,
+    console, JSON, Date: ScriptDate, Math, Object, Array, String, Number, isNaN, Infinity,
     SpreadsheetApp: { openById: () => ({
       getSheetByName: name => tabs[name] || null,
       insertSheet: name => (tabs[name] = new Sheet()),
@@ -44,15 +71,51 @@ export function appsScriptSim(files, props) {
     PropertiesService: { getScriptProperties: () => ({
       getProperty: k => (k in properties ? properties[k] : null),
       setProperty: (k, v) => { properties[k] = String(v); },
+      setProperties: o => { Object.keys(o).forEach(k => { properties[k] = String(o[k]); }); },
       getProperties: () => Object.assign({}, properties),
       deleteProperty: k => { delete properties[k]; },
     }) },
-    Utilities: { getUuid: () => randomUUID() },
+    Utilities: { formatDate },
     Session: { getScriptTimeZone: () => "America/New_York" },
+    // The outside world: opts.http(method, url, headers, body) -> { status, body } stands in for every site.
+    UrlFetchApp: { fetch: (url, o) => {
+      o = o || {};
+      const r = opts.http(String(o.method || "get").toUpperCase(), url, o.headers || {}, o.payload);
+      return { getResponseCode: () => r.status, getContentText: () => (typeof r.body === "string" ? r.body : JSON.stringify(r.body)) };
+    } },
+    CacheService: { getScriptCache: () => ({
+      get: k => (cache[k] && cache[k].until > ScriptDate.now() ? cache[k].value : null),
+      put: (k, v, seconds) => { cache[k] = { value: String(v), until: ScriptDate.now() + seconds * 1000 }; },
+    }) },
+    LockService: { getScriptLock: () => lock, getUserLock: () => lock },
+    Logger: { log: () => {} },
+    ContentService: { MimeType: { JSON: "json" }, createTextOutput: text => ({ setMimeType: () => ({ text }) }) },
+    CalendarApp: { getCalendarById: () => null },
+    ScriptApp: {
+      getProjectTriggers: () => timers.map(fn => ({ getHandlerFunction: () => fn })),
+      deleteTrigger: t => { timers.splice(timers.indexOf(t.getHandlerFunction()), 1); },
+      newTrigger: fn => ({ timeBased: () => ({ everyMinutes: () => ({ create: () => { timers.push(fn); } }) }) }),
+    },
   });
+  context.Utilities.sleep = () => {};
+  context.Utilities.getUuid = opts.uuid || (() => randomUUID());
+  Object.assign(context, opts.globals || {}); // stand-ins a test wants the scripts to see
   files.forEach(f => vm.runInContext(fs.readFileSync(path.join(dir, f), "utf8"), context, { filename: f }));
   return {
     tabs,
+    props: properties,
+    timers,
+    Date: ScriptDate, // the kind of Date the scripts see in a date cell
+    /**
+     * A request as the web app would get it: { method: "GET", query } or { method: "POST", body }.
+     * Runs the script's own doGet or doPost and gives its JSON answer.
+     */
+    request: sent => {
+      context.__e = sent.method === "POST" ? { postData: { contents: JSON.stringify(sent.body) } } : { parameter: sent.query || {} };
+      return JSON.parse(vm.runInContext(sent.method === "POST" ? "doPost(__e).text" : "doGet(__e).text", context));
+    },
+    /** Runs a line of script, e.g. to swap a function that needs a Google service for a stand-in. */
+    eval: code => vm.runInContext(code, context),
     /** Calls one of the script's functions by name. The result is copied out as plain data. */
     run: (fn, ...args) => {
       context.__args = args;

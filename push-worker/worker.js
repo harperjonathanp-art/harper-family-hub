@@ -31,7 +31,7 @@ const PUSH_HOSTS = [
   /(^|\.)notify\.windows\.com$/,
 ];
 
-const MAX_PAYLOAD = 3900; // push services cap the encrypted body at 4096 bytes
+export const MAX_PAYLOAD = 3900; // push services cap the encrypted body at 4096 bytes
 const enc = new TextEncoder();
 
 export default {
@@ -72,7 +72,7 @@ export default {
   },
 };
 
-async function sendOne(sub, payload, signingKey, publicKey, env) {
+export async function sendOne(sub, payload, signingKey, publicKey, env) {
   const endpoint = sub && sub.endpoint;
   try {
     const target = new URL(endpoint);
@@ -101,7 +101,7 @@ async function sendOne(sub, payload, signingKey, publicKey, env) {
 
 // ---------- VAPID (RFC 8292) ----------
 
-async function vapidSigningKey(publicKey, privateKey) {
+export async function vapidSigningKey(publicKey, privateKey) {
   const pub = b64uDecode(publicKey); // 0x04 || x || y
   return crypto.subtle.importKey("jwk", {
     kty: "EC", crv: "P-256",

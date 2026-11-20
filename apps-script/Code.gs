@@ -57,6 +57,10 @@ const TABS = {
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (!pinOk_(p.pin)) return json_({ ok: false, error: 'bad_pin' });
+  // Handing over to the Worker (Handover.gs): these two are for it, and still answer afterwards.
+  if (p.action === 'export' && typeof exportAll_ === 'function') return json_(exportAll_());
+  if (p.action === 'events') return json_({ ok: true, events: getEvents_() });
+  if (handedOver_()) return json_({ ok: false, error: 'moved' });
   if (p.action === 'notify') return json_(notifyInfo_());
   const out = {
     ok: true,
@@ -82,6 +86,8 @@ function doPost(e) {
     return json_({ ok: false, error: 'bad_json' });
   }
   if (!pinOk_(body.pin)) return json_({ ok: false, error: 'bad_pin' });
+  if (body.action === 'handover' && typeof handover_ === 'function') return json_(handover_(body.on === true));
+  if (handedOver_()) return json_({ ok: false, error: 'moved' });
 
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -128,6 +134,11 @@ function doPost(e) {
 function prop_(key) {
   const v = PropertiesService.getScriptProperties().getProperty(key);
   return v == null ? null : v.trim(); // pasted values often carry a stray space
+}
+
+/** Whether the Worker has taken over (Handover.gs). From then on this script only serves the calendar. */
+function handedOver_() {
+  return prop_('HANDED_OVER') === '1';
 }
 
 function pinOk_(pin) {
