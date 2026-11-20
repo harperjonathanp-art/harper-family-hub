@@ -48,6 +48,7 @@ function formatDate(date, tz, pattern) {
  * files: which .gs files to load, e.g. ["Code.gs"]. props: the Script Properties.
  * opts.clock: { now } in milliseconds, read whenever the script asks the time.
  * opts.uuid: makes the ids, so a test can give the Worker's version the same ones.
+ * opts.globals: extra names the scripts can see (see eval below).
  * The scripts use a Date's local time as Apps Script's time zone, so tests that
  * depend on the day must run with TZ=America/New_York (set at the top of the test).
  */
@@ -75,9 +76,13 @@ export function appsScriptSim(files, props, opts) {
     Utilities: { getUuid: opts.uuid || (() => randomUUID()), formatDate },
     Session: { getScriptTimeZone: () => "America/New_York" },
   });
+  Object.assign(context, opts.globals || {}); // stand-ins a test wants the scripts to see
   files.forEach(f => vm.runInContext(fs.readFileSync(path.join(dir, f), "utf8"), context, { filename: f }));
   return {
     tabs,
+    props: properties,
+    /** Runs a line of script, e.g. to swap a function that needs a Google service for a stand-in. */
+    eval: code => vm.runInContext(code, context),
     /** Calls one of the script's functions by name. The result is copied out as plain data. */
     run: (fn, ...args) => {
       context.__args = args;
