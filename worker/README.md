@@ -12,11 +12,11 @@ to this repo (step 1 below), every push to `main` deploys it
 | `/api` | `proxy.js` | The Hub's data for a signed-in device: answered here for a feature that has moved, passed to Apps Script for the rest |
 | | `groceries.js` | The grocery list, once it has moved (see "Moving a feature") |
 
-This is the start of moving the backend off Apps Script. Nothing has moved
-yet: tasks, meals, check-ins, notifications and the rest still run in
-`apps-script/`, and every phone that uses the PIN keeps working exactly as
+This is the start of moving the backend off Apps Script. Only the grocery
+list has moved: tasks, meals, check-ins, notifications and the rest still run
+in `apps-script/`, and every phone that uses the PIN keeps working as
 before. What's new is that a device can sign in instead of holding the PIN,
-and that the grocery list is ready to move as soon as every phone has.
+and that a signed-in device gets its grocery list from the Worker.
 
 ## How sign-in works
 
@@ -132,17 +132,18 @@ To go back to the PIN on a phone: ⚙ → **Sign out**.
 
 ## Moving a feature
 
-A feature moves out of Apps Script when the Worker's `MOVED` variable names
-it. `MOVED` is set in `wrangler.jsonc`, so a move is one small commit, and
-taking the name out again undoes it.
+A feature moves out of Apps Script when the list in `moved.js` names it, so a
+move is a one-line commit, and taking the name out again undoes it. (In a
+hurry, a Text variable named `MOVED` on the Worker replaces that list until
+it's deleted: `none` moves everything back at once.)
 
-| In `MOVED` | What changes |
-|------------|--------------|
-| `groceries` | The grocery list is kept in the Worker's database. The first request after the switch copies the list over from the Sheet, once, keeping every item's id, tick and place. From then on grocery actions never touch Apps Script, and the Sheet's `Groceries` tab is no longer read or written |
+| In `moved.js` | Since | What changes |
+|---------------|-------|--------------|
+| `groceries` | 20 Nov 2026 | The grocery list is kept in the Worker's database. The first request after the switch copies the list over from the Sheet, once, keeping every item's id, tick and place. From then on grocery actions never touch Apps Script, and the Sheet's `Groceries` tab is no longer read or written |
 
-**Only move a feature once every phone is signed in.** A phone still on the
-PIN talks to Apps Script directly and would go on seeing the Sheet's copy,
-which stops changing at the move.
+**A phone has to be signed in to see a moved feature.** A phone still on the
+PIN talks to Apps Script directly and goes on seeing the Sheet's copy, which
+stops changing at the move. Signing it in fixes that.
 
 Undoing a move sends the Hub back to the Sheet's copy as it was at the move;
 anything added since stays in the Worker's database but isn't shown.

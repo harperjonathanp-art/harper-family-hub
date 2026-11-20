@@ -1,0 +1,6 @@
+/**
+ * Which features this Worker keeps itself, instead of passing them to Apps Script.
+ * Adding a name here moves that feature; taking it out moves it back.
+ * See README.md, "Moving a feature", before changing it.
+ */
+export const MOVED = ["groceries"];

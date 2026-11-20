@@ -5,9 +5,9 @@
  * Google Sheet. It behaves as the Groceries part of apps-script/Code.gs did:
  * the same actions, the same answers, the same order.
  *
- * It is used only while the Worker's MOVED variable lists "groceries"
- * (see README.md, "Moving a feature"). The first time it is, the list is
- * copied over from the Sheet, once, keeping every item's id, tick and place.
+ * It is used only while moved.js lists "groceries" (see README.md, "Moving a
+ * feature"). The first time it is, the list is copied over from the Sheet,
+ * once, keeping every item's id, tick and place.
  */
 
 const ACTIONS = ["addGroceries", "toggleGrocery", "deleteGrocery", "clearGroceries", "reorderGroceries"];
