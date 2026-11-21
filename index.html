@@ -1882,7 +1882,7 @@ function deviceName() {
 async function renderSignin(msg) {
   const box = document.getElementById("signinBox");
   if (!box) return;
-  if (cfg.signedIn) { box.innerHTML = signedInHtml(); loadDevices(); return; }
+  if (cfg.signedIn) { box.innerHTML = signedInHtml(); loadDevices(); loadCalendar(); return; }
   if (!cfg.hub) {
     box.innerHTML = `<div class="tiny">Sign in with Google instead of typing the PIN. Paste the Hub Worker's address to try it on this device.</div>
       <div class="addrow" style="margin-top:var(--space-2)">
@@ -1971,7 +1971,51 @@ function signedInHtml() {
     </div>
     <div class="tiny" id="apMsg" role="status" style="margin-top:var(--space-2)"></div>
     <h2>Signed-in devices</h2>
-    <div id="devBox"><div class="empty">Loading…</div></div>` : ""}`;
+    <div id="devBox"><div class="empty">Loading…</div></div>
+    <h2>Calendar<span class="hint">read from Google</span></h2>
+    <div id="calBox"><div class="empty">Loading…</div></div>` : ""}`;
+}
+
+/* A parent lets the Hub read the family's Google calendars, once. As with sign-in,
+   Google's page opens beside the Hub and this just keeps asking whether it's done. */
+let CAL_POLL = null;
+async function loadCalendar(msg) {
+  const box = document.getElementById("calBox");
+  if (!box) return;
+  clearInterval(CAL_POLL); CAL_POLL = null;
+  try {
+    const d = await hubFetch("/auth/calendar");
+    if (!d.ok) throw new Error(d.error);
+    if (d.connected) {
+      const bad = Object.keys(d.errors || {});
+      const when = d.readAt ? "Last read " + new Date(d.readAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + "." : "It will be read within five minutes.";
+      box.innerHTML = `<div class="sheet"><span class="marker ${bad.length ? "scheduled" : "team"}">${bad.length ? "Check" : "Connected"}</span>
+        <div class="muted">${esc((d.calendars || []).join(", ") || "No calendars are set up on the Worker yet")}. ${esc(when)}</div>
+        ${bad.map(k => `<div class="tiny" style="color:var(--warn);margin-top:var(--space-2)">${esc(k === "all" ? "Google" : k)}: ${esc(d.errors[k])}</div>`).join("")}
+        <div class="actions"><button class="ghost" onclick="disconnectCalendar()">Disconnect</button></div>
+        <div class="tiny" role="status" style="margin-top:var(--space-2)">${esc(msg || "")}</div></div>`;
+      return;
+    }
+    const b = await hubFetch("/auth/calendar/begin", {});
+    if (!b.ok) throw new Error(b.error);
+    box.innerHTML = `<div class="tiny">Lets the Hub read your Google calendars (it can't change them). Use your own Google account.</div>
+      <div class="actions"><a class="primary" target="_blank" rel="noopener" href="${esc(b.url)}">Connect the calendar</a></div>
+      <div class="tiny" role="status" style="margin-top:var(--space-2)">${esc(msg || "This finishes by itself once Google's page is done.")}</div>`;
+    const until = Date.now() + (b.minutes || 10) * 60000;
+    CAL_POLL = setInterval(async () => {
+      if (!document.getElementById("calBox") || document.getElementById("overlay").classList.contains("hidden")) { clearInterval(CAL_POLL); CAL_POLL = null; return; }
+      if (Date.now() > until) { loadCalendar("That link ran out. Here's a new one."); return; }
+      if (document.visibilityState !== "visible") return;
+      try { const s = await hubFetch("/auth/calendar"); if (s.ok && s.connected) loadCalendar("Connected ✓"); } catch (e) {}
+    }, 3000);
+  } catch (e) {
+    box.innerHTML = `<div class="empty">Couldn't load the calendar's connection.</div>`;
+  }
+}
+async function disconnectCalendar() {
+  if (!confirm("Stop the Hub reading your Google calendars?")) return;
+  try { await hubFetch("/auth/calendar/disconnect", {}); } catch (e) {}
+  loadCalendar();
 }
 
 async function approveDevice() {

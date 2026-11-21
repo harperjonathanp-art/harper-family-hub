@@ -24,6 +24,8 @@ import * as notify from "./notify.js";
 import * as todoist from "./todoist.js";
 import * as notion from "./notion.js";
 import { ensureCutover, setAsideOldTicks } from "./move.js";
+import * as calendar from "./calendar.js";
+import { MOVED } from "../moved.js";
 
 const CORE = ["Tasks", "Completions", "Meals", "CheckIns"];
 const ALL = CORE.concat(["Devices", "NotifyPrefs"]);
@@ -182,13 +184,53 @@ export async function tick(env) {
   return report;
 }
 
-/** The calendar still lives in Apps Script: keep a copy of its events here. */
+const calendarMoved = env => (env.MOVED != null ? String(env.MOVED).split(",") : MOVED).map(s => s.trim().toLowerCase()).indexOf("calendar") >= 0;
+
+/**
+ * Keeps a copy of the calendar's events here, so no request waits on anyone else.
+ *   "calendar" in moved.js   the Worker reads Google Calendar itself (hub/calendar.js)
+ *   otherwise                Apps Script still does. If the calendar has been connected,
+ *                            the Worker reads it too and records how the two compare
+ *                            (CALENDAR_CHECK), serving Apps Script's as before.
+ */
 async function syncEvents(env) {
+  const now = nowOf(env);
+  const had = await transact(env, [], c => ({ grant: c.props.GOOGLE_CALENDAR, cache: calendar.loadCache(c.props) }), { now });
+  let mine = null, why = "";
+  if (had.grant) {
+    try {
+      const read = await calendar.readCalendars(env, had.grant, had.cache, now);
+      await transact(env, [], c => calendar.keep(c, read), { now });
+      mine = calendar.merged(read.byCalendar);
+      why = Object.keys(read.errors).map(k => k + ": " + read.errors[k]).join("; ");
+    } catch (err) {
+      why = String(err && err.message || err).slice(0, 150);
+      await transact(env, [], c => calendar.failed(c, why), { now });
+    }
+  }
+  if (calendarMoved(env)) {
+    if (!mine) throw new Error(why || "the calendar isn't connected: a parent connects it in the Hub's Settings");
+    const text = JSON.stringify(mine);
+    await transact(env, [], c => { if (c.props[EVENTS] !== text) c.props[EVENTS] = text; });
+    return why ? "partly: " + why : "ok";
+  }
   const up = await appsScript(env, { action: "events" });
   if (up.error) throw new Error(up.error);
   if (up.data.ok !== true || !Array.isArray(up.data.events)) throw new Error("no events in Apps Script's answer");
   const text = JSON.stringify(up.data.events);
-  await transact(env, [], c => { if (c.props[EVENTS] !== text) c.props[EVENTS] = text; });
+  await transact(env, [], c => {
+    if (c.props[EVENTS] !== text) c.props[EVENTS] = text;
+    if (!had.grant) return;
+    // The rehearsal: counts of how the Worker's reading differs from Apps Script's, never what an event says.
+    const before = JSON.parse(c.props.CALENDAR_CHECK || "{}");
+    const check = mine ? calendar.compareEvents(mine, up.data.events) : { error: why };
+    check.at = now.toISOString();
+    check.ok = !!mine && !why && check.onlyMine === 0 && check.onlyTheirs === 0;
+    if (why) check.error = why;
+    check.runs = (before.runs || 0) + 1;
+    check.cleanRuns = check.ok ? (before.cleanRuns || 0) + 1 : 0;
+    c.props.CALENDAR_CHECK = JSON.stringify(check);
+  }, { now });
 }
 
 /** Reads Todoist and keeps the result, or notes the failure and keeps the last good copy. Never throws. */
