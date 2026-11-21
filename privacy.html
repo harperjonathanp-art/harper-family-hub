@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Family Hub — Privacy</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+  body { margin: 0; background: #e7eae0; color: #1f2a24; font: 17px/1.6 -apple-system, system-ui, sans-serif; }
+  main { max-width: 40rem; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .5rem; }
+  h2 { font-size: 1.1rem; margin: 2rem 0 .25rem; }
+  p, li { margin: .5rem 0; }
+  .lede { color: #4d5852; }
+  a { color: #2f5d46; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #161b18; color: #e6ebe4; } .lede { color: #a5b0a9; } a { color: #8fc7a8; }
+  }
+</style>
+</head>
+<body>
+<main>
+<h1>Family Hub: privacy</h1>
+<p class="lede">The Family Hub is a private app for one family: a shared view of the day's tasks, dinners, calendar and check-ins. It is not offered to the public, and only family members can sign in.</p>
+
+<h2>Signing in with Google</h2>
+<p>When you sign in with Google, the Hub is told the email address of the Google account you chose. It uses that for one thing: to check that you are a family member. If you are not, you are not signed in and nothing about you is kept. If you are, the device is remembered as yours; the email address itself is not stored with that sign-in.</p>
+
+<h2>Google Calendar</h2>
+<p>A parent can let the Hub read the family's Google calendars. The Hub asks for permission to <em>see</em> calendars only. It cannot add, change or delete anything.</p>
+<ul>
+  <li>It reads the events of the family's own calendars for the next 14 days: each event's title, day and time.</li>
+  <li>It shows them to family members who are signed in, and uses them in the family's morning summary notification.</li>
+  <li>It keeps a copy of those events, replaced every few minutes, so the app opens quickly.</li>
+  <li>The permission itself is stored encrypted.</li>
+</ul>
+<p>The permission can be withdrawn at any time: in the Hub's Settings (Calendar, then Disconnect), or in your Google Account under Security, in the list of apps with access to your account.</p>
+<p>The Hub's use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+<h2>What the Hub keeps, and where</h2>
+<p>What the family puts into the Hub (tasks, grocery lists, dinner plans, check-ins, notification settings) and the copies described above are kept in the Hub's own database, hosted by Cloudflare. To do its job the Hub also reads the family's own task list and meal plan from Todoist and Notion, and saves the family's check-ins to the family's Notion.</p>
+
+<h2>What the Hub does not do</h2>
+<p>Nothing is sold, shared with anyone outside the family, or used for advertising. There is no tracking or analytics. Nothing from Google is used to train or improve any AI or machine-learning model.</p>
+
+<h2>Questions</h2>
+<p>Ask the family member who set the Hub up, or see the app's source at <a href="https://github.com/harperjonathanp-art/harper-family-hub">github.com/harperjonathanp-art/harper-family-hub</a>.</p>
+<p><a href="./">Back to the Family Hub</a></p>
+</main>
+</body>
+</html>
