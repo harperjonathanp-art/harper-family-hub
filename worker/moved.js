@@ -3,6 +3,5 @@
  * Adding a name here moves that feature; taking it out moves it back.
  * See README.md, "Moving a feature", before changing it.
  */
-export const MOVED = ["groceries", "shadow"];
-// "shadow" is the rehearsal for "core": copy everything from Apps Script, compare, serve nobody from it.
-// To move: replace "shadow" with "core".
+export const MOVED = ["groceries", "core"];
+// "core" replaced "shadow" (its rehearsal) on 21 Nov 2026, after 55 clean rehearsal runs.
