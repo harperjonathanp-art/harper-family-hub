@@ -61,3 +61,17 @@ export function longDate(s) {
   const d = ymd(s);
   return MONTHS[d.getUTCMonth()] + " " + d.getUTCDate() + ", " + d.getUTCFullYear();
 }
+
+/** The moment a calendar day begins in a time zone (home, unless `tz` says otherwise). */
+export function dayStart(isoDate, tz) {
+  const want = ymd(isoDate).getTime();
+  let at = want;
+  // Start from midnight UTC and move by however far off the zone's clock reads; twice covers a daylight-saving edge.
+  for (let i = 0; i < 3; i++) {
+    const p = local(new Date(at), tz);
+    const reads = Date.UTC(p.y, p.m - 1, p.d, p.H, p.M);
+    if (reads === want) break;
+    at += want - reads;
+  }
+  return new Date(at);
+}

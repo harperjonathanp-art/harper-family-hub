@@ -13,6 +13,7 @@
 
 import relay from "../push-worker/worker.js";
 import { handleAuth, sessionFor } from "./auth.js";
+import { handleCalendarAuth } from "./calendar-auth.js";
 import { handleApi, moved } from "./proxy.js";
 import { tick, nowOf } from "./hub/api.js";
 import { shadowRun } from "./hub/move.js";
@@ -35,6 +36,7 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
     if (!env.DB) return json({ ok: false, error: "no_database" }, 503, headers);
     try {
+      if (url.pathname.indexOf("/auth/calendar") === 0) return await handleCalendarAuth(request, env, url, headers);
       if (isAuth) return await handleAuth(request, env, url, headers);
       const session = await sessionFor(request, env);
       if (!session) return json({ ok: false, error: "signed_out" }, 401, headers);

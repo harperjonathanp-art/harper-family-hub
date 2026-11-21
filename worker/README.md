@@ -144,6 +144,8 @@ it's deleted: `none` moves everything back at once.)
 | `core` | 21 Nov 2026 | Tasks, dinners, check-ins, notification sign-ups and settings, the notifications themselves, Todoist and both Notion syncs: they read each other, so they move together. The first request tells Apps Script to stop, takes a last copy, and the Worker is the backend from then on. The calendar stays in Apps Script; the timer keeps a copy of its events here |
 | `groceries` | 20 Nov 2026 | The grocery list is kept in the Worker's database. The first request after the switch copies the list over from the Sheet, once, keeping every item's id, tick and place. From then on grocery actions never touch Apps Script, and the Sheet's `Groceries` tab is no longer read or written |
 
+| `calendar` | | The Worker reads the family's Google calendars itself, as Jon, with read-only access he grants once in Settings (see "The calendar"). Until it is named here the events still come from Apps Script; once the calendar is connected, the timer also reads Google and records how the two compare in the `CALENDAR_CHECK` row of `props` (counts only) |
+
 **A phone has to be signed in to see a moved feature.** A phone still on the
 PIN talks to Apps Script directly and goes on seeing the Sheet's copy, which
 stops changing at the move. Signing it in fixes that.
@@ -171,6 +173,34 @@ What `core` does that Apps Script didn't: the Jon & Maggie check-ins and Jon's
 Todoist tasks go only to a parent's device, and the Todoist projects in
 `REMINDERS_HIDE_LISTS` (Work, unless it says otherwise) are dropped as they
 are read, so they are never stored.
+
+## The calendar
+
+The last thing Apps Script does. To take it over, the Worker reads the same
+four calendars through the Google Calendar API, as Jon, read-only.
+
+1. **Google Cloud**, in the project that has the Hub's OAuth client:
+   - **APIs & Services → Library**: enable the **Google Calendar API**.
+   - **Clients → Family Hub**: add a second **Authorized redirect URI**, the
+     Worker's address followed by `/auth/calendar/callback`.
+   - **Audience**: **Publish app**, so it reads *In production*. While it is
+     *Testing*, Google ends calendar access after seven days. Google shows a
+     "hasn't verified this app" notice when connecting; that is expected for
+     an app only the family uses. Who can sign in to the Hub is still decided
+     by `FAMILY_ACCOUNTS`, not by this.
+2. **Cloudflare**: add the calendar IDs to the Worker as **Secrets**, with the
+   same values as the Script Properties of the same names: `CAL_JON`,
+   `CAL_MAGGIE`, `CAL_FAMILY`, `CAL_MCHS`. One left out is left off the Hub.
+3. **The Hub**: ⚙ → **Calendar → Connect the calendar**, with Jon's own Google
+   account, leaving the box for seeing calendars ticked.
+4. Leave it until `CALENDAR_CHECK` says `ok` for a while, then add `calendar`
+   to `moved.js`. After that nothing asks Apps Script for anything.
+
+What Google gives in step 3 is kept in the database encrypted with a key made
+from the Worker's own secret, so the database alone can't be used to read a
+calendar. **Disconnect** in Settings forgets it and withdraws it at Google.
+A calendar that can't be read keeps showing what was last read from it, and
+Settings says which.
 
 ## Other settings
 

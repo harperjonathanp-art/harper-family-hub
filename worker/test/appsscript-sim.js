@@ -49,6 +49,7 @@ function formatDate(date, tz, pattern) {
  * opts.clock: { now } in milliseconds, read whenever the script asks the time.
  * opts.uuid: makes the ids, so a test can give the Worker's version the same ones.
  * opts.globals: extra names the scripts can see (see eval below).
+ * opts.calendars: (id, Date) -> a stand-in for CalendarApp's calendar, or null (see fake-calendar.js).
  * The scripts use a Date's local time as Apps Script's time zone, so tests that
  * depend on the day must run with TZ=America/New_York (set at the top of the test).
  */
@@ -90,7 +91,7 @@ export function appsScriptSim(files, props, opts) {
     LockService: { getScriptLock: () => lock, getUserLock: () => lock },
     Logger: { log: () => {} },
     ContentService: { MimeType: { JSON: "json" }, createTextOutput: text => ({ setMimeType: () => ({ text }) }) },
-    CalendarApp: { getCalendarById: () => null },
+    CalendarApp: { getCalendarById: id => (opts.calendars ? opts.calendars(id, ScriptDate) : null) },
     ScriptApp: {
       getProjectTriggers: () => timers.map(fn => ({ getHandlerFunction: () => fn })),
       deleteTrigger: t => { timers.splice(timers.indexOf(t.getHandlerFunction()), 1); },

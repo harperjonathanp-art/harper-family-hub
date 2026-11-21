@@ -310,7 +310,7 @@ function cookie(request, name) {
 }
 
 /** A plain page in the Hub's colours, for the few steps that happen outside it. */
-function page(title, text, status, html, headers) {
+export function page(title, text, status, html, headers) {
   return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
 <title>${esc(title)}</title><style>
