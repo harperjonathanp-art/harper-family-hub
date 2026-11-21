@@ -22,6 +22,8 @@ import { transact, TABS, ready } from "../store.js";
 import { appsScript } from "../appsscript.js";
 import * as core from "./core.js";
 import * as todoist from "./todoist.js";
+import * as notion from "./notion.js";
+import { today } from "./time.js";
 import { groceriesCopied, copyGroceries } from "../groceries.js";
 
 const ALL = Object.keys(TABS);
@@ -100,6 +102,31 @@ function compare(c, env, theirs) {
   return { diff, sample };
 }
 
+/**
+ * Whether the Worker itself can read Todoist and Notion with the settings it was
+ * given, and whether it reads what Apps Script read. Only reads; nothing is kept
+ * but counts. Apps Script's copy can be a few minutes old, so "same" is a guide.
+ */
+async function tryTheSites(env, x, now) {
+  const live = { at: now.toISOString() };
+  const tryIt = async (name, on, work) => {
+    if (!on) return;
+    try { live[name] = Object.assign({ ok: true }, await work()); } catch (err) { live[name] = { ok: false, error: String(err && err.message || err).slice(0, 150) }; }
+  };
+  await tryIt("todoist", todoist.todoistOn(env), async () => {
+    const mine = await todoist.fetchTodoist(env), keys = list => list.map(r => [r.key, r.due, r.time]);
+    let theirs = []; try { theirs = JSON.parse(x.props.TODOIST_ITEMS || "[]"); } catch (err) {}
+    return { tasks: mine.length, sameAsAppsScript: same(keys(mine), keys(theirs)) };
+  });
+  await tryIt("dinners", notion.notionOn(env), async () => {
+    const week = notion.weekStart(today(now));
+    const meals = notion.weekOfDinners(await notion.fetchDinners(env, week, {}, now.getTime()), week);
+    return { week, planned: Object.keys(meals).filter(d => meals[d].meal).length, sameAsAppsScript: notion.sameMeals(meals, x.all.meals || {}) };
+  });
+  await tryIt("checkins", notion.notionCheckinsOn(env), async () => ({ pagesInNotion: await notion.countCheckinPages(env), checkinsInHub: x.tabs.CheckIns.length }));
+  return live;
+}
+
 /** One shadow run. Never throws: what went wrong is part of what's recorded. */
 export async function shadowRun(env, now) {
   const result = { at: now.toISOString(), ok: false };
@@ -116,11 +143,13 @@ export async function shadowRun(env, now) {
     result.missing = SECRETS.filter(k => (x.has || []).indexOf(k) >= 0 && !String(env[k] || "").trim());
     result.timers = x.timers || [];
     result.ok = Object.keys(found.diff).every(k => found.diff[k] === 0);
+    if (now.getUTCMinutes() < 5) result.live = await tryTheSites(env, x, now); // once an hour
   } catch (err) {
     result.error = String(err && err.message || err).slice(0, 200);
   }
   await transact(env, [], c => {
     const before = JSON.parse(c.props.SHADOW || "{}");
+    if (!result.live && before.live) result.live = before.live; // the last hourly try stays on show
     result.runs = (before.runs || 0) + 1;
     result.cleanRuns = result.ok ? (before.cleanRuns || 0) + 1 : 0; // in a row
     c.props.SHADOW = JSON.stringify(result);

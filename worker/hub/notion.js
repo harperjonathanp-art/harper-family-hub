@@ -237,6 +237,9 @@ export async function syncNotionCheckins(env, checkins) {
   }
 }
 
+/** How many check-ins have a page in Notion. Only reads. */
+export async function countCheckinPages(env) { return Object.keys(await checkinPages(env)).length; }
+
 /** The pages the Hub has made, by check-in id: { id: [pageId, …] }. */
 async function checkinPages(env) {
   const P = CHECKINS_PROPS, byId = {};
