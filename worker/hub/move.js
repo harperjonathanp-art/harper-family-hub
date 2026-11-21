@@ -183,7 +183,12 @@ export async function ensureCutover(env, now) {
       await env.DB.batch(stale.slice(i, i + 100).map(r => env.DB.prepare(`INSERT INTO ${OLD} VALUES (?, ?, ?, ?)`).bind(r.taskId, r.periodKey, r.completedBy, r.timestamp)));
     }
   }
-  await transact(env, [], c => { if (!c.props.CUTOVER_AT) c.props.CUTOVER_AT = now.toISOString(); });
+  await transact(env, [], c => {
+    if (c.props.CUTOVER_AT) return;
+    c.props.CUTOVER_AT = now.toISOString();
+    // What Apps Script said when told to stop: the timers it still has, and anything it couldn't do.
+    c.props.HANDOVER = JSON.stringify({ timers: hand.data.timers || [], notes: hand.data.notes || [] });
+  });
   cutOver = true;
 }
 
