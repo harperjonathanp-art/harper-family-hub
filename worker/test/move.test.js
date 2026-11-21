@@ -100,6 +100,7 @@ before(async () => {
   h.appsScript = sent => gs.request(sent);
   h.site = async (request, url) => {
     if (url.host === "api.todoist.com") { const r = site("GET", url.href); return new Response(JSON.stringify(r.body)); }
+    if (url.host === "api.notion.com") return new Response(JSON.stringify({ message: "Could not find data_source" }), { status: 404 });
   };
   jon = await h.signIn("jon@example.com", "Jon");
 });
@@ -114,10 +115,20 @@ test("shadow: the Worker's copy gives the Hub exactly what Apps Script does, and
   assert.ok(s.oldTicksSetAside > 30, "ticks for days and weeks long over aren't carried in the rows every request loads");
   assert.deepEqual(s.missing, ["NOTION_TOKEN", "NOTION_MEALS_SOURCE", "NOTION_CHECKINS_SOURCE"], "it says which settings the Worker still needs its own copy of");
   assert.deepEqual([s.runs, s.cleanRuns], [1, 1]);
+  assert.equal(s.live, undefined, "the sites themselves are only tried on the hour");
+  await setHub({ TEST_NOW: "2026-11-20T22:01:00Z", NOTION_TOKEN: "ntok", NOTION_MEALS_SOURCE: "m" });
+  await cron();
+  const live = (await shadow()).live;
+  assert.deepEqual(live.todoist, { ok: true, tasks: 1, sameAsAppsScript: true }, "the Worker reads Todoist itself and gets what Apps Script got, Work left out");
+  assert.deepEqual([live.dinners.ok, live.dinners.error], [false, "Notion 404: Could not find data_source"], "a setting that doesn't work is reported, not hidden");
+  assert.equal(live.checkins, undefined, "what isn't set up isn't tried");
+  await setHub({ TEST_NOW: "2026-11-20T21:30:40Z", NOTION_TOKEN: "", NOTION_MEALS_SOURCE: "" });
+  await cron();
+  assert.deepEqual((await shadow()).live, live, "and the last hourly try stays on show between hours");
   assert.deepEqual(await hubAll(), before, "the Hub is still answered by Apps Script");
   assert.deepEqual(gs.timers.length, 5, "and Apps Script's timers are untouched");
   await cron();
-  assert.deepEqual([(await shadow()).runs, (await shadow()).cleanRuns], [2, 2]);
+  assert.deepEqual([(await shadow()).runs, (await shadow()).cleanRuns], [4, 4]);
 });
 
 test("shadow notices a difference, and records where without recording what", async () => {
