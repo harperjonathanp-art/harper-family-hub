@@ -15,9 +15,9 @@ to this repo (step 1 below), every push to `main` deploys it
 | | `store.js`, `push.js` | Where the rows are kept and how two savers at once are kept apart; sending notifications |
 | every 5 min | `index.js` → `hub/api.js` | The timer: what the Apps Script timers did |
 
-The Hub's backend now runs here. Apps Script (`apps-script/`) has been told
-to stop and serves only the calendar, which the timer copies in every five
-minutes. A phone has to be signed in: one still holding the PIN is told so.
+The Hub's backend now runs here, calendar included. Apps Script
+(`apps-script/`) has been told to stop and is no longer asked for anything.
+A phone has to be signed in: one still holding the PIN is told so.
 
 ## How sign-in works
 
@@ -144,7 +144,7 @@ it's deleted: `none` moves everything back at once.)
 | `core` | 21 Nov 2026 | Tasks, dinners, check-ins, notification sign-ups and settings, the notifications themselves, Todoist and both Notion syncs: they read each other, so they move together. The first request tells Apps Script to stop, takes a last copy, and the Worker is the backend from then on. The calendar stays in Apps Script; the timer keeps a copy of its events here |
 | `groceries` | 20 Nov 2026 | The grocery list is kept in the Worker's database. The first request after the switch copies the list over from the Sheet, once, keeping every item's id, tick and place. From then on grocery actions never touch Apps Script, and the Sheet's `Groceries` tab is no longer read or written |
 
-| `calendar` | | The Worker reads the family's Google calendars itself, as Jon, with read-only access he grants once in Settings (see "The calendar"). Until it is named here the events still come from Apps Script; once the calendar is connected, the timer also reads Google and records how the two compare in the `CALENDAR_CHECK` row of `props` (counts only) |
+| `calendar` | 22 Nov 2026 | The Worker reads the family's Google calendars itself, as Jon, with read-only access he grants once in Settings (see "The calendar"). Until it is named here the events still come from Apps Script; once the calendar is connected, the timer also reads Google and records how the two compare in the `CALENDAR_CHECK` row of `props` (counts only) |
 
 **A phone has to be signed in to see a moved feature.** A phone still on the
 PIN talks to Apps Script directly and goes on seeing the Sheet's copy, which
