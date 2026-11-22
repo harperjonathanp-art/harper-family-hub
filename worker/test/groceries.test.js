@@ -1,52 +1,29 @@
-// The grocery list once it lives in the Worker (MOVED = groceries).
+// The grocery list, against the Groceries part of the real apps-script/Code.gs.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { startHub } from "./harness.js";
 import { appsScriptSim } from "./appsscript-sim.js";
 
-const SHEET = [ // the list as Apps Script sends it at the moment of the move
-  { id: "aaaa1111", item: "Milk", done: false, addedBy: "Maggie" },
-  { id: "bbbb2222", item: "Eggs", done: true, addedBy: "Jon" },
-  { id: "cccc3333", item: "Bread", done: false, addedBy: "" },
-];
-const state = extra => Object.assign({ ok: true, tasks: [{ id: "t1" }], meals: {}, checkins: [], groceries: SHEET }, extra);
 let h, jon, kid;
 const api = async (body, token) => (await h.post("/api", body, token || jon)).json();
 const list = async () => (await (await h.get("/api?action=all", jon)).json()).groceries;
 const items = l => l.map(g => (g.done ? "✓" : "") + g.item);
 
 before(async () => {
-  h = await startHub({ MOVED: "groceries" });
+  h = await startHub();
   jon = await h.signIn("jon@example.com", "Jon");
   kid = await h.signIn("clayton@example.com", "Clayton");
-  h.appsScript = () => state();
 });
 after(() => h.mf.dispose());
 
-test("the first use copies the Sheet's list in, once, as it was", async () => {
-  h.upstream.length = 0;
-  const first = await api({ action: "toggleGrocery", id: "aaaa1111" });
-  assert.deepEqual(h.upstream.map(u => u.method + " " + (u.query ? u.query.action : "")), ["GET all"], "one read of the Sheet, to copy it");
-  assert.deepEqual(first, { ok: true, groceries: [
-    { id: "aaaa1111", item: "Milk", done: true, addedBy: "Maggie" },
-    { id: "bbbb2222", item: "Eggs", done: true, addedBy: "Jon" },
-    { id: "cccc3333", item: "Bread", done: false, addedBy: "" },
-  ] });
-  // From here the Sheet is never the source again, whatever it says.
-  h.appsScript = () => state({ groceries: [{ id: "zzzz9999", item: "Stale", done: false, addedBy: "" }] });
-  const all = await (await h.get("/api?action=all&reminders=1", jon)).json();
-  assert.deepEqual(items(all.groceries), ["✓Milk", "✓Eggs", "Bread"]);
-  assert.deepEqual(all.tasks, [{ id: "t1" }], "everything else still comes from Apps Script");
-});
-
-test("grocery actions don't go to Apps Script at all", async () => {
-  h.upstream.length = 0;
-  await api({ action: "toggleGrocery", id: "aaaa1111" });
+test("the list starts empty, and who added an item comes from the sign-in", async () => {
+  assert.deepEqual(await list(), []);
   const d = await api({ action: "addGroceries", text: "Butter", by: "Maggie" }, kid);
-  assert.equal(h.upstream.length, 0);
-  assert.deepEqual(d.groceries[3].addedBy, "Clayton", "who added it comes from the sign-in");
-  assert.match(d.groceries[3].id, /^[0-9a-f]{8}$/);
   assert.deepEqual(Object.keys(d), ["ok", "groceries"]);
+  assert.deepEqual([d.groceries[0].item, d.groceries[0].done, d.groceries[0].addedBy], ["Butter", false, "Clayton"]);
+  assert.match(d.groceries[0].id, /^[0-9a-f]{8}$/);
+  const ticked = await api({ action: "toggleGrocery", id: d.groceries[0].id });
+  assert.deepEqual(items(ticked.groceries), ["✓Butter"]);
 });
 
 test("a pasted list becomes one item per line", async () => {
@@ -60,13 +37,11 @@ test("a pasted list becomes one item per line", async () => {
   assert.equal((await api({ action: "addGroceries", text: " \n - \n" })).groceries.length, before + 54);
 });
 
-test("another save's answer carries the Worker's list, not the Sheet's", async () => {
-  h.appsScript = () => state({ groceries: [{ id: "zzzz9999", item: "Stale", done: false, addedBy: "" }] });
-  const d = await api({ action: "toggleTask", id: "t1" });
-  assert.equal(d.groceries[0].item, "Milk");
-  assert.deepEqual(d.tasks, [{ id: "t1" }]);
-  h.appsScript = () => ({ ok: true, prefs: {} }); // settings actions answer without a list
-  assert.deepEqual(await api({ action: "savePrefs", prefs: {} }), { ok: true, prefs: {} });
+test("the list comes with every full answer, so the Hub redraws in one round trip", async () => {
+  const saved = await api({ action: "addTask", title: "Bins" });
+  assert.deepEqual(Object.keys(saved), ["ok", "tasks", "meals", "checkins", "groceries"]);
+  assert.deepEqual(items(saved.groceries), items(await list()));
+  assert.equal("groceries" in (await api({ action: "savePrefs", prefs: {} })), false, "a settings answer has no list");
 });
 
 test("it behaves as Code.gs does, action for action", async () => {
@@ -134,28 +109,4 @@ test("it behaves as Code.gs does, action for action", async () => {
   Object.keys(done).forEach(k => assert.ok(done[k] >= 10, `only ${done[k]} ${k} actions were tried`));
   await api({ action: "reorderGroceries", ids: "not a list" }); // ignored, as in Code.gs
   assert.deepEqual(items(await list()), items(ours));
-});
-
-test("if the Sheet can't be read, nothing is copied and nothing is lost", async () => {
-  const fresh = await startHub({ MOVED: "groceries" });
-  try {
-    const token = await fresh.signIn("jon@example.com", "Jon");
-    fresh.appsScript = () => "<html>Script error</html>";
-    const r = await fresh.post("/api", { action: "addGroceries", text: "Milk" }, token);
-    assert.equal(r.status, 502);
-    fresh.appsScript = () => ({ ok: false, error: "bad_pin" });
-    assert.equal((await fresh.post("/api", { action: "addGroceries", text: "Milk" }, token)).status, 503);
-    fresh.appsScript = () => state();
-    const d = await (await fresh.post("/api", { action: "addGroceries", text: "Butter" }, token)).json();
-    assert.deepEqual(items(d.groceries), ["Milk", "✓Eggs", "Bread", "Butter"], "the Sheet's list came over on the next try");
-  } finally { await fresh.mf.dispose(); }
-});
-
-test("an older backend that sends no grocery list starts the list empty", async () => {
-  const fresh = await startHub({ MOVED: "groceries" });
-  try {
-    const token = await fresh.signIn("jon@example.com", "Jon");
-    fresh.appsScript = () => ({ ok: true, tasks: [] });
-    assert.deepEqual((await (await fresh.get("/api?action=all", token)).json()).groceries, []);
-  } finally { await fresh.mf.dispose(); }
 });

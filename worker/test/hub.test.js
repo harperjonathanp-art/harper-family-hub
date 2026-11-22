@@ -1,21 +1,19 @@
-// Sign-in and the pass-through to Apps Script. From the worker folder: npm install, then npm test.
+// Sign-in. From the worker folder: npm install, then npm test.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { startHub, PAGE } from "./harness.js";
 
-let h, db, call, post, get, begin, poll, toConfirmPage, confirm, signIn, upstream;
+let h, db, call, post, get, begin, poll, toConfirmPage, confirm, signIn;
 before(async () => {
   h = await startHub();
-  ({ db, call, post, get, begin, poll, toConfirmPage, confirm, signIn, upstream } = h);
+  ({ db, call, post, get, begin, poll, toConfirmPage, confirm, signIn } = h);
 });
 after(() => h.mf.dispose());
 
-test("the push relay still answers as before", async () => {
-  assert.equal(await (await call("/")).text(), "Family Hub push relay is running.\n");
-  assert.equal((await call("/send", { method: "POST", body: "{}" })).status, 401);
-  const ok = await call("/send", { method: "POST", body: JSON.stringify({ subscriptions: [] }), headers: { Authorization: "Bearer push-secret" } });
-  assert.equal(ok.status, 500); // past the secret check; these tests set no VAPID keys
-  assert.deepEqual(await ok.json(), { error: "vapid_keys_missing" });
+test("anything that isn't sign-in or the API is turned away", async () => {
+  assert.equal(await (await call("/")).text(), "Family Hub is running.\n");
+  const old = await call("/send", { method: "POST", body: JSON.stringify({ subscriptions: [] }), headers: { Authorization: "Bearer anything" } });
+  assert.deepEqual([old.status, await old.json()], [404, { ok: false, error: "not_found" }], "the relay Apps Script used is gone");
 });
 
 test("the API turns away a device that isn't signed in", async () => {
@@ -25,7 +23,6 @@ test("the API turns away a device that isn't signed in", async () => {
     assert.deepEqual(await r.json(), { ok: false, error: "signed_out" });
     assert.equal(r.headers.get("Access-Control-Allow-Origin"), PAGE);
   }
-  assert.equal(upstream.length, 0);
 });
 
 test("only the Hub's own page may read answers", async () => {
@@ -121,40 +118,6 @@ test("a code stops working after ten minutes", async () => {
   assert.equal((await call("/auth/google?d=" + s.id)).status, 410);
   await begin(); // the next sign-in clears out the old one
   assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM signins WHERE id = ?").bind(s.id).first()).n, 0);
-});
-
-test("the API passes requests to Apps Script as the signed-in person", async () => {
-  const kid = await signIn("clayton@example.com", "Clayton");
-  upstream.length = 0;
-  h.appsScript = () => ({ ok: true, tasks: [{ id: "a1" }] });
-
-  let r = await get("/api?action=all&reminders=1&pin=0000", kid);
-  assert.deepEqual(await r.json(), { ok: true, tasks: [{ id: "a1" }] });
-  assert.equal(r.headers.get("Access-Control-Allow-Origin"), PAGE);
-  assert.deepEqual(upstream.pop(), { method: "GET", query: { action: "all", pin: "4321", reminders: "1" } });
-
-  await get("/api?action=notify", kid);
-  assert.deepEqual(upstream.pop(), { method: "GET", query: { action: "notify", pin: "4321" } });
-
-  r = await post("/api", { action: "toggleTask", id: "a1", by: "Jon", pin: "0000" }, kid);
-  assert.deepEqual(await r.json(), { ok: true, tasks: [{ id: "a1" }] }, "the answer comes back through Apps Script's redirect");
-  assert.deepEqual(upstream.pop().body, { action: "toggleTask", id: "a1", by: "Clayton", pin: "4321" });
-
-  await post("/api", { action: "savePrefs", person: "Jon", prefs: {} }, kid);
-  assert.deepEqual(upstream.pop().body, { action: "savePrefs", person: "Clayton", prefs: {}, by: "Clayton", pin: "4321" });
-
-  await post("/api", { action: "pushUnsubscribe", endpoint: "https://e" }, kid);
-  assert.equal(upstream.pop().body.person, undefined);
-
-  assert.equal((await call("/api", { method: "POST", body: "nope", headers: { Authorization: "Bearer " + kid } })).status, 400);
-  assert.equal(upstream.length, 0);
-
-  h.appsScript = () => "<html>Script error</html>";
-  r = await get("/api?action=all", kid);
-  assert.equal(r.status, 502);
-  assert.deepEqual(await r.json(), { ok: false, error: "backend_error" });
-  h.appsScript = () => ({ ok: false, error: "bad_pin" });
-  assert.deepEqual(await (await get("/api?action=all", kid)).json(), { ok: false, error: "backend_pin" });
 });
 
 test("signing out, and a parent signing another device out", async () => {

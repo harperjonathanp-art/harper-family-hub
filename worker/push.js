@@ -1,15 +1,14 @@
 /**
  * HARPER FAMILY HUB — sending an outbox
  *
- * The rules (hub/notify.js) decide what to send and to whom. This sends it,
- * with the same signing and encryption the push relay does for Apps Script
- * (push-worker/worker.js), and reports back as Notify.gs's deliver_ did:
+ * The rules (hub/notify.js) decide what to send and to whom. This sends it
+ * (webpush.js does the signing and encryption) and reports back:
  *   { delivered, failed, error?, gone: [endpoint, …] }
  * `gone` are phones that have dropped their subscription (404 or 410); the
  * caller forgets them.
  */
 
-import { sendOne, vapidSigningKey, MAX_PAYLOAD } from "../push-worker/worker.js";
+import { sendOne, vapidSigningKey, MAX_PAYLOAD } from "./webpush.js";
 
 // The free plan allows 50 outside requests per run; leave room for the rest of the run's work.
 const MAX_SENDS = 40;

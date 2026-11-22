@@ -1,12 +1,9 @@
-// The whole thing wired together with "core" moved: the Worker answering the Hub
-// from its own database, sending real (encrypted) push messages, and the timer.
-// Apps Script here is the real scripts, run in the simulator.
-process.env.TZ = "America/New_York";
+// The whole thing wired together: the Worker answering the Hub from its own
+// database, sending real (encrypted) push messages, and the timer.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { webcrypto as wc } from "node:crypto";
 import { startHub, MfResponse } from "./harness.js";
-import { appsScriptSim } from "./appsscript-sim.js";
 
 const b64u = bytes => Buffer.from(bytes).toString("base64url");
 const enc = new TextEncoder();
@@ -42,10 +39,7 @@ const notionSite = { dinners: [], made: [] };
 const api = async (body, token) => (await h.post("/api", body, token || jon)).json();
 const all = async (token, q) => (await h.get("/api?action=all" + (q || ""), token || jon)).json();
 const until = async (ok, what) => { for (let i = 0; i < 100; i++) { if (ok()) return; await new Promise(r => setTimeout(r, 50)); } assert.fail("timed out waiting for " + what); };
-const gsClock = { now: Date.parse("2026-11-20T21:30:00Z") }, world = { events: [] };
-let gs;
 const tick = async at => {
-  if (at) gsClock.now = Date.parse(at);
   if (at) { await h.mf.setOptions(Object.assign({}, h.options, { bindings: Object.assign({}, h.options.bindings, { TEST_NOW: at }) })); h.db = await h.mf.getD1Database("DB"); }
   await (await h.mf.getWorker()).scheduled({ cron: "*/5 * * * *" });
 };
@@ -55,7 +49,7 @@ before(async () => {
   vapid = { pub: b64u(new Uint8Array(await wc.subtle.exportKey("raw", pair.publicKey))), priv: (await wc.subtle.exportKey("jwk", pair.privateKey)).d };
   jonPhone = await phone("jon"); kidPhone = await phone("kid");
   h = await startHub({
-    MOVED: "groceries,core", TEST_NOW: "2026-11-20T21:30:00Z", // Friday, 4:30 PM at home
+    TEST_NOW: "2026-11-20T21:30:00Z", // Friday, 4:30 PM at home
     VAPID_PUBLIC_KEY: vapid.pub, VAPID_PRIVATE_KEY: vapid.priv,
     TODOIST_TOKEN: "tok", NOTION_TOKEN: "ntok", NOTION_MEALS_SOURCE: "meals-src", NOTION_CHECKINS_SOURCE: "checkins-src",
   });
@@ -81,18 +75,10 @@ before(async () => {
   };
   jon = await h.signIn("jon@example.com", "Jon");
   kid = await h.signIn("clayton@example.com", "Clayton");
-  gs = appsScriptSim(["Code.gs", "Notify.gs", "Todoist.gs", "Notion.gs", "NotionCheckins.gs", "Handover.gs"], {}, {
-    clock: gsClock, http: () => ({ status: 500, body: {} }), globals: { __events: () => JSON.stringify(world.events) },
-    timers: ["notifyTick", "syncTodoist", "syncNotionMeals", "syncNotionCheckins"],
-  });
-  gs.eval("getEvents_ = function () { return JSON.parse(__events()); };");
-  gs.run("addGroceries_", "Milk", "");
-  h.appsScript = sent => gs.request(sent);
 });
 after(() => h.mf.dispose());
 
 test("the Hub is answered from the Worker's own database", async () => {
-  h.upstream.length = 0;
   const d = await all();
   assert.deepEqual([d.ok, d.tasks, d.checkins, d.events, d.mealsFrom.source], [true, [], [], [], "notion"]);
   assert.deepEqual(Object.keys(d.meals), ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
@@ -100,14 +86,10 @@ test("the Hub is answered from the Worker's own database", async () => {
   const saved = await api({ action: "addTask", title: "Bins", assignee: "Jon", recurrence: "weekly", by: "Heidi" });
   assert.deepEqual(saved.tasks.map(t => [t.title, t.recurrence, t.completed]), [["Bins", "weekly", false]]);
   assert.deepEqual(Object.keys(saved), ["ok", "tasks", "meals", "checkins", "groceries"]);
+  assert.deepEqual(saved.groceries, []);
   const ticked = await api({ action: "toggleTask", id: saved.tasks[0].id, by: "Heidi" });
   assert.deepEqual([ticked.tasks[0].completed, ticked.tasks[0].completedBy], [true, "Jon"], "who ticked it comes from the sign-in");
   assert.deepEqual(await api({ action: "nonsense" }), { ok: false, error: "unknown_action" });
-  assert.deepEqual(h.upstream.filter(u => u.method === "POST").map(u => u.body.action), ["handover"], "no save went to Apps Script: it was only told to stop");
-  assert.deepEqual(h.upstream.filter(u => u.method === "GET").map(u => u.query.action), ["export"], "and asked once, for everything");
-  assert.deepEqual(gs.timers, [], "Apps Script's timers are gone");
-  assert.deepEqual(gs.request({ method: "GET", query: { action: "all", pin: "4321" } }), { ok: false, error: "moved" }, "a phone still on the PIN is told to sign in");
-  assert.deepEqual((await all()).groceries.map(g => g.item), ["Milk"], "and the grocery list comes along as before");
 });
 
 test("two saves at the same instant both land", async () => {
@@ -170,12 +152,10 @@ test("the Jon & Maggie check-ins and Jon's Todoist go only to a parent's device"
   await api({ action: "tickReminder", key: "t1", on: false });
 });
 
-test("the timer: calendar copied in, Todoist read, and the 7:00 summary sent once", async () => {
+test("the timer: Todoist read, and the 7:00 summary sent once", async () => {
   pushed.length = 0;
-  world.events = [{ cal: "Family", title: "Soccer", allDay: false, date: "2026-11-21", start: "10:00 AM", end: "11:00 AM", sort: 1 }];
   await tick("2026-11-21T11:58:00Z"); // Saturday, 6:58 AM: nothing due yet
   assert.deepEqual(pushed, []);
-  assert.equal((await all()).events[0].title, "Soccer", "the calendar's events are now served from the Worker's copy");
 
   await tick("2026-11-21T12:03:00Z"); // 7:03 AM
   await until(() => pushed.length >= 2, "the morning summaries");
@@ -183,7 +163,7 @@ test("the timer: calendar copied in, Todoist read, and the 7:00 summary sent onc
   assert.equal(mine.title, "Today · Saturday, Nov 21");
   assert.deepEqual(mine.body.split("\n"), [
     "Dinner: not planned yet",
-    "Calendar: 10:00 AM Soccer",
+    "Calendar: nothing today",
     "Todoist: Renew passport",
     "Kids: Tidy your room (Clayton)",
     "Family: One, Two, Three",
