@@ -1,4 +1,19 @@
-# Apps Script backend
+# Apps Script backend (retired)
+
+**Nothing runs this any more.** On 22 November 2026 the Hub's backend finished
+moving to the Cloudflare Worker in `worker/`; see `worker/README.md` for how
+the Hub works now and where its settings live.
+
+This folder is kept for two reasons. The Worker's tests run these files to
+check that it behaves exactly as they did. And the sections below are still
+the description of that behaviour: what each notification is and when it goes,
+how repeats and subtasks work, what is read from Notion and Todoist. Where
+they say "Script Properties", the same names are now settings on the Worker;
+where they say to paste a file and publish, there is nothing to do.
+
+What follows is as it was written when Apps Script was the backend.
+
+---
 
 The Hub reads from and writes to this Google Apps Script web app. The live
 copy runs in Google's Apps Script editor; this folder is the tracked copy.

@@ -1,5 +1,5 @@
 // What the tests share: the Worker in Cloudflare's local simulator, with a
-// pretend Google and a pretend Apps Script, and helpers to sign devices in.
+// pretend Google, and helpers to sign devices in.
 import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,12 +15,10 @@ const b64u = s => Buffer.from(s).toString("base64url");
 const idToken = claims => "h." + b64u(JSON.stringify(Object.assign(
   { iss: "https://accounts.google.com", aud: "client-id", email_verified: true }, claims))) + ".s";
 
-/** Starts a Worker with nothing moved, whatever moved.js says. `vars` are extra variables for it, e.g. { MOVED: "groceries" }. */
+/** Starts a Worker. `vars` are extra variables for it, e.g. { TEST_NOW: "2026-11-21T12:00:00Z" }. */
 export async function startHub(vars) {
   const h = {
-    upstream: [],                                   // what the Worker sent to Apps Script
-    appsScript: () => ({ ok: true, tasks: [] }),    // what Apps Script answers; tests replace it
-    site: null,                                     // other sites the Worker calls; a test sets it
+    site: null, // other sites the Worker calls (push services, Todoist, Notion, Google Calendar); a test sets it
   };
 
   async function outbound(request) {
@@ -38,29 +36,13 @@ export async function startHub(vars) {
       const claims = code.startsWith("{") ? JSON.parse(code) : { email: code };
       return MfResponse.json({ id_token: idToken(claims) });
     }
-    if (url.host === "script.example") {
-      let sent;
-      if (request.method === "POST") {
-        sent = { method: "POST", body: JSON.parse(await request.text()) };
-        h.upstream.push(sent);
-        h.pending = h.appsScript(sent);
-        return new MfResponse(null, { status: 302, headers: { Location: "https://script.example/result" } });
-      }
-      let out;
-      if (url.pathname === "/result") out = h.pending;
-      else { sent = { method: "GET", query: Object.fromEntries(url.searchParams) }; h.upstream.push(sent); out = h.appsScript(sent); }
-      return typeof out === "string" ? new MfResponse(out, { headers: { "Content-Type": "text/html" } }) : MfResponse.json(out);
-    }
     return new MfResponse("unexpected " + request.url, { status: 599 });
   }
 
   const bindings = Object.assign({
-    MOVED: "",
     GOOGLE_CLIENT_ID: "client-id", GOOGLE_CLIENT_SECRET: "client-secret",
     FAMILY_ACCOUNTS: "Jon=jon@example.com, maggie = Maggie@Example.com\nClayton=clayton@example.com, Nobody=x@example.com",
-    APPS_SCRIPT_URL: "https://script.example/exec", FAMILY_PIN: "4321", PUSH_SECRET: "push-secret",
   }, vars || {});
-  Object.keys(bindings).forEach(k => { if (bindings[k] === undefined) delete bindings[k]; }); // { MOVED: undefined }: as deployed, no variable at all
 
   h.options = {
     modules: true, modulesRoot: root, scriptPath: path.join(root, "worker/index.js"),

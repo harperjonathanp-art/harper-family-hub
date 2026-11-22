@@ -1,10 +1,7 @@
-// The calendar, wired in: a parent connects it, the timer reads it beside Apps
-// Script and compares, and once "calendar" has moved Apps Script isn't asked at all.
-process.env.TZ = "America/New_York";
+// The calendar, wired in: a parent connects it, the timer reads it, and the Hub is shown it.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { startHub, MfResponse, HUB } from "./harness.js";
-import { appsScriptSim } from "./appsscript-sim.js";
 import { fakeCalendars } from "./fake-calendar.js";
 
 const NOW = "2026-11-21T15:02:00Z";
@@ -19,9 +16,8 @@ const cals = {
 const fake = fakeCalendars(cals);
 const google = { codes: {}, revoked: [], tokenCalls: 0 };
 const b64u = s => Buffer.from(s).toString("base64url");
-let h, gs, jon, kid;
+let h, jon, kid;
 const props = async key => { const r = await h.db.prepare("SELECT value FROM props WHERE key = ?").bind(key).first(); return r ? r.value : null; };
-const setHub = async vars => { h.options.bindings = Object.assign({}, h.options.bindings, vars); await h.mf.setOptions(h.options); h.db = await h.mf.getD1Database("DB"); };
 const cron = async () => (await h.mf.getWorker()).scheduled({ cron: "*/5 * * * *" });
 /** Through Google's page: gives the response of the Worker's callback. `code` picks what Google answers. */
 async function connect(token, code) {
@@ -36,10 +32,7 @@ async function connect(token, code) {
 }
 
 before(async () => {
-  h = await startHub(Object.assign({ MOVED: "groceries,core", TEST_NOW: NOW }, IDS));
-  gs = appsScriptSim(["Code.gs", "Notify.gs", "Todoist.gs", "Notion.gs", "NotionCheckins.gs", "Handover.gs"], IDS,
-    { clock: { now: Date.parse(NOW) }, http: () => ({ status: 500, body: {} }), calendars: fake.forAppsScript });
-  h.appsScript = sent => gs.request(sent);
+  h = await startHub(Object.assign({ TEST_NOW: NOW }, IDS));
   google.codes = {
     jon: { refresh_token: "grant-jon", scope: "openid https://www.googleapis.com/auth/calendar.readonly", email: "jon@example.com" },
     stranger: { refresh_token: "grant-stranger", scope: "openid https://www.googleapis.com/auth/calendar.readonly", email: "someone@example.com" },
@@ -84,38 +77,25 @@ test("only a parent, with a parent's own Google account, can connect the calenda
   assert.equal((await (await h.get("/auth/calendar", jon)).json()).connected, true);
 });
 
-test("the timer reads Google beside Apps Script and records how they compare, still serving Apps Script's", async () => {
+test("the timer reads the calendars and the Hub is shown them", async () => {
   await cron();
-  const check = JSON.parse(await props("CALENDAR_CHECK"));
-  assert.deepEqual([check.ok, check.mine, check.theirs, check.onlyMine, check.onlyTheirs, check.runs, check.cleanRuns], [true, 4, 4, 0, 0, 1, 1], JSON.stringify(check));
-  assert.deepEqual(check.perCalendar, { Jon: [1, 1], Maggie: [1, 1], Family: [1, 1], MCHS: [1, 1] });
-  assert.ok(!/Dentist|Grandma|Book club/.test(JSON.stringify(check)), "nothing an event says is in the record");
   const d = await (await h.get("/api?action=all", jon)).json();
   assert.deepEqual(d.events.map(e => [e.cal, e.title, e.allDay, e.date]), [["Jon", "Dentist", false, "2026-11-22"], ["MCHS", "No school", true, "2026-11-23"], ["Maggie", "Book club", false, "2026-11-23"], ["Family", "Grandma visits", true, "2026-11-25"]]);
+  assert.deepEqual(d.events[3], { cal: "Family", color: "#F6BF26", title: "Grandma visits", allDay: true, date: "2026-11-25", start: "7:00 PM", end: "7:00 PM", sort: Date.parse("2026-11-25T05:00:00Z") });
+  const s = await (await h.get("/auth/calendar", jon)).json();
+  assert.deepEqual([s.connected, s.errors, s.readAt], [true, {}, Date.parse(NOW)]);
 
   cals["jon@example.com"].events.push({ title: "Haircut", start: at + 7200e3, end: at + 9000e3 });
-  gs.eval("var realEvents_ = getEvents_; getEvents_ = function () { return realEvents_().filter(function (e) { return e.title !== 'Haircut'; }); };"); // Apps Script misses one
   await cron();
-  const off = JSON.parse(await props("CALENDAR_CHECK"));
-  assert.deepEqual([off.ok, off.onlyMine, off.onlyTheirs, off.cleanRuns, off.perCalendar.Jon], [false, 1, 0, 0, [2, 1]]);
-  assert.equal((await (await h.get("/api?action=all", jon)).json()).events.length, 4, "until the calendar has moved, the Hub is shown Apps Script's");
-  gs.eval("getEvents_ = realEvents_;");
+  assert.deepEqual((await (await h.get("/api?action=all", jon)).json()).events.map(e => e.title), ["Dentist", "Haircut", "No school", "Book club", "Grandma visits"]);
 });
 
-test("once the calendar has moved, Apps Script isn't asked for anything", async () => {
-  await setHub({ MOVED: "groceries,core,calendar" });
-  h.upstream.length = 0;
-  await cron();
-  assert.deepEqual(h.upstream, []);
-  const d = await (await h.get("/api?action=all", jon)).json();
-  assert.deepEqual(d.events.map(e => e.title), ["Dentist", "Haircut", "No school", "Book club", "Grandma visits"]);
-  assert.deepEqual(d.events[4], { cal: "Family", color: "#F6BF26", title: "Grandma visits", allDay: true, date: "2026-11-25", start: "7:00 PM", end: "7:00 PM", sort: Date.parse("2026-11-25T05:00:00Z") });
-
+test("a calendar that can't be read keeps showing what was last read, and Settings says which", async () => {
   cals["school@example.org"].denied = true;
   await cron();
   const s = await (await h.get("/auth/calendar", jon)).json();
   assert.deepEqual([s.connected, s.errors], [true, { MCHS: "Google 403: PERMISSION_DENIED" }]);
-  assert.ok((await (await h.get("/api?action=all", jon)).json()).events.some(e => e.cal === "MCHS"), "a calendar that can't be read keeps showing what was last read");
+  assert.ok((await (await h.get("/api?action=all", jon)).json()).events.some(e => e.cal === "MCHS"));
 });
 
 test("disconnecting forgets the access here and withdraws it at Google; the last events stay", async () => {

@@ -1,23 +1,13 @@
 /**
- * HARPER FAMILY HUB — push relay (Cloudflare Worker)
+ * HARPER FAMILY HUB — Web Push
  *
- * Apps Script decides what to send and to whom; this file only does the
- * Web Push signing (VAPID) and payload encryption (RFC 8291) that Apps
- * Script can't. It stores nothing. worker/index.js is what Cloudflare
- * deploys; it hands /send here.
+ * The signing (VAPID, RFC 8292) and payload encryption (RFC 8291) that a push
+ * service asks for before it will deliver a notification to a phone. push.js
+ * decides which phones; this sends to one.
  *
- *   POST /send   Authorization: Bearer <PUSH_SECRET>
- *     { "subscriptions": [ <PushSubscription JSON>, … ],
- *       "notification": { "title", "body", "tag", "view" } }
- *   → { "results": [ { "endpoint", "status" }, … ] }
- *
- * A 404 or 410 status means the phone dropped that subscription, and
- * Apps Script forgets it.
- *
- * SETUP (see README.md next to this file) — Settings > Variables and Secrets:
- *   VAPID_PUBLIC_KEY   text    from keys.html
- *   VAPID_PRIVATE_KEY  secret  from keys.html
- *   PUSH_SECRET        secret  from keys.html, shared with Apps Script
+ * SETUP — the Worker's Settings > Variables and Secrets (made with keys.html):
+ *   VAPID_PUBLIC_KEY   text
+ *   VAPID_PRIVATE_KEY  secret
  *   VAPID_SUBJECT      text    optional, e.g. mailto:you@example.com
  */
 
@@ -33,44 +23,6 @@ const PUSH_HOSTS = [
 
 export const MAX_PAYLOAD = 3900; // push services cap the encrypted body at 4096 bytes
 const enc = new TextEncoder();
-
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    if (request.method === "GET") {
-      return new Response("Family Hub push relay is running.\n");
-    }
-    if (request.method !== "POST" || url.pathname !== "/send") {
-      return json({ error: "not_found" }, 404);
-    }
-    const auth = request.headers.get("Authorization") || "";
-    if (!env.PUSH_SECRET || !sameString(auth, "Bearer " + env.PUSH_SECRET.trim())) {
-      return json({ error: "unauthorized" }, 401);
-    }
-    if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
-      return json({ error: "vapid_keys_missing" }, 500);
-    }
-
-    let body;
-    try { body = await request.json(); } catch (err) {
-      return json({ error: "bad_json" }, 400);
-    }
-    const subs = Array.isArray(body.subscriptions) ? body.subscriptions.slice(0, 20) : [];
-    const payload = enc.encode(JSON.stringify(body.notification || {}));
-    if (payload.length > MAX_PAYLOAD) return json({ error: "too_large" }, 413);
-
-    const publicKey = env.VAPID_PUBLIC_KEY.trim();
-    let signingKey;
-    try {
-      signingKey = await vapidSigningKey(publicKey, env.VAPID_PRIVATE_KEY.trim());
-    } catch (err) {
-      return json({ error: "bad_vapid_keys" }, 500);
-    }
-    const results = await Promise.all(subs.map(sub =>
-      sendOne(sub, payload, signingKey, publicKey, env)));
-    return json({ results });
-  },
-};
 
 export async function sendOne(sub, payload, signingKey, publicKey, env) {
   const endpoint = sub && sub.endpoint;
@@ -183,18 +135,4 @@ function b64uDecode(str) {
   const s = String(str).replace(/-/g, "+").replace(/_/g, "/");
   const bin = atob(s + "===".slice((s.length + 3) % 4));
   return Uint8Array.from(bin, c => c.charCodeAt(0));
-}
-
-function sameString(a, b) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-function json(obj, status) {
-  return new Response(JSON.stringify(obj), {
-    status: status || 200,
-    headers: { "Content-Type": "application/json" },
-  });
 }

@@ -1,19 +1,13 @@
 /**
  * HARPER FAMILY HUB — the grocery list
  *
- * The first feature to live in the Worker's own database instead of the
- * Google Sheet. It behaves as the Groceries part of apps-script/Code.gs did:
- * the same actions, the same answers, the same order.
- *
- * It is used only while moved.js lists "groceries" (see README.md, "Moving a
- * feature"). The first time it is, the list is copied over from the Sheet,
- * once, keeping every item's id, tick and place.
+ * The same actions, answers and order as the Groceries part of
+ * apps-script/Code.gs, which test/groceries.test.js checks it against.
  */
 
 const ACTIONS = ["addGroceries", "toggleGrocery", "deleteGrocery", "clearGroceries", "reorderGroceries"];
 const MAX_AT_ONCE = 50; // items taken from one paste
 const MAX_LENGTH = 200; // characters kept of one item
-const SEEDED = "groceries_copied";
 
 let tablesReady = false;
 
@@ -23,34 +17,12 @@ async function ready(env) {
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS groceries (
       id TEXT PRIMARY KEY, item TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0,
       added_by TEXT NOT NULL DEFAULT '', added_at TEXT NOT NULL DEFAULT '', sort INTEGER NOT NULL DEFAULT 0)`),
-    env.DB.prepare("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"),
   ]);
   tablesReady = true;
 }
 
 export function isGroceryAction(action) {
   return ACTIONS.indexOf(action) >= 0;
-}
-
-/** Whether the Sheet's list has been copied in yet. */
-export async function groceriesCopied(env) {
-  await ready(env);
-  return !!(await env.DB.prepare("SELECT 1 AS x FROM meta WHERE key = ?").bind(SEEDED).first());
-}
-
-/**
- * Copies the Sheet's list in, as Apps Script last sent it. Safe to run twice:
- * an item already here is left alone, and after the first copy it does nothing.
- */
-export async function copyGroceries(env, fromSheet) {
-  await ready(env);
-  const rows = Array.isArray(fromSheet) ? fromSheet : [];
-  const now = new Date().toISOString();
-  const work = rows.filter(r => r && r.id != null && String(r.item || "").trim()).map((r, i) => env.DB.prepare(
-    "INSERT OR IGNORE INTO groceries (id, item, done, added_by, added_at, sort) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(String(r.id), String(r.item).slice(0, MAX_LENGTH), r.done === true ? 1 : 0, String(r.addedBy || ""), now, i + 1));
-  work.push(env.DB.prepare("INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)").bind(SEEDED, now));
-  await env.DB.batch(work); // all of it or none of it
 }
 
 /** The list as the Hub's page expects it, in order. */

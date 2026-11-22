@@ -51,11 +51,9 @@ function b64u(bytes) {
   const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
   const pub = b64u(await crypto.subtle.exportKey("raw", pair.publicKey));
   const priv = (await crypto.subtle.exportKey("jwk", pair.privateKey)).d;
-  const secret = b64u(crypto.getRandomValues(new Uint8Array(32)));
   const keys = [
-    ["VAPID_PUBLIC_KEY", pub, "Cloudflare Worker (as text) and Apps Script Script Properties"],
-    ["VAPID_PRIVATE_KEY", priv, "Cloudflare Worker only (as a secret)"],
-    ["PUSH_SECRET", secret, "Cloudflare Worker (as a secret) and Apps Script Script Properties"],
+    ["VAPID_PUBLIC_KEY", pub, "Cloudflare Worker, as Text"],
+    ["VAPID_PRIVATE_KEY", priv, "Cloudflare Worker, as a Secret"],
   ];
   document.getElementById("keys").innerHTML = keys.map(([name, value, where], i) =>
     `<div class="key"><b>${name}</b><div class="where">${where}</div>

@@ -492,7 +492,7 @@ const RECURS = ["once", "daily", "weekly", "monthly", "quarterly", "yearly"];
 const RECUR_LABEL = { once: "One-off", daily: "Daily", weekly: "Weekly", monthly: "Monthly", quarterly: "Quarterly", yearly: "Yearly" };
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-// Mirrored in apps-script/NotionCheckins.gs (CHECKINS_QUESTIONS) for the Notion copy: change both together.
+// Mirrored in worker/hub/notion.js (CHECKINS_QUESTIONS) for the Notion copy: change both together.
 const HUDDLE_FIELDS = [
   ["rose",  "Rose / Thorn / Bud", "Everyone shares a high, a low, and something they're looking forward to"],
   ["week",  "Week ahead", "Calendar Captain walks the week — practices, events, lunch menu peek"],
@@ -511,50 +511,28 @@ const COUPLES_QUESTIONS = [
 ];
 
 let DATA = { tasks: [], meals: {}, events: [], checkins: [], groceries: [] };
-/* Whether the backend that last answered predates times and subtasks: its tasks
-   have no parentId. Set only from live answers, never from the copy saved on
-   this device, which can be older than the backend. */
-let OLD_BACKEND = false;
-function noteBackend(tasks) {
-  OLD_BACKEND = Array.isArray(tasks) && tasks.some(t => !("parentId" in t));
-  // Shown or cleared straight away, even when a redraw is held back for a draft.
-  const w = document.getElementById("oldBackend"), form = document.querySelector("#main .addform");
-  if (!OLD_BACKEND && w) w.remove();
-  if (OLD_BACKEND && !w && form && VIEW === "tasks") form.insertAdjacentHTML("afterend", oldBackendHtml());
-}
-function oldBackendHtml() {
-  return `<div class="block" id="oldBackend"><div class="empty" style="color:var(--warn)">Times, subtasks and moving tasks won't save yet: the Apps Script backend is an older version. Paste the latest Apps Script files and publish a new version.</div></div>`;
-}
 let VIEW = "today";
 let POLL = null;
 
-// The Hub's Worker: where a device signs in, and where a signed-in device gets its data
+// The Hub's Worker: where a device signs in, and where it gets and saves everything
 // (see worker/README.md). It is a public address; what it serves is behind the sign-in.
 const HUB = "https://family-hub-push.harper-jonathan-p.workers.dev";
 
 const cfg = {
-  get api()  { return localStorage.getItem("fd_api") || ""; },
-  get pin()  { return localStorage.getItem("fd_pin") || ""; },
-  get user() { return localStorage.getItem("fd_user") || "Jon"; },
+  get user()  { return localStorage.getItem("fd_user") || "Jon"; }, // who this device was signed in as
   get hub()   { return (localStorage.getItem("fd_hub") || HUB || "").replace(/\/+$/, ""); }, // fd_hub: one device pointed elsewhere, for testing
-  get token() { return localStorage.getItem("fd_token") || ""; }, // set once this device has signed in
-  get signedIn()  { return !!(this.hub && this.token); },
-  get connected() { return this.signedIn || !!(this.api && this.pin); },
+  get token() { return localStorage.getItem("fd_token") || ""; },   // set once this device has signed in
+  get signedIn() { return !!(this.hub && this.token); },
 };
 
 /* ============ networking ============ */
 async function apiGet(action, withReminders) {
-  if (cfg.signedIn) return hubFetch("/api?action=" + (action || "all") + (withReminders ? "&reminders=1" : ""));
-  const r = await fetch(cfg.api + "?action=" + (action || "all") + "&pin=" + encodeURIComponent(cfg.pin) + (withReminders ? "&reminders=1" : ""));
-  return r.json();
+  return hubFetch("/api?action=" + (action || "all") + (withReminders ? "&reminders=1" : ""));
 }
 async function apiPost(body) {
-  if (cfg.signedIn) return hubFetch("/api", body);
-  body.pin = cfg.pin;
-  const r = await fetch(cfg.api, { method: "POST", body: JSON.stringify(body) });
-  return r.json();
+  return hubFetch("/api", body);
 }
-/* A signed-in device talks to the Hub's Worker, which knows who it is from its token. */
+/* Everything goes through the Hub's Worker, which knows who a device is from its token. */
 async function hubFetch(path, body) {
   const r = await fetch(cfg.hub + path, {
     method: body ? "POST" : "GET",
@@ -562,35 +540,30 @@ async function hubFetch(path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const d = await r.json();
-  // Signed out from another device: this one goes back to how it was connected before.
+  // Signed out from another device: this one forgets its token and asks to sign in again.
   if (r.status === 401 && d.error === "signed_out") localStorage.removeItem("fd_token");
   return d;
 }
 const SYNC_ERRORS = {
-  bad_pin: "Wrong PIN — check Settings",
-  signed_out: "Signed out — sign in again in Settings",
-  backend_pin: "The Hub's Worker has the wrong FAMILY_PIN",
-  not_configured: "The Hub's Worker isn't set up yet",
-  moved: "This phone needs signing in — ⚙, then Sign in",
-  moving: "The Hub is moving — try again in a minute",
+  signed_out: "Signed out — sign in again",
+  no_database: "The Hub's Worker isn't set up yet",
 };
 
 async function refresh(quiet) {
-  if (!cfg.connected) { showSetup(); return; }
+  if (!cfg.signedIn) { showSetup(); return; }
   if (!quiet) note("Syncing…");
   try {
     const d = await apiGet("all", REM.show);
     if (!d.ok) {
       note(SYNC_ERRORS[d.error] || "Sync error");
-      if (!cfg.connected) showSetup(); // signed out from elsewhere, with no PIN to fall back on
+      if (!cfg.signedIn) showSetup(); // signed out from another device
       return;
     }
     DATA = { tasks: d.tasks || [], meals: d.meals || {}, events: d.events || [], checkins: d.checkins || [],
-             groceries: d.groceries, // undefined until the backend has the grocery list
+             groceries: d.groceries,
              mealsFrom: d.mealsFrom, // set when the dinners come from the Notion meal plan
              reminders: REM.show ? keepGoodReminders(d.reminders) : undefined }; // never kept on a device that hides them
     localStorage.setItem("fd_cache", JSON.stringify(DATA));
-    noteBackend(d.tasks);
     note("Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
     if (hasUnsavedEdits()) { note("Synced — your unsaved edits are kept"); return; }
     render();
@@ -604,11 +577,10 @@ async function send(body) {
   try {
     const d = await apiPost(body);
     if (d.ok) {
-      if (d.tasks) noteBackend(d.tasks);
       DATA.tasks = d.tasks || DATA.tasks;
       DATA.meals = d.meals || DATA.meals;
       DATA.checkins = d.checkins || DATA.checkins;
-      DATA.groceries = d.groceries; // an older backend leaves this out, and the page says so
+      DATA.groceries = d.groceries || DATA.groceries; // a settings answer carries no list
       localStorage.setItem("fd_cache", JSON.stringify(DATA));
       note("Saved ✓");
     } else { note("Save failed"); }
@@ -965,7 +937,7 @@ function saveMeals() {
 function renderGroceries() {
   const list = DATA.groceries;
   if (!Array.isArray(list)) {
-    return `<h2>Grocery list</h2><div class="block"><div class="empty">The grocery list needs the latest Apps Script backend. Paste the new Code.gs and publish a new version.</div></div>`;
+    return `<h2>Grocery list</h2><div class="block"><div class="empty">The grocery list couldn't be loaded. It will be tried again in a minute.</div></div>`;
   }
   const left = list.filter(g => !g.done), got = list.filter(g => g.done);
   let h = `<h2>Grocery list${left.length ? `<span class="hint">${left.length} to get</span>` : ""}</h2>
@@ -1173,8 +1145,6 @@ function renderTasks() {
       <button class="primary" onclick="addTask()">Add</button>
     </div>
   </div>`;
-  // A backend from before times and subtasks leaves those fields out, and drops them when saving.
-  if (OLD_BACKEND) h += oldBackendHtml();
   // Dated tasks, like Apple Reminders: overdue, today, the coming week, then later.
   // Subtasks go with their parents, so only top-level tasks sort into sections.
   const today = todayStr(), week = isoPlus(today, 7), shown = new Set();
@@ -1254,7 +1224,7 @@ function remStatus(rm) {
 }
 function remEmpty(rm) {
   if (rm.status === "none") return `<div class="empty">Nothing synced from Todoist yet.</div>`;
-  if (rm.status === "error") return `<div class="empty">Couldn't read Jon's Todoist. Check the Apps Script log.</div>`;
+  if (rm.status === "error") return `<div class="empty">Couldn't read Jon's Todoist. Check TODOIST_TOKEN on the Hub's Worker.</div>`;
   return "";
 }
 function reminderRow(r, asSub) {
@@ -1349,7 +1319,7 @@ function remSettingsHtml() {
     "Read from Jon's Todoist. Chosen per device. Projects the backend hides (Work, unless changed) are never sent.");
   if (REM.show && lists.length) h += lists.map(l =>
     row(`data-list="${esc(l)}" onchange="setRemList(this.dataset.list, this.checked)"`, REM.hidden.includes(l) ? "" : "checked", l, "Show this project here")).join("");
-  else if (REM.show && rm === undefined) h += `<div class="empty">Waiting for the backend — paste the latest Apps Script files and publish a new version.</div>`;
+  else if (REM.show && rm === undefined) h += `<div class="empty">Jon's Todoist tasks are sent to a parent's device only.</div>`;
   return h;
 }
 function redrawRemSettings() { const b = document.getElementById("remBox"); if (b) b.innerHTML = `<div class="block">${remSettingsHtml()}</div>`; }
@@ -1805,47 +1775,20 @@ function overlayHtml(inner) {
 }
 function closeOverlay() { document.getElementById("overlay").classList.add("hidden"); }
 
+/* A device that isn't signed in sees only this. */
 function showSetup() {
   overlayHtml(`
-    <header><span class="eyebrow">Harper Family Hub</span><h1>One-time setup</h1>
-      <div class="subtitle">Do this once per device — it's remembered after that.</div></header>
-    <label class="f">Apps Script web app URL</label>
-    <input type="url" id="setApi" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(cfg.api)}">
-    <label class="f">Family PIN</label>
-    <input type="password" id="setPin" inputmode="numeric" value="${esc(cfg.pin)}">
-    <label class="f">This device belongs to</label>
-    <select id="setUser">${FAMILY.slice(0, 4).map(f => `<option ${f === cfg.user ? "selected" : ""}>${f}</option>`).join("")}</select>
-    <div class="actions"><button class="primary" onclick="saveSetup()">Connect</button></div>
-    <h2>Or sign in<span class="hint">being tried out</span></h2><div id="signinBox"></div>`);
+    <header><span class="eyebrow">Harper Family Hub</span><h1>Sign in</h1>
+      <div class="subtitle">Once per device. It's remembered after that.</div></header>
+    <div id="signinBox"></div>`);
   renderSignin();
 }
-function saveSetup() {
-  localStorage.setItem("fd_api", document.getElementById("setApi").value.trim());
-  localStorage.setItem("fd_pin", document.getElementById("setPin").value.trim());
-  localStorage.setItem("fd_user", document.getElementById("setUser").value);
-  closeOverlay();
-  refresh();
-  syncPush();
-}
 function openSettings() {
-  // A signed-in device is who its sign-in says it is, so the PIN and "belongs to" are put away.
-  const connection = cfg.signedIn ? `
-    <div id="signinBox"></div>
-    <div class="actions"><button class="primary" onclick="closeOverlay()">Done</button></div>` : `
-    <label class="f">Apps Script web app URL</label>
-    <input type="url" id="setApi" value="${esc(cfg.api)}">
-    <label class="f">Family PIN</label>
-    <input type="password" id="setPin" value="${esc(cfg.pin)}">
-    <label class="f">This device belongs to</label>
-    <select id="setUser">${FAMILY.slice(0, 4).map(f => `<option ${f === cfg.user ? "selected" : ""}>${f}</option>`).join("")}</select>
-    <div class="actions">
-      <button class="primary" onclick="saveSetup()">Save</button>
-      <button class="ghost" onclick="closeOverlay()">Cancel</button>
-    </div>
-    <h2>Sign in<span class="hint">instead of the PIN · being tried out</span></h2>
-    <div id="signinBox"></div>`;
+  if (!cfg.signedIn) { showSetup(); return; }
   overlayHtml(`
-    <header><span class="eyebrow">Settings</span></header>${connection}
+    <header><span class="eyebrow">Settings</span></header>
+    <div id="signinBox"></div>
+    <div class="actions"><button class="primary" onclick="closeOverlay()">Done</button></div>
     <div class="tiny" style="margin-top:var(--space-5)">Data refreshes every 60 seconds and whenever the app is reopened.</div>
     <h2>Todoist<span class="hint">on this device</span></h2>
     <div id="remBox"><div class="block">${remSettingsHtml()}</div></div>
@@ -1884,7 +1827,7 @@ async function renderSignin(msg) {
   if (!box) return;
   if (cfg.signedIn) { box.innerHTML = signedInHtml(); loadDevices(); loadCalendar(); return; }
   if (!cfg.hub) {
-    box.innerHTML = `<div class="tiny">Sign in with Google instead of typing the PIN. Paste the Hub Worker's address to try it on this device.</div>
+    box.innerHTML = `<div class="tiny">This copy of the Hub doesn't know where its Worker is. Paste the Worker's address.</div>
       <div class="addrow" style="margin-top:var(--space-2)">
         <input type="url" id="setHub" class="grow" placeholder="https://family-hub-push.….workers.dev" data-nodraft="1">
         <button class="ghost" onclick="saveHub()">Use it</button>
@@ -2060,7 +2003,7 @@ async function signOut(device) {
   localStorage.removeItem("fd_token");
   localStorage.removeItem("fd_push_sync");
   closeOverlay();
-  refresh(); // back to the PIN if this device has one, or to setup
+  refresh(); // back to sign-in
 }
 
 /* ============ notifications ============ */
@@ -2081,11 +2024,11 @@ async function loadNotify() {
     if (!d.ok) throw new Error(d.error);
     NOTIFY = d;
   } catch (e) {
-    box.innerHTML = `<div class="empty">Couldn't load notification settings — check the connection above.</div>`;
+    box.innerHTML = `<div class="empty">Couldn't load notification settings — offline?</div>`;
     return;
   }
   if (!NOTIFY.prefs) {
-    box.innerHTML = `<div class="empty">The Apps Script backend needs updating before notifications can be turned on.</div>`;
+    box.innerHTML = `<div class="empty">Couldn't load notification settings.</div>`;
     return;
   }
   const p = NOTIFY.prefs[cfg.user];
@@ -2129,7 +2072,7 @@ async function renderPushState(msg) {
   if (!el) return;
   const state = await pushStatus();
   const text = {
-    server: "Notifications aren't connected on the server yet. Finish the setup in the repo's apps-script/README.md.",
+    server: "Notifications aren't set up on the Hub's Worker yet: it needs its push keys (worker/README.md in the repo).",
     unsupported: "Notifications need the Home Screen app. Open Family Hub from its Home Screen icon (iPhone: iOS 16.4 or later) and come back here.",
     blocked: "Notifications are blocked for Family Hub. Turn them on in the iPhone's Settings → Notifications → Family Hub, then come back here.",
     off: "Off on this device.",
@@ -2141,7 +2084,7 @@ async function renderPushState(msg) {
          <button class="ghost" onclick="disablePush()">Turn off here</button>`,
   }[state] || "";
   const stale = state === "on" && (!NOTIFY.lastTick || Date.now() - NOTIFY.lastTick > 30 * 60000)
-    ? `<div class="tiny" style="color:var(--warn);margin-top:var(--space-2)">Scheduled reminders aren't running yet — run setupNotifications in the Apps Script editor.</div>` : "";
+    ? `<div class="tiny" style="color:var(--warn);margin-top:var(--space-2)">Scheduled reminders haven't run in the last half hour. Check the Hub's Worker in Cloudflare.</div>` : "";
   el.innerHTML = `<span class="marker ${state === "on" ? "team" : "scheduled"}">${state === "on" ? "On" : "Off"}</span>
     <div class="muted">${text}</div>${stale}
     ${buttons ? `<div class="actions">${buttons}</div>` : ""}
@@ -2222,7 +2165,7 @@ async function saveNotifyPrefs() {
    server's list stays current even if a subscription rotates. */
 async function syncPush() {
   try {
-    if (!cfg.connected || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (!cfg.signedIn || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
     if (Notification.permission !== "granted") return;
     const key = cfg.user + "|" + todayStr();
     if (localStorage.getItem("fd_push_sync") === key) return;
@@ -2243,6 +2186,8 @@ function openFromNotification(d) {
 
 /* ============ boot ============ */
 (function boot() {
+  // Left on older devices from when the Hub was reached with a PIN: no longer used, so not kept.
+  ["fd_api", "fd_pin"].forEach(k => localStorage.removeItem(k));
   const cached = localStorage.getItem("fd_cache");
   if (cached) { try { DATA = JSON.parse(cached); } catch (e) {} }
   const [view, checkin] = location.hash.slice(1).split("/"); // from a tapped notification

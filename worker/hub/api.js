@@ -1,31 +1,25 @@
 /**
- * HARPER FAMILY HUB — the Hub's requests and the timer, once the core has moved
+ * HARPER FAMILY HUB — the Hub's requests and the timer
  *
- * "core" in moved.js means tasks, dinners, check-ins, phones' notification
- * sign-ups and settings, the notifications themselves, Todoist and both Notion
- * syncs: they read each other, so they move together. The calendar stays in
- * Apps Script for now; the timer copies its events here so no request waits
- * on Apps Script.
+ *   hubGet / hubPost   what the Hub's page asks for and saves (once doGet and
+ *                      doPost in apps-script/Code.gs)
+ *   tick               every five minutes: what the Apps Script timers did
  *
- *   hubGet / hubPost   what doGet / doPost in Code.gs did, for a signed-in device
- *   tick               what the Apps Script timers did, run every five minutes
+ * Tasks, dinners, check-ins, phones' notification sign-ups and settings, the
+ * notifications themselves, Todoist, both Notion syncs and the calendar all
+ * read each other, so they live together here.
  *
- * Two things are stricter than Apps Script, which could only ask a device to
- * behave: the Jon & Maggie check-ins and Jon's Todoist tasks go only to a
- * parent's device.
+ * The Jon & Maggie check-ins and Jon's Todoist tasks go only to a parent's device.
  */
 
 import { transact } from "../store.js";
 import { deliver, pushReady } from "../push.js";
-import { appsScript } from "../appsscript.js";
 import { today } from "./time.js";
 import * as core from "./core.js";
 import * as notify from "./notify.js";
 import * as todoist from "./todoist.js";
 import * as notion from "./notion.js";
-import { ensureCutover, setAsideOldTicks } from "./move.js";
 import * as calendar from "./calendar.js";
-import { MOVED } from "../moved.js";
 
 const CORE = ["Tasks", "Completions", "Meals", "CheckIns"];
 const ALL = CORE.concat(["Devices", "NotifyPrefs"]);
@@ -152,12 +146,12 @@ async function send(env, outbox, devices) {
  * Every five minutes. Each job stands alone: one failing doesn't stop the rest,
  * and the notifications always run last, on what the others brought in.
  *   every run        the calendar's events, then what's due to be sent
+ *   once a day       old ticks set aside
  *   every 10 min     Todoist; the Notion dinners (on the other five minutes)
  *   every 30 min     check-ins to Notion
  */
 export async function tick(env) {
   const now = nowOf(env), minute = now.getUTCMinutes(), report = {};
-  await ensureCutover(env, now); // the first run after the move takes over from Apps Script; if it can't, nothing runs
   const job = async (name, due, work) => {
     if (!due) return;
     try { report[name] = (await work()) || "ok"; } catch (err) { report[name] = "failed: " + String(err && err.message || err).slice(0, 120); }
@@ -184,53 +178,38 @@ export async function tick(env) {
   return report;
 }
 
-const calendarMoved = env => (env.MOVED != null ? String(env.MOVED).split(",") : MOVED).map(s => s.trim().toLowerCase()).indexOf("calendar") >= 0;
-
-/**
- * Keeps a copy of the calendar's events here, so no request waits on anyone else.
- *   "calendar" in moved.js   the Worker reads Google Calendar itself (hub/calendar.js)
- *   otherwise                Apps Script still does. If the calendar has been connected,
- *                            the Worker reads it too and records how the two compare
- *                            (CALENDAR_CHECK), serving Apps Script's as before.
- */
+/** Reads the family's Google calendars and keeps the events here, so no request waits on Google. */
 async function syncEvents(env) {
   const now = nowOf(env);
   const had = await transact(env, [], c => ({ grant: c.props.GOOGLE_CALENDAR, cache: calendar.loadCache(c.props) }), { now });
-  let mine = null, why = "";
-  if (had.grant) {
-    try {
-      const read = await calendar.readCalendars(env, had.grant, had.cache, now);
-      await transact(env, [], c => calendar.keep(c, read), { now });
-      mine = calendar.merged(read.byCalendar);
-      why = Object.keys(read.errors).map(k => k + ": " + read.errors[k]).join("; ");
-    } catch (err) {
-      why = String(err && err.message || err).slice(0, 150);
-      await transact(env, [], c => calendar.failed(c, why), { now });
-    }
+  if (!had.grant) throw new Error("the calendar isn't connected: a parent connects it in the Hub's Settings");
+  let read;
+  try { read = await calendar.readCalendars(env, had.grant, had.cache, now); }
+  catch (err) {
+    const why = String(err && err.message || err).slice(0, 150);
+    await transact(env, [], c => calendar.failed(c, why), { now }); // the events last read stay on show
+    throw new Error(why);
   }
-  if (calendarMoved(env)) {
-    if (!mine) throw new Error(why || "the calendar isn't connected: a parent connects it in the Hub's Settings");
-    const text = JSON.stringify(mine);
-    await transact(env, [], c => { if (c.props[EVENTS] !== text) c.props[EVENTS] = text; });
-    return why ? "partly: " + why : "ok";
+  const text = JSON.stringify(calendar.merged(read.byCalendar));
+  await transact(env, [], c => { calendar.keep(c, read); if (c.props[EVENTS] !== text) c.props[EVENTS] = text; }, { now });
+  const errors = Object.keys(read.errors).map(k => k + ": " + read.errors[k]).join("; ");
+  return errors ? "partly: " + errors : "ok";
+}
+
+/** Once a day: ticks whose day, week or month is over leave the rows every request loads. None are dropped. */
+async function setAsideOldTicks(env, now) {
+  const OLD = "hub_completions_old";
+  const stale = await transact(env, ["Completions"], c => core.staleCompletions(c), { now });
+  if (!stale.length) return "none";
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ${OLD} ("taskId", "periodKey", "completedBy", "timestamp")`).run();
+  for (let i = 0; i < stale.length; i += 100) {
+    await env.DB.batch(stale.slice(i, i + 100).map(r => env.DB.prepare(`INSERT INTO ${OLD} VALUES (?, ?, ?, ?)`).bind(r.taskId, r.periodKey, r.completedBy, r.timestamp)));
   }
-  const up = await appsScript(env, { action: "events" });
-  if (up.error) throw new Error(up.error);
-  if (up.data.ok !== true || !Array.isArray(up.data.events)) throw new Error("no events in Apps Script's answer");
-  const text = JSON.stringify(up.data.events);
-  await transact(env, [], c => {
-    if (c.props[EVENTS] !== text) c.props[EVENTS] = text;
-    if (!had.grant) return;
-    // The rehearsal: counts of how the Worker's reading differs from Apps Script's, never what an event says.
-    const before = JSON.parse(c.props.CALENDAR_CHECK || "{}");
-    const check = mine ? calendar.compareEvents(mine, up.data.events) : { error: why };
-    check.at = now.toISOString();
-    check.ok = !!mine && !why && check.onlyMine === 0 && check.onlyTheirs === 0;
-    if (why) check.error = why;
-    check.runs = (before.runs || 0) + 1;
-    check.cleanRuns = check.ok ? (before.cleanRuns || 0) + 1 : 0;
-    c.props.CALENDAR_CHECK = JSON.stringify(check);
+  const gone = new Set(stale.map(r => JSON.stringify(r)));
+  await transact(env, ["Completions"], c => {
+    for (let i = c.tabs.Completions.length - 1; i >= 0; i--) if (gone.has(JSON.stringify(c.tabs.Completions[i]))) c.tabs.Completions.splice(i, 1);
   }, { now });
+  return stale.length + " set aside";
 }
 
 /** Reads Todoist and keeps the result, or notes the failure and keeps the last good copy. Never throws. */

@@ -1,23 +1,26 @@
 # The Hub's Worker
 
-One Cloudflare Worker, named `family-hub-push`: the Worker that already runs
-the push relay, so its address and keys stay as they are. Once it is connected
-to this repo (step 1 below), every push to `main` deploys it
-(`wrangler.jsonc` at the repo root).
+The Hub's whole backend: one Cloudflare Worker, `family-hub-push`, with a D1
+database. Cloudflare deploys it from this repo on every push to `main`
+(`wrangler.jsonc` at the repo root; Workers Builds). The page it serves data to
+is `index.html`, on GitHub Pages.
 
 | Path | File | What it does |
 |------|------|--------------|
-| `/send` | `../push-worker/worker.js` | The push relay, unchanged. See `push-worker/README.md` |
 | `/auth/…` | `auth.js` | Sign-in: with Google, or by a parent's say-so |
-| `/api` | `proxy.js` | The Hub's data for a signed-in device: answered here for a feature that has moved, passed to Apps Script for the rest |
+| `/auth/calendar…` | `calendar-auth.js` | A parent letting the Hub read the Google calendars |
+| `/api` | `api.js` | What a signed-in Hub asks for and saves |
 | | `groceries.js` | The grocery list |
-| | `hub/` | Everything else, once it has moved: `core.js` (tasks, dinners, check-ins), `notify.js` (what to send and when), `todoist.js`, `notion.js`, `api.js` (requests and the timer), `move.js` (the move itself), `time.js` (what day it is at home) |
-| | `store.js`, `push.js` | Where the rows are kept and how two savers at once are kept apart; sending notifications |
-| every 5 min | `index.js` → `hub/api.js` | The timer: what the Apps Script timers did |
-
-The Hub's backend now runs here, calendar included. Apps Script
-(`apps-script/`) has been told to stop and is no longer asked for anything.
-A phone has to be signed in: one still holding the PIN is told so.
+| | `hub/core.js` | Tasks, repeats, subtasks, dinners, check-ins |
+| | `hub/notify.js` | Notifications: what to send, to whom, and when |
+| | `hub/todoist.js` | Jon's Todoist tasks, read-only |
+| | `hub/notion.js` | Dinners in from Notion; check-ins out to Notion |
+| | `hub/calendar.js` | The next 14 days of the family's Google calendars |
+| | `hub/api.js` | The requests and the timer that tie those together |
+| | `hub/time.js` | What day and time it is at home (a Worker runs on UTC) |
+| | `store.js` | Where the rows are kept, and how two savers at once are kept apart |
+| | `push.js`, `webpush.js` | Sending notifications to phones |
+| every 5 min | `index.js` → `hub/api.js` | The timer |
 
 ## How sign-in works
 
@@ -38,175 +41,122 @@ has to come back from Google's page to the Hub. That is what makes it work in
 an iPhone Home Screen app, where pop-ups and redirects often don't.
 
 Once approved, the device holds a token of its own. The Worker stores only a
-hash of it, in the `sessions` table of its D1 database. A parent sees every
-signed-in device in Settings and can sign any of them out.
+hash of it. A parent sees every signed-in device in Settings and can sign any
+of them out. Who ticked a task or added one comes from the sign-in, not from
+what the page says.
 
-A signed-in device never holds the family PIN: the Worker adds it when it
-passes a request on to Apps Script. Who ticked a task or added one comes from
-the sign-in, not from what the page says.
+Two things go only to a parent's device: the Jon & Maggie check-ins, and Jon's
+Todoist tasks.
 
-**Until the PIN is retired, sign-in doesn't lock anything.** A device that
-still has the PIN saved goes back to using it when it's signed out.
+## The timer
 
-## Setup
+Every five minutes (`triggers` in `wrangler.jsonc`). Each job stands alone, so
+one failing doesn't stop the rest.
 
-About 40 minutes, once. The names in the two consoles move around; the steps
-are the same.
+| How often | What |
+|-----------|------|
+| every run | The calendar's events are read from Google; then whatever notifications are due are sent |
+| every 10 min | Todoist is read; the week's dinners are read from Notion |
+| every 30 min | New check-ins are copied to Notion |
+| once a day | Ticks for days and weeks already over are set aside (kept, but no longer loaded with every request) |
 
-### 1. Cloudflare: connect the repo
+What gets sent, and when, is described in "Notifications" in
+`apps-script/README.md`, which is still the description of the behaviour.
 
-Until this is done, nothing in `worker/` is running: the Worker is still the
-copy of the push relay pasted into the dashboard.
+## Settings
 
-1. In the Cloudflare dashboard, open **Workers & Pages → `family-hub-push` →
-   Settings → Builds** and choose **Connect** (a Git repository).
-2. Pick GitHub and the `harper-family-hub` repo. Cloudflare may ask GitHub for
-   access to it first.
-3. Branch `main`, root directory `/`, no build command, deploy command
-   `npx wrangler deploy` (the defaults).
-4. Save, then start a deployment (or push anything to `main`). The build log
-   should end with the Worker's address.
-5. Open that address. It should still say *Family Hub push relay is running.*
-   Then open it with `/auth/me` on the end: `{"ok":false,"error":"signed_out"}`
-   means the new code is live. In the Hub, ⚙ → **Send a test** should still
-   arrive.
+All on the Worker: **Settings → Variables and Secrets** in Cloudflare. None of
+them belong in this repo, which is public. `wrangler.jsonc` says to keep them
+across deploys.
 
-The relay's keys (`VAPID_…`, `PUSH_SECRET`) are kept: `wrangler.jsonc` says to
-keep the dashboard's variables, and secrets are always kept.
-
-### 2. Google: an OAuth client
-
-1. Go to [console.cloud.google.com](https://console.cloud.google.com) and make
-   a project, e.g. "Family Hub".
-2. Open **Google Auth Platform** (older name: *APIs & Services → OAuth consent
-   screen*). Set it up as **External**, with any app name and your email.
-3. Under **Audience**, leave it in **Testing** and add each family member's
-   Google account as a **test user**. Only those accounts can get through
-   Google at all. (The Hub asks Google only for the account's email address,
-   once, at sign-in, so Testing's seven-day limit never comes into it.)
-4. Under **Clients**, create a client of type **Web application**. Add one
-   **Authorized redirect URI**: the Worker's address followed by
-   `/auth/callback`, e.g.
-   `https://family-hub-push.<name>.workers.dev/auth/callback`.
-5. Copy the **Client ID** and **Client secret**.
-
-### 3. Cloudflare: the Worker's variables
-
-In the dashboard, open the `family-hub-push` Worker's **Settings → Variables
-and Secrets** and add:
-
-| Name | Type | Value |
-|------|------|-------|
-| `GOOGLE_CLIENT_ID` | Text | from step 2 |
-| `GOOGLE_CLIENT_SECRET` | Secret | from step 2 |
-| `FAMILY_ACCOUNTS` | Secret | Who each Google account is: `Jon=…@gmail.com, Maggie=…@gmail.com`. Add `Clayton=…` or `Heidi=…` only if they have accounts of their own |
-| `APPS_SCRIPT_URL` | Secret | The Apps Script web app's address (`…/exec`), as in the Hub's Settings today |
-| `FAMILY_PIN` | Secret | The same PIN as the `FAMILY_PIN` Script Property |
-
-None of these belong in this repo, which is public.
-
-The push relay's own variables (`VAPID_…`, `PUSH_SECRET`) stay as they are.
-
-### 4. The database
-
-Nothing to do. `wrangler.jsonc` asks for a D1 database bound as `DB` without
-naming one, so the first deploy creates it and links it to the Worker. The
-Worker makes its own tables the first time it needs them. To look inside:
-dashboard → **Storage & Databases → D1**.
-
-If a deploy ever fails on the database, the previous version of the Worker
-keeps running, so the push relay isn't interrupted.
-
-### 5. Try it on one phone
-
-1. Open the Hub from its Home Screen icon and tap ⚙. Under **Sign in** there
-   is a four-digit code and a **Sign in with Google** button. (The Worker's
-   address is `HUB`, near the top of the script in `index.html`.)
-2. Tap **Sign in with Google**, pick your account, check the code matches, and
-   tap **Sign in**.
-3. Go back to the Hub. Within a few seconds Settings shows *Signed in*.
-
-For a device whose owner has no Google account, a signed-in parent opens ⚙ →
-**Sign in another device** on their own Hub and types that device's code.
-
-To go back to the PIN on a phone: ⚙ → **Sign out**.
-
-## Moving a feature
-
-A feature moves out of Apps Script when the list in `moved.js` names it, so a
-move is a one-line commit, and taking the name out again undoes it. (In a
-hurry, a Text variable named `MOVED` on the Worker replaces that list until
-it's deleted: `none` moves everything back at once.)
-
-| In `moved.js` | Since | What changes |
-|---------------|-------|--------------|
-| `shadow` | 20 to 21 Nov 2026 | The rehearsal for `core`, no longer on. It changes nothing anyone sees. Every 15 minutes the Worker copies everything from Apps Script, works out what it would send the Hub, and compares that with what Apps Script sends. The result is the `SHADOW` row of the `props` table: `ok`, `differences`, `cleanRuns` (in a row), `missing` (settings the Worker still needs), and an `error` if it couldn't run |
-| `core` | 21 Nov 2026 | Tasks, dinners, check-ins, notification sign-ups and settings, the notifications themselves, Todoist and both Notion syncs: they read each other, so they move together. The first request tells Apps Script to stop, takes a last copy, and the Worker is the backend from then on. The calendar stays in Apps Script; the timer keeps a copy of its events here |
-| `groceries` | 20 Nov 2026 | The grocery list is kept in the Worker's database. The first request after the switch copies the list over from the Sheet, once, keeping every item's id, tick and place. From then on grocery actions never touch Apps Script, and the Sheet's `Groceries` tab is no longer read or written |
-
-| `calendar` | 22 Nov 2026 | The Worker reads the family's Google calendars itself, as Jon, with read-only access he grants once in Settings (see "The calendar"). Until it is named here the events still come from Apps Script; once the calendar is connected, the timer also reads Google and records how the two compare in the `CALENDAR_CHECK` row of `props` (counts only) |
-
-**A phone has to be signed in to see a moved feature.** A phone still on the
-PIN talks to Apps Script directly and goes on seeing the Sheet's copy, which
-stops changing at the move. Signing it in fixes that.
-
-Undoing a move sends the Hub back to the Sheet's copy as it was at the move;
-anything added since stays in the Worker's database but isn't shown. To undo
-`core`, also run `handover_(false)` in the Apps Script editor: it puts the
-timers back and lets the script answer the Hub again.
-
-### Before `core`
-
-1. In Apps Script, add a script file named `Handover` with
-   `apps-script/Handover.gs`, replace `Code.gs` with the repo's copy, and
-   publish a new version. Nothing changes: it only lets the Worker ask.
-2. Give the Worker its own copy of the settings Apps Script uses, as
-   **Secrets** (Settings → Variables and Secrets), with the same values as the
-   Script Properties of the same names: `TODOIST_TOKEN`, `NOTION_TOKEN`,
-   `NOTION_MEALS_SOURCE`, `NOTION_CHECKINS_SOURCE`, and `REMINDERS_HIDE_LISTS`
-   if it is set there.
-3. Leave `shadow` on until `SHADOW` says `ok` with nothing `missing`, for a
-   day or so of `cleanRuns`.
-4. Sign in every phone.
-
-What `core` does that Apps Script didn't: the Jon & Maggie check-ins and Jon's
-Todoist tasks go only to a parent's device, and the Todoist projects in
-`REMINDERS_HIDE_LISTS` (Work, unless it says otherwise) are dropped as they
-are read, so they are never stored.
-
-## The calendar
-
-The last thing Apps Script does. To take it over, the Worker reads the same
-four calendars through the Google Calendar API, as Jon, read-only.
-
-1. **Google Cloud**, in the project that has the Hub's OAuth client:
-   - **APIs & Services → Library**: enable the **Google Calendar API**.
-   - **Clients → Family Hub**: add a second **Authorized redirect URI**, the
-     Worker's address followed by `/auth/calendar/callback`.
-   - **Audience**: **Publish app**, so it reads *In production*. While it is
-     *Testing*, Google ends calendar access after seven days. Google shows a
-     "hasn't verified this app" notice when connecting; that is expected for
-     an app only the family uses. Who can sign in to the Hub is still decided
-     by `FAMILY_ACCOUNTS`, not by this.
-2. **Cloudflare**: add the calendar IDs to the Worker as **Secrets**, with the
-   same values as the Script Properties of the same names: `CAL_JON`,
-   `CAL_MAGGIE`, `CAL_FAMILY`, `CAL_MCHS`. One left out is left off the Hub.
-3. **The Hub**: ⚙ → **Calendar → Connect the calendar**, with Jon's own Google
-   account, leaving the box for seeing calendars ticked.
-4. Leave it until `CALENDAR_CHECK` says `ok` for a while, then add `calendar`
-   to `moved.js`. After that nothing asks Apps Script for anything.
-
-What Google gives in step 3 is kept in the database encrypted with a key made
-from the Worker's own secret, so the database alone can't be used to read a
-calendar. **Disconnect** in Settings forgets it and withdraws it at Google.
-A calendar that can't be read keeps showing what was last read from it, and
-Settings says which.
-
-## Other settings
-
-| Name | Type | Value |
-|------|------|-------|
+| Name | Type | What it is |
+|------|------|------------|
+| `GOOGLE_CLIENT_ID` | Text | The OAuth client's ID (see "Google") |
+| `GOOGLE_CLIENT_SECRET` | Secret | The OAuth client's secret |
+| `FAMILY_ACCOUNTS` | Text or Secret | Who each Google account is: `Jon=…@gmail.com, Maggie=…@gmail.com`. Add `Clayton=…` or `Heidi=…` only if they have accounts of their own |
+| `VAPID_PUBLIC_KEY` | Text | For notifications; made with `keys.html` |
+| `VAPID_PRIVATE_KEY` | Secret | For notifications; made with `keys.html` |
+| `CAL_JON`, `CAL_MAGGIE`, `CAL_FAMILY`, `CAL_MCHS` | Secret | The calendar IDs. One left out is left off the Hub |
+| `TODOIST_TOKEN` | Secret | Jon's Todoist API token. Leave it out to do without Todoist |
+| `REMINDERS_HIDE_LISTS` | Text | Optional. Todoist projects that are never read into the Hub, comma separated. Left unset it hides `Work`, whose tasks name students. Hidden projects are dropped as they are read: they are never stored |
+| `NOTION_TOKEN` | Secret | The Notion integration's secret. Leave it out to plan dinners in the Hub |
+| `NOTION_MEALS_SOURCE` | Secret | The Meal Plan database's data source ID |
+| `NOTION_CHECKINS_SOURCE` | Secret | The Weekly Check-Ins database's data source ID |
+| `VAPID_SUBJECT` | Text | Optional: `mailto:` and an address push services can contact |
 | `HUB_ORIGIN` | Text | Optional. Where the Hub's page is served from, if not GitHub Pages. Only pages from here may read the Worker's answers |
+
+How the Notion databases and the Todoist token are set up on their own side is
+in `apps-script/README.md` ("Meal plan from Notion", "Check-ins to Notion",
+"Todoist"): those steps haven't changed, only where the values go.
+
+## Google
+
+One Google Cloud project holds an OAuth client of type **Web application**,
+used for both sign-in and the calendar.
+
+- **Authorized redirect URIs**: the Worker's address followed by
+  `/auth/callback`, and again followed by `/auth/calendar/callback`.
+- **Google Calendar API**: enabled.
+- **Audience**: published (*In production*). In *Testing*, Google ends calendar
+  access after seven days. Publishing needs a home page and a privacy policy
+  link: the Hub's address, and `privacy.html` beside it. Google shows a
+  "hasn't verified this app" notice when the calendar is connected; that is
+  expected for an app only a family uses. Who can sign in to the Hub is
+  decided by `FAMILY_ACCOUNTS`, not by Google.
+
+### The calendar
+
+The Worker reads the calendars as Jon, read-only. He grants that once: ⚙ →
+**Calendar → Connect the calendar**, with his own Google account, leaving the
+box for seeing calendars ticked. Only a parent's own account is accepted.
+
+What Google gives is kept in the database encrypted with a key made from the
+Worker's own secret, so the database alone can't be used to read a calendar.
+**Disconnect** forgets it and withdraws it at Google. A calendar that can't be
+read keeps showing what was last read from it, and Settings says which. If
+Settings ever says Google returned `invalid_grant`, the access has lapsed or
+been withdrawn: connect again.
+
+## Notifications
+
+`keys.html` makes the two push keys in your browser:
+<https://harperjonathanp-art.github.io/harper-family-hub/worker/keys.html>.
+Phones sign up against `VAPID_PUBLIC_KEY`, so if new keys are ever made, every
+phone has to turn notifications off and on again.
+
+On each iPhone: open the Hub from its Home Screen icon, ⚙ → **Turn on
+notifications**, then **Send a test**. A phone that has dropped its
+subscription is forgotten the next time something is sent to it.
+
+## The database
+
+D1, bound as `DB`. `wrangler.jsonc` names no database ID: the first deploy made
+one and linked it. The Worker makes its own tables the first time it needs
+them. To look inside: Cloudflare dashboard → **Storage & Databases → D1**.
+
+| Table | Holds |
+|-------|-------|
+| `sessions`, `signins` | Signed-in devices (a hash of each token), and sign-ins waiting to be approved |
+| `groceries` | The grocery list |
+| `hub_tasks`, `hub_completions`, `hub_completions_old` | Tasks and their ticks; ticks for periods that are over |
+| `hub_meals`, `hub_checkins` | The week's dinners; check-ins |
+| `hub_devices`, `hub_notifyprefs` | Phones signed up for notifications; each person's notification settings |
+| `props` | Bookkeeping, as text by key: what notifications have gone out, the last good copy of Todoist, the calendar's events and the (encrypted) access to it, and `rev` |
+
+Two phones saving at once can't undo each other: every change carries the
+`rev` the data had when it was read and is applied only if that is still
+current; otherwise the work is redone on fresh rows (`store.js`).
+
+## Where this came from
+
+Until 22 November 2026 the backend was a Google Apps Script web app over a
+Google Sheet, reached with a shared family PIN. It moved here feature by
+feature: sign-in and the grocery list on 20 November, everything else on the
+21st after 55 clean rehearsal runs against the real data, and the calendar on
+the 22nd after 232 comparisons with Apps Script's, all identical.
+
+`apps-script/` is kept. Nothing runs it any more, but it is what this Worker
+is tested against.
 
 ## Tests
 
@@ -216,10 +166,11 @@ npm install
 npm test
 ```
 
-They run the Worker in Cloudflare's local simulator with a pretend Google and
-a pretend Apps Script. For everything that moves, they also run the real
-`apps-script/*.gs` files over a pretend Sheet (`test/appsscript-sim.js`) and
-check the Worker gives the same answers: action for action for tasks and
-groceries, timer run for timer run for notifications, and through a whole
-move with the Sheet's cells turned into dates the way Google Sheets does it.
-`package.json` here is only for the tests; Cloudflare never reads it.
+They run the Worker in Cloudflare's local simulator with a pretend Google,
+Todoist, Notion and push service. For the rules themselves they also run the
+real `apps-script/*.gs` files over a pretend Sheet (`test/appsscript-sim.js`)
+and check the Worker gives the same answers: action for action for tasks and
+groceries, timer run for timer run for notifications, sync for sync for
+Todoist and Notion, and event for event for the calendar, across midnights,
+New Year and both daylight-saving changes. `package.json` here is only for the
+tests; Cloudflare never reads it.
