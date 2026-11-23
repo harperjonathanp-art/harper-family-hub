@@ -295,6 +295,7 @@ async function tickReminder(key, on) {
   if (!r) return;
   r.ticked = on; r.tickedBy = on ? cfg.user : "";
   localStorage.setItem("fd_cache", JSON.stringify(DATA));
+  if (on) FLASH = key; // redrawn at once, so its tick pops on the new row
   render();
   note("Saving…");
   try {
@@ -448,12 +449,15 @@ function addTask() {
   DATA.tasks.push({ id: "tmp-" + Date.now(), title, recurrence: repeat ? "repeat" : "once", repeat, due, time, parentId,
     sort: parentId ? last + 1 : null, assignee: body.assignee, completed: false });
   clearDraft("fd_draft_task");
+  expectNewRows();
   send(body);
 }
 function toggleTask(id) {
   if (id.startsWith("tmp")) { render(); return; } // still saving
   const t = DATA.tasks.find(x => x.id === id);
   if (t) { t.completed = !t.completed; t.completedBy = t.completed ? cfg.user : null; }
+  const row = document.querySelector(`#main [data-tid="${CSS.escape(id)}"]`);
+  if (row && t) row.classList.toggle("done", t.completed);
   // Ticking a task ticks its open subtasks too (the server does the same); unticking leaves them.
   // A subtask with a repeat of its own keeps its own schedule.
   if (t && t.completed && !isSub(t)) subsOf(id).forEach(s => {
@@ -465,8 +469,11 @@ function deleteTask(id) {
   const n = subsOf(id).length;
   if (!confirm(n ? `Delete this task and its ${n} subtask${n > 1 ? "s" : ""}?` : "Delete this task?")) { render(); return; }
   closeOverlay();
-  DATA.tasks = DATA.tasks.filter(x => x.id !== id && x.parentId !== id);
-  send({ action: "deleteTask", id });
+  const sel = CSS.escape(id);
+  leaveRow([...document.querySelectorAll(`#main [data-tid="${sel}"], #main [data-parent="${sel}"], #main details[data-for="${sel}"]`)], () => {
+    DATA.tasks = DATA.tasks.filter(x => x.id !== id && x.parentId !== id);
+    send({ action: "deleteTask", id });
+  });
 }
 /* Edits go one at a time, in order, so a quick run of moves can't land out of order. */
 let TASK_Q = Promise.resolve();

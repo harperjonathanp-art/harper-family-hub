@@ -94,7 +94,7 @@ function groceryRow(g) {
         <svg width="12" height="18" viewBox="0 0 12 18" aria-hidden="true" fill="currentColor">
           <circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/><circle cx="3" cy="9" r="1.6"/>
           <circle cx="9" cy="9" r="1.6"/><circle cx="3" cy="15" r="1.6"/><circle cx="9" cy="15" r="1.6"/></svg></button>`;
-  return `<div class="task ${g.done ? "done" : ""}">
+  return `<div class="task ${g.done ? "done" : ""}" data-gid="${esc(g.id)}">
     ${grip}
     <input type="checkbox" id="${id}" ${g.done ? "checked" : ""} onchange="toggleGrocery('${esc(g.id)}')">
     <label class="ttl" for="${id}">${esc(g.item)}</label>
@@ -195,6 +195,7 @@ async function addGrocery() {
   text.split(/\n+/).map(s => s.replace(/^[\s•*\-–—]+/, "").trim()).filter(Boolean)
     .forEach((item, i) => DATA.groceries.push({ id: "tmp-" + Date.now() + "-" + i, item, done: false }));
   box.value = "";
+  expectNewRows();
   const refocus = () => { const b = document.getElementById("newGrocery"); if (b) b.focus(); }; // ready for the next item
   render(); refocus(); // show it straight away; the save fills in the real ids
   await send({ action: "addGroceries", text, by: cfg.user });
@@ -204,12 +205,16 @@ function toggleGrocery(id) {
   if (id.startsWith("tmp-")) { render(); return; } // still saving; the server hasn't named it yet
   const g = DATA.groceries.find(x => x.id === id);
   if (g) g.done = !g.done;
+  const row = document.querySelector(`#main [data-gid="${CSS.escape(id)}"]`);
+  if (row && g) row.classList.toggle("done", g.done);
   send({ action: "toggleGrocery", id });
 }
 function deleteGrocery(id) {
   if (id.startsWith("tmp-")) return; // still saving
-  DATA.groceries = DATA.groceries.filter(x => x.id !== id);
-  send({ action: "deleteGrocery", id });
+  leaveRow(document.querySelector(`#main [data-gid="${CSS.escape(id)}"]`), () => {
+    DATA.groceries = DATA.groceries.filter(x => x.id !== id);
+    send({ action: "deleteGrocery", id });
+  });
 }
 function clearGroceries() {
   DATA.groceries = DATA.groceries.filter(x => !x.done);

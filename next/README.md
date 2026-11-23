@@ -14,7 +14,7 @@ sign-in and data as the live Hub, so a signed-in phone can open it straight away
 | `css/app.css` | Layout and components |
 | `js/theme.js` | Applies the chosen theme before the page draws (loaded in `<head>`) |
 | `js/data.js` | Who's signed in, talking to the Worker, drafts |
-| `js/shell.js` | Shared helpers, the screen list, drawing the current screen, the overlay |
+| `js/shell.js` | Shared helpers, the screen list and floating tab bar, sliding between screens, row and tick motion, and the panel that rises from the bottom |
 | `js/today.js`, `calendar.js`, `dinner.js`, `tasks.js`, `checkins.js` | One file per screen |
 | `js/settings.js` | Sign-in, Settings (including Look & feel), devices, notifications |
 | `js/boot.js` | Starts the Hub; always loaded last |
@@ -23,6 +23,10 @@ sign-in and data as the live Hub, so a signed-in phone can open it straight away
 The scripts are plain files that share one scope, loaded in order with
 `defer`, so the `onclick="…"` handlers in the page keep working. There is no
 build step.
+
+Motion follows one rule: only what someone does moves (switching screens, ticking,
+adding, deleting, opening a panel). The refresh every minute, a drag in progress
+and typing never animate, and the phone's Reduce Motion setting turns it all off.
 
 ## Release numbers
 

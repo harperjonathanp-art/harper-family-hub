@@ -40,10 +40,11 @@ function renderCheckins() {
   }
   return h;
 }
-function openCheckin(type) { CHECKIN_OPEN = type; render(); }
+function openCheckin(type) { slide("forward", () => { CHECKIN_OPEN = type; render(); window.scrollTo(0, 0); }); }
 function closeCheckin() {
   if (localStorage.getItem("fd_draft_" + CHECKIN_OPEN) && !confirm("Discard your notes for this check-in?")) return;
-  clearDraft("fd_draft_" + CHECKIN_OPEN); CHECKIN_OPEN = null; render();
+  clearDraft("fd_draft_" + CHECKIN_OPEN);
+  slide("back", () => { CHECKIN_OPEN = null; render(); window.scrollTo(0, 0); });
 }
 
 function renderHuddleForm() {

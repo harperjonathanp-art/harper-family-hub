@@ -6,7 +6,7 @@ function showSetup() {
   overlayHtml(`
     <header><span class="eyebrow">Harper Family Hub</span><h1>Sign in</h1>
       <div class="subtitle">Once per device. It's remembered after that.</div></header>
-    <div id="signinBox"></div>`);
+    <div id="signinBox"></div>`, { locked: true }); // a new device: nothing else until it's signed in
   renderSignin();
 }
 function openSettings() {
@@ -80,7 +80,7 @@ function pickLook(theme, scheme) {
    whether it's been approved, so nothing has to come back from Google's page. */
 let SIGNIN = null;      // the sign-in this device is waiting on: { hub, secret, id, code, until, google }
 let SIGNIN_POLL = null;
-const signinShowing = () => !!document.getElementById("signinBox") && !document.getElementById("overlay").classList.contains("hidden");
+const signinShowing = () => !!document.getElementById("signinBox") && panelUp();
 
 function loadSignin() {
   if (!SIGNIN) { try { SIGNIN = JSON.parse(localStorage.getItem("fd_signin") || "null"); } catch (e) {} }

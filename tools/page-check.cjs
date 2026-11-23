@@ -85,6 +85,7 @@ const PAIRS = [
   ["crit", "bg"], ["crit", "card"], ["warn", "bg"], ["warn", "card"], ["ok", "bg"], ["ok", "card"],
   ["p-jon-ink", "p-jon"], ["p-maggie-ink", "p-maggie"], ["p-clayton-ink", "p-clayton"],
   ["p-heidi-ink", "p-heidi"], ["p-family-ink", "p-family"],
+  ["nav-active-ink", "nav-active-bg"], ["nav-muted", "nav-bg", 3], // resting tab icons: 3:1, as for any icon
 ];
 function contrast(a, b) {
   const lum = hex => {
@@ -133,26 +134,62 @@ function contrast(a, b) {
         const cs = getComputedStyle(document.documentElement);
         return Object.fromEntries(names.map(n => [n, cs.getPropertyValue("--" + n).trim()]));
       }, [...new Set(PAIRS.flat())]);
-      for (const [fg, bg] of PAIRS) {
+      for (const [fg, bg, min = 4.5] of PAIRS) {
         if (!/^#[0-9a-f]{6}$/i.test(vars[fg]) || !/^#[0-9a-f]{6}$/i.test(vars[bg])) { problems.push(`${tag}: --${fg} or --${bg} missing`); continue; }
         const r = contrast(vars[fg], vars[bg]);
-        if (r < 4.5) problems.push(`${tag}: --${fg} on --${bg} is ${r.toFixed(2)}:1`);
+        if (r < min) problems.push(`${tag}: --${fg} on --${bg} is ${r.toFixed(2)}:1`);
       }
 
       {
         const shot = name => page.screenshot({ path: path.join(OUT, `${tag}-${name}.png`), fullPage: true });
         for (const v of SCREENS) {
           await page.evaluate(v => go(v), v);
-          await page.waitForTimeout(120);
+          await page.waitForTimeout(650); // past the slide between screens
           const blank = await page.evaluate(() => !document.getElementById("main").textContent.trim());
           if (blank) problems.push(`${tag}: ${v} drew nothing`);
           await shot(v);
         }
+        // the tab bar: five tabs, the open one marked
+        const tabs = await page.evaluate(() => [...document.querySelectorAll("#nav button")].map(b => [b.dataset.view, b.getAttribute("aria-current")]));
+        if (tabs.length !== 5) problems.push(`${tag}: the tab bar has ${tabs.length} tabs`);
+        if (!tabs.some(([v, cur]) => v === "checkins" && cur === "page")) problems.push(`${tag}: the open tab isn't marked`);
+        // the panel: rises, closes with Escape, and is gone after its slide
         await page.evaluate(() => openSettings());
-        await page.waitForTimeout(150);
-        await shot("settings");
+        await page.waitForTimeout(500);
+        if (!(await page.evaluate(() => panelUp()))) problems.push(`${tag}: Settings panel didn't open`);
+        await page.screenshot({ path: path.join(OUT, `${tag}-settings.png`) });
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(500);
+        if (await page.evaluate(() => panelUp() || !document.getElementById("overlay").classList.contains("hidden")))
+          problems.push(`${tag}: Escape didn't close the panel`);
       }
       await ctx.close();
+    }
+  }
+
+  // switching tabs: the slide finishes on the new screen, and Reduce Motion switches at once
+  if (PAGE.startsWith("next")) {
+    for (const reducedMotion of ["no-preference", "reduce"]) {
+      const c = await browser.newContext({ reducedMotion });
+      await c.addInitScript(() => { localStorage.setItem("fd_token", "page-check"); localStorage.setItem("fd_user", "Jon"); });
+      await c.route(HUB + "/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(sample()) }));
+      const p = await c.newPage();
+      p.on("pageerror", e => problems.push(`motion ${reducedMotion}: script error: ${e.message}`));
+      await p.goto(base);
+      await p.waitForTimeout(300);
+      const now = await p.evaluate(() => { go("tasks"); return VIEW; });
+      if (reducedMotion === "reduce" && now !== "tasks") problems.push("Reduce Motion: switching tabs wasn't instant");
+      await p.waitForTimeout(700);
+      const after = await p.evaluate(() => [VIEW, document.querySelector('#nav button[aria-current="page"]')?.dataset.view, document.getElementById("srAnnounce").textContent]);
+      if (after.join() !== "tasks,tasks,Tasks") problems.push(`motion ${reducedMotion}: after switching to Tasks got ${after.join(" / ")}`);
+      // a new device's sign-in can't be swiped or tapped away
+      await p.evaluate(() => { showSetup(); });
+      await p.waitForTimeout(450);
+      await p.keyboard.press("Escape");
+      await p.evaluate(() => panelBackTap());
+      await p.waitForTimeout(450);
+      if (!(await p.evaluate(() => panelUp()))) problems.push(`motion ${reducedMotion}: sign-in could be dismissed`);
+      await c.close();
     }
   }
 
