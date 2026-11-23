@@ -180,11 +180,16 @@ function renderToday() {
   }
   if (any) h += `<div class="block">${mixRows(plate, rems).join("")}</div>`;
 
+  const deck = onDeck.length ? `<h2>On deck this period</h2><div class="block">${onDeck.map(taskRow).join("")}</div>` : "";
+  // On a computer: the week strip and the calendar beside everything else (js/calendar.js)
+  if (wide()) {
+    const sentence = h.slice(0, h.indexOf("</p>") + 4);
+    return sentence + cols(h.slice(sentence.length) + deck, `<h2>The week</h2>${renderCalendar()}`, "today-cols");
+  }
   // The whole day, with what's over dimmed
   const todays = eventsOn(t);
   h += `<h2>Today's schedule</h2>`;
   h += todays.length ? `<div class="block">${todays.map(e => eventRow(e, evOver(e, t, now), t)).join("")}</div>`
                      : `<div class="block"><div class="empty">Nothing on the calendar today.</div></div>`;
-  if (onDeck.length) h += `<h2>On deck this period</h2><div class="block">${onDeck.map(taskRow).join("")}</div>`;
-  return h;
+  return h + deck;
 }

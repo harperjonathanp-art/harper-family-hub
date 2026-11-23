@@ -81,6 +81,24 @@ const GRIP_SVG = `<svg width="12" height="18" viewBox="0 0 12 18" aria-hidden="t
   <circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/><circle cx="3" cy="9" r="1.6"/>
   <circle cx="9" cy="9" r="1.6"/><circle cx="3" cy="15" r="1.6"/><circle cx="9" cy="15" r="1.6"/></svg>`;
 
+/* ============ computers: the wide layout ============
+   On a screen wider than about 900 px the tab bar becomes a sidebar (with New task, the sync pill,
+   Settings and who's signed in), and the screens use two columns. Resizing across switches at once. */
+const WIDE_Q = window.matchMedia ? window.matchMedia("(min-width: 900px)") : null;
+const wide = () => !!(WIDE_Q && WIDE_Q.matches);
+const cols = (a, b, cls = "") => `<div class="cols ${cls}"><div class="col">${a}</div><div class="col">${b}</div></div>`;
+/* The sync pill and Settings sit in the header on a phone, and at the foot of the sidebar on a computer. */
+function placeTools() {
+  const tools = document.querySelector(".header-tools"), foot = document.getElementById("navFoot");
+  if (!tools || !foot) return;
+  const home = wide() ? foot.querySelector(".nav-tools") : document.querySelector(".header-row");
+  if (home && tools.parentElement !== home) home.appendChild(tools);
+}
+if (WIDE_Q) {
+  const flip = () => { placeTools(); LENS.x = null; if (!TD && !DRAG) render(); };
+  if (WIDE_Q.addEventListener) WIDE_Q.addEventListener("change", flip); else if (WIDE_Q.addListener) WIDE_Q.addListener(flip);
+}
+
 /* ============ views ============ */
 // Each screen's renderer is looked up when it's drawn, so the screen files can load after this one.
 const VIEWS = {
@@ -154,7 +172,7 @@ function render() {
   document.getElementById("main").innerHTML = v.render();
   restoreDraft();
   if (VIEW === "checkins" && CHECKIN_OPEN) ckPaint(false); // the card it was on, without a slide
-  if (VIEW === "calendar") calPaint(false); // the week and day it was on
+  if (VIEW === "calendar" || (VIEW === "today" && wide())) calPaint(false); // the week and day it was on
   document.querySelectorAll("#main .meal input").forEach(mealLinks);
   document.getElementById("main").addEventListener("input", saveDraft);
   if (ENTER) {
@@ -183,10 +201,20 @@ const LENS = { x: null, w: 0, raf: 0, until: 0 };
 function drawNav() {
   const nav = document.getElementById("nav");
   if (!nav.childElementCount) {
-    nav.innerHTML = `<span class="nav-lens" aria-hidden="true"></span>` + Object.keys(VIEWS).map(k => `<button type="button" data-view="${k}" aria-label="${VIEWS[k].label}" onclick="go('${k}')">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${VIEWS[k].icon}"/></svg><span class="lbl" aria-hidden="true">${VIEWS[k].label}</span></button>`).join("");
+    // The head and foot only show in the sidebar (on a computer).
+    nav.innerHTML = `<div class="nav-head" aria-hidden="true">Harper<br>Family Hub</div>
+      <div class="nav-tabs"><span class="nav-lens" aria-hidden="true"></span>` + Object.keys(VIEWS).map(k => `<button type="button" data-view="${k}" aria-label="${VIEWS[k].label}" onclick="go('${k}')">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${VIEWS[k].icon}"/></svg><span class="lbl" aria-hidden="true">${VIEWS[k].label}</span></button>`).join("") + `</div>
+      <div class="nav-foot" id="navFoot">
+        <button type="button" class="nav-new" onclick="openTaskPanel()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New task</button>
+        <div class="nav-tools"></div>
+        <div class="nav-me" id="navMe"></div>
+      </div>`;
+    placeTools();
   }
-  nav.querySelectorAll("button").forEach(b => {
+  const me = document.getElementById("navMe");
+  if (me) me.innerHTML = cfg.signedIn ? `${chip(cfg.user)}<span>Signed in as <b>${esc(cfg.user)}</b></span>` : "";
+  nav.querySelectorAll("button[data-view]").forEach(b => {
     const on = b.dataset.view === VIEW;
     b.classList.toggle("active", on);
     if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
@@ -197,11 +225,13 @@ function drawNav() {
 function glideLens(now) {
   const nav = document.getElementById("nav"), lens = nav.querySelector(".nav-lens"), b = nav.querySelector("button.active");
   if (!lens || !b) { LENS.raf = 0; return; }
-  const x = b.offsetLeft, w = b.offsetWidth, snap = LENS.x === null || calm();
+  // Along the bar on a phone; down the sidebar on a computer.
+  const down = wide(), x = down ? b.offsetTop : b.offsetLeft, w = down ? b.offsetHeight : b.offsetWidth, snap = LENS.x === null || calm();
   LENS.x = snap ? x : LENS.x + (x - LENS.x) * 0.22;
   LENS.w = snap ? w : LENS.w + (w - LENS.w) * 0.22;
-  lens.style.transform = `translateX(${LENS.x.toFixed(2)}px)`;
-  lens.style.width = LENS.w.toFixed(2) + "px";
+  lens.style.transform = down ? `translateY(${LENS.x.toFixed(2)}px)` : `translateX(${LENS.x.toFixed(2)}px)`;
+  lens.style.width = down ? "" : LENS.w.toFixed(2) + "px";
+  lens.style.height = down ? LENS.w.toFixed(2) + "px" : "";
   const settled = Math.abs(x - LENS.x) < 0.3 && Math.abs(w - LENS.w) < 0.3;
   LENS.raf = settled && now > LENS.until ? 0 : requestAnimationFrame(glideLens);
 }

@@ -228,7 +228,8 @@ function renderRecipe(id) {
       : `<div class="rloading" role="status"><span class="spin" aria-hidden="true"></span>Reading the recipe…</div>`;
     return h;
   }
-  h += ingredientsHtml(id, b);
+  const left = h; // on a computer, the ingredients, steps and notes go beside the photo and details
+  h = ingredientsHtml(id, b);
   if (hasSteps) {
     h += `<h2>Steps</h2><ol class="rsteps">`;
     let n = 0;
@@ -246,7 +247,7 @@ function renderRecipe(id) {
     h += `<h2>From the page</h2><div class="rraw">${b.raw.map(x => (x.h ? `<h3 class="rsub">${esc(x.h)}</h3>` : `<p>${x.list ? "• " : ""}${esc(x.t)}</p>`)).join("")}</div>
       <p class="tiny">This page doesn't use the usual Ingredients and Steps headings, so it's shown as written.</p>`;
   }
-  return h;
+  return wide() ? cols(left, h, "recipe-cols") : left + h;
 }
 function backToRecipes() {
   return `<button type="button" class="backlink" onclick="closeRecipe()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Recipes</button>`;

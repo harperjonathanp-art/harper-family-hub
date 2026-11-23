@@ -197,9 +197,11 @@ function renderTasks() {
     ? `<h2 class="${warn ? "warn" : ""}">${name}<span class="hint">${open(ts, rs) ? open(ts, rs) + " open" : "all done"}</span></h2>
        <div class="block">${mixRows(ts, rs).join("")}</div>` : "";
   h += remStale();
+  if (wide()) h += `<div class="cols tasks-cols"><div class="col">`; // on a computer: what's dated, beside what isn't
   h += sec("Overdue", overdue, rOver, true) + sec("Today", todays, rToday) + sec("This week", soon, rSoon);
   const nLater = later.length + rLater.length;
   if (nLater) h += `<details class="later" data-sec="later" ontoggle="secToggle(this)" ${REM.open.has("later") ? "open" : ""}><summary>Later · ${nLater} task${nLater > 1 ? "s" : ""}</summary><div class="block">${mixRows(later, rLater).join("")}</div></details>`;
+  if (wide()) h += `</div><div class="col">`;
   h += sec("Anytime", anytime, []);
   // The Sheet's own daily/weekly/monthly lists, which reset on a schedule and keep no date
   const routines = RECURS.filter(r => r !== "once").map(r => [r, pool.filter(t => t.recurrence === r && !shown.has(t.id)).sort(cmpTask)]).filter(([, g]) => g.length);
@@ -209,6 +211,7 @@ function renderTasks() {
     routines.forEach(([r, g]) => { h += `<div class="subhead">${RECUR_LABEL[r]} · ${resets[r]}</div><div class="block">${g.map(taskRow).join("")}</div>`; });
   }
   h += rems.length ? renderUndatedReminders(rems.filter(r => !r.due)) : "";
+  if (wide()) h += `</div></div>`;
   if (!tops().length && !reminderTops().length) h += `<div class="block"><div class="empty">No tasks yet. Tap + to add the first one.</div></div>`;
   else if (!pool.length && !rems.length) h += `<div class="block"><div class="empty">Nothing for ${f === "kids" ? "the kids" : esc(f)} right now.</div></div>`;
   h += `<p class="tiny tasks-help">Tap a task to edit it. Swipe right to tick it off, or left to move or delete it. Press and hold to drag it into a new spot, or onto another task to tuck it under.</p>`;
@@ -636,7 +639,8 @@ function closeSwipe(except) {
 }
 function rowDown(e, id) {
   if ((e.button && e.button > 0) || TD || DRAG || panelUp()) return;
-  if (e.pointerType === "mouse" && e.target.closest("input, button")) return; // a click on a control is a click
+  // A click on a control is a click; but the task's title can be held to drag it, or pulled sideways, with a mouse too.
+  if (e.pointerType === "mouse" && e.target.closest("input, button") && !e.target.closest(".tedit")) return;
   const el = e.currentTarget;
   closeSwipe(el);
   Object.assign(SWIPE, { id, el, x0: e.clientX, y0: e.clientY, lx: e.clientX, ly: e.clientY, dx: 0, mode: null, pid: e.pointerId });
@@ -667,6 +671,7 @@ function rowMove(e) {
 }
 function rowUp() {
   clearTimeout(SWIPE.hold);
+  if (SWIPE.mode || TD) SWIPE.quiet = Date.now(); // the click that ends a drag or swipe isn't a tap on the title
   if (TD) { rowRelease(); tdEnd(false); return; }
   if (SWIPE.mode === "swipe") {
     const { id, el, dx } = SWIPE;
@@ -700,6 +705,11 @@ function rowHold() {
 }
 /* While a row is being swiped or dragged, the page doesn't scroll under the finger. */
 document.addEventListener("touchmove", e => { if (TD || SWIPE.mode === "swipe") e.preventDefault(); }, { passive: false });
+document.addEventListener("click", e => {
+  if (SWIPE.quiet && Date.now() - SWIPE.quiet < 400 && e.target.closest && e.target.closest(".task-in")) {
+    e.preventDefault(); e.stopPropagation(); SWIPE.quiet = 0;
+  }
+}, true);
 /* A tap anywhere but an open row closes it. */
 document.addEventListener("pointerdown", e => {
   if (!e.target.closest || !e.target.closest('.task-in[data-open="1"], .swipe-under')) closeSwipe();

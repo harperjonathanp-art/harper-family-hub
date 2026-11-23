@@ -29,6 +29,15 @@ Motion follows one rule: only what someone does moves (switching screens, tickin
 adding, deleting, opening a panel). The refresh every minute, a drag in progress
 and typing never animate, and the phone's Reduce Motion setting turns it all off.
 
+## Phones and computers
+
+One page for both. Wider than 900 px (`wide()` in `js/shell.js`, and the
+`@media (min-width: 900px)` block at the end of `css/app.css`), the tab bar
+becomes a sidebar (with New task, the sync pill, Settings and who's signed
+in), Today, Tasks, Dinner, Calendar and a recipe page use two columns, and
+panels open as windows in the middle. Resizing across 900 px switches at once.
+The sections come first for the keyboard, after a "Skip to content" link.
+
 ## Release numbers
 
 Every file link in `index.html` ends in `?v=<release>`. Raise it whenever any
