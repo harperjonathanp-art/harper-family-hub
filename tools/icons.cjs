@@ -1,38 +1,25 @@
-// Draws the Hub's icons and link-preview image in the Fridge Door look, from one design.
+// Draws the Hub's icons and link-preview image, from one design.
 //   node tools/icons.cjs [out-dir]     (default: icons)
-// A note stuck to the fridge door, marked with an H, held by Maggie's magnet, with Jon's
-// and Heidi's beside it. Every size the app uses is drawn from the same SVG with Playwright.
+// The Evergreen icon from the redesign mock-ups: a home with a heart in it, cream on the Hub's
+// green. Every size the app uses is drawn from the same SVG with Playwright.
 "use strict";
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
 
 const OUT = path.resolve(process.argv[2] || path.join(__dirname, "..", "icons"));
-const C = { door: "#1f7a52", doorDeep: "#17603f", note: "#f3f0e8", ink: "#1b1b1f", jon: "#2f5fcc", maggie: "#c8461f", heidi: "#f0b429" };
+const C = { green: "#2F5D46", cream: "#F2EFE4", ink: "#1b1b1f", jon: "#2f5fcc", maggie: "#c8461f", clayton: "#1f7a52", heidi: "#f0b429" };
 
-/* A magnet: a shadow, the disc, and a soft shine. */
-const magnet = (x, y, r, fill) => `
-  <circle cx="${x + r * 0.08}" cy="${y + r * 0.22}" r="${r}" fill="#000" opacity=".22"/>
-  <circle cx="${x}" cy="${y}" r="${r}" fill="${fill}"/>
-  <circle cx="${x - r * 0.32}" cy="${y - r * 0.34}" r="${r * 0.34}" fill="#fff" opacity=".32"/>`;
-
-/* The picture on a 512 square. `round`: rounded corners (a favicon); `inset`: how far in it's drawn (the maskable icon's safe zone). */
+/* The picture on a 512 square. `round`: rounded corners (a favicon); `inset`: how far in it's drawn
+   (the maskable icon's safe zone); `small`: a heavier line, so it still reads at 32 px. */
 function art({ round = 0, inset = 1, small = false } = {}) {
-  const s = inset, t = (1 - s) * 256;
-  const extra = small ? "" : magnet(388, 382, 30, C.jon) + magnet(118, 136, 24, C.heidi);
+  // The mock-up: a 50 px drawing (24-unit grid, 1.6 lines) in an 84 px tile.
+  const size = 512 * (small ? 56 : 50) / 84, k = (size / 24) * inset, o = (512 - 24 * k) / 2;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs><linearGradient id="door" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${C.door}"/><stop offset="1" stop-color="${C.doorDeep}"/></linearGradient></defs>
-  <rect width="512" height="512" rx="${round}" fill="url(#door)"/>
-  <g transform="translate(${t} ${t}) scale(${s})">
-    <g transform="rotate(-6 256 270)">
-      <rect x="140" y="138" width="232" height="262" rx="20" fill="#000" opacity=".2" transform="translate(4 12)"/>
-      <rect x="140" y="138" width="232" height="262" rx="20" fill="${C.note}"/>
-      <rect x="190" y="208" width="44" height="146" rx="6" fill="${C.ink}"/>
-      <rect x="278" y="208" width="44" height="146" rx="6" fill="${C.ink}"/>
-      <rect x="190" y="262" width="132" height="38" fill="${C.ink}"/>
-    </g>
-    ${magnet(252, 150, small ? 40 : 34, C.maggie)}
-    ${extra}
+  <rect width="512" height="512" rx="${round}" fill="${C.green}"/>
+  <g transform="translate(${o.toFixed(2)} ${o.toFixed(2)}) scale(${k.toFixed(4)})" stroke="${C.cream}" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.5 11L12 4l8.5 7M6 9.5V20h12V9.5" fill="none" stroke-width="${small ? 2.3 : 1.6}"/>
+    <path d="M12 17.2s-3-1.8-3-3.7c0-1 .8-1.7 1.6-1.7.6 0 1.1.3 1.4.8.3-.5.8-.8 1.4-.8.8 0 1.6.7 1.6 1.7 0 1.9-3 3.7-3 3.7z" fill="${C.cream}" stroke-width="0.8"/>
   </g>
 </svg>`;
 }
@@ -51,7 +38,7 @@ const OG = svg => `<!doctype html><html><head><meta charset="utf-8">
 </style></head><body><div class="wrap">
   <div class="icon">${svg}</div>
   <div><h1>Harper<br>Family Hub</h1><p>What today asks of four people.</p>
-    <div class="dots"><span style="background:${C.jon}"></span><span style="background:${C.maggie}"></span><span style="background:${C.door}"></span><span style="background:${C.heidi}"></span></div></div>
+    <div class="dots"><span style="background:${C.jon}"></span><span style="background:${C.maggie}"></span><span style="background:${C.clayton}"></span><span style="background:${C.heidi}"></span></div></div>
 </div></body></html>`;
 
 (async () => {
