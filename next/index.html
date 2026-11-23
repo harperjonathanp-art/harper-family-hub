@@ -18,9 +18,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Every file carries the release number, so a new page never runs with an old file. -->
-<script src="js/theme.js?v=14"></script>
-<link rel="stylesheet" href="css/themes.css?v=14">
-<link rel="stylesheet" href="css/app.css?v=14">
+<script src="js/theme.js?v=15"></script>
+<link rel="stylesheet" href="css/themes.css?v=15">
+<link rel="stylesheet" href="css/app.css?v=15">
 </head>
 <body>
 
@@ -36,21 +36,28 @@
   <main id="main"></main>
 </div>
 
-<nav id="nav"></nav>
+<nav id="nav" aria-label="Sections"></nav>
 
-<div class="overlay hidden" id="overlay">
+<!-- Settings, Edit task and sign-in rise from the bottom (js/shell.js). -->
+<div class="panel-back hidden" id="panelBack" onclick="panelBackTap()"></div>
+<div class="panel hidden" id="overlay" role="dialog" aria-modal="true" aria-label="Panel" tabindex="-1">
+  <div class="panel-grab" aria-hidden="true" onpointerdown="panelGrab(event)" onpointermove="panelPull(event)"
+       onpointerup="panelLetGo()" onpointercancel="panelLetGo()"></div>
   <div class="page" id="overlayPage"></div>
 </div>
 
+<!-- Tells VoiceOver which screen just opened. -->
+<div id="srAnnounce" class="sr-only" aria-live="polite"></div>
+
 <!-- In order: data and helpers first, each screen, Settings, then the start. -->
-<script src="js/data.js?v=14" defer></script>
-<script src="js/shell.js?v=14" defer></script>
-<script src="js/today.js?v=14" defer></script>
-<script src="js/calendar.js?v=14" defer></script>
-<script src="js/dinner.js?v=14" defer></script>
-<script src="js/tasks.js?v=14" defer></script>
-<script src="js/checkins.js?v=14" defer></script>
-<script src="js/settings.js?v=14" defer></script>
-<script src="js/boot.js?v=14" defer></script>
+<script src="js/data.js?v=15" defer></script>
+<script src="js/shell.js?v=15" defer></script>
+<script src="js/today.js?v=15" defer></script>
+<script src="js/calendar.js?v=15" defer></script>
+<script src="js/dinner.js?v=15" defer></script>
+<script src="js/tasks.js?v=15" defer></script>
+<script src="js/checkins.js?v=15" defer></script>
+<script src="js/settings.js?v=15" defer></script>
+<script src="js/boot.js?v=15" defer></script>
 </body>
 </html>

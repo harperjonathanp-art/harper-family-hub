@@ -17,7 +17,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   line-height: 1.45;
-  padding: var(--space-4) var(--space-4) calc(76px + env(safe-area-inset-bottom));
+  padding: var(--space-4) var(--space-4) calc(100px + env(safe-area-inset-bottom));
 }
 .page { max-width: 640px; margin: 0 auto; }
 
@@ -186,7 +186,6 @@ label.f {
   display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
 }
 
-.task input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); flex: 0 0 20px; cursor: pointer; }
 .task .ttl { flex: 1; min-width: 0; font-size: 16px; line-height: 22px; font-weight: 500; }
 .task.done .ttl { text-decoration: line-through; color: var(--faint); }
 .task.done .ttl .tiny { text-decoration: none; }
@@ -352,33 +351,109 @@ details.subs.tsubs .task.sub { padding: var(--space-2) 0; }
   margin-top: var(--space-4); margin-bottom: var(--space-1);
 }
 
-/* ---------- bottom nav: the thumb index ---------- */
+/* ---------- the floating tab bar ---------- */
 nav {
-  position: fixed; left: 0; right: 0; bottom: 0;
-  background: var(--card);
-  box-shadow: var(--shadow-bar);
-  display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-1);
-  padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom));
-  z-index: 20;
+  position: fixed; z-index: 20; left: 0; right: 0; margin: 0 auto;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  width: calc(100% - 28px); max-width: 460px; height: 64px; box-sizing: border-box;
+  padding: 0 7px; border-radius: 32px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--nav-bg); box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+  view-transition-name: tabbar;
 }
 nav button {
-  background: none; border: none; cursor: pointer;
-  font-family: var(--font-ui); font-size: 12.5px; line-height: 17px; font-weight: 500;
-  color: var(--muted);
+  height: 50px; min-width: 48px; padding: 0 13px; border: 0; border-radius: 25px;
   display: flex; align-items: center; justify-content: center;
-  min-height: 44px; padding: var(--space-2) var(--space-1);
-  border-radius: var(--radius-md);
+  background: transparent; color: var(--nav-muted); cursor: pointer;
+  font: 700 14px/1 var(--font-ui);
+  transition: background-color .3s ease, color .3s ease, padding .34s cubic-bezier(.22,.8,.24,1);
 }
-nav button.active { color: var(--accent); background: var(--accent-tint); font-weight: 600; }
+nav button svg {
+  flex: none; width: 22px; height: 22px;
+  fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round;
+}
+nav button .lbl {
+  display: block; max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap;
+  transition: max-width .34s cubic-bezier(.22,.8,.24,1), opacity .22s ease, padding .34s cubic-bezier(.22,.8,.24,1);
+}
+nav button.active { background: var(--nav-active-bg); color: var(--nav-active-ink); padding: 0 16px; }
+nav button.active .lbl { max-width: 96px; opacity: 1; padding-left: 7px; }
+nav button:focus-visible { outline: 2px solid var(--nav-active-bg); outline-offset: 2px; }
 
-/* ---------- overlay ---------- */
-.overlay {
-  position: fixed; inset: 0; z-index: 30;
-  background: var(--bg);
-  overflow-y: auto;
-  padding: var(--space-5) var(--space-4) calc(var(--space-7) + env(safe-area-inset-bottom));
+/* ---------- the panel that rises from the bottom ---------- */
+.panel-back {
+  position: fixed; inset: 0; z-index: 29; background: rgba(0,0,0,0.45);
+  opacity: 0; transition: opacity .32s ease;
 }
+.panel-back.open { opacity: 1; }
+.panel {
+  position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; margin: 0 auto;
+  max-width: 640px; max-height: calc(100dvh - 28px - env(safe-area-inset-top));
+  overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box;
+  background: var(--bg); border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: 0 -10px 40px rgba(0,0,0,0.22);
+  padding: 0 var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom));
+  transform: translateY(105%); transition: transform .42s cubic-bezier(.22,.8,.24,1);
+}
+.panel:focus { outline: none; }
+.panel.open { transform: none; }
+.panel.dragging { transition: none; }
+.panel-grab {
+  position: sticky; top: 0; z-index: 1; height: 30px; margin: 0 calc(var(--space-4) * -1) var(--space-2);
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg); cursor: grab; touch-action: none;
+}
+.panel-grab::before { content: ""; width: 40px; height: 5px; border-radius: 5px; background: var(--line-strong); }
+/* sign-in on a new device: the whole screen, and it can't be swiped away */
+.panel.locked { top: 0; max-height: none; border-radius: 0; padding-top: calc(var(--space-5) + env(safe-area-inset-top)); }
+.panel.locked .panel-grab { display: none; }
+html.panel-open, html.panel-open body { overflow: hidden; }
 .hidden { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- checkboxes: drawn by the theme, and the tick pops ---------- */
+.task input[type=checkbox] {
+  -webkit-appearance: none; appearance: none; margin: 0;
+  width: 22px; height: 22px; flex: 0 0 22px; border-radius: var(--check-radius);
+  border: 2px solid var(--line-strong); background-color: var(--card);
+  background-image: var(--check-img); background-repeat: no-repeat; background-position: center; background-size: 0%;
+  cursor: pointer;
+  transition: background-color .18s ease, border-color .18s ease, background-size .3s cubic-bezier(.34,1.56,.64,1);
+}
+.task input[type=checkbox]:checked { background-color: var(--accent); border-color: var(--accent); background-size: 72%; }
+.task input[type=checkbox].pop:checked { animation: tick-pop .34s cubic-bezier(.34,1.56,.64,1); }
+@keyframes tick-pop { from { background-size: 0%; transform: scale(.85); } }
+.task .ttl { transition: color .2s ease; }
+
+/* ---------- rows arriving and leaving ---------- */
+.enter { animation: row-in .42s cubic-bezier(.22,.8,.24,1) both; }
+@keyframes row-in { from { opacity: 0; transform: translateY(-8px); } }
+.leaving {
+  height: 0 !important; min-height: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important;
+  opacity: 0; overflow: hidden; border-bottom-color: transparent !important;
+  transition: height .24s ease, padding .24s ease, opacity .16s ease;
+}
+
+/* ---------- switching screens: a slide toward the tab you tapped ---------- */
+#app { view-transition-name: screen; }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+::view-transition-old(tabbar) { display: none; }
+::view-transition-new(tabbar) { animation: none; }
+::view-transition-group(screen) { animation: none; }
+::view-transition-old(screen) { animation: screen-out-left .28s cubic-bezier(.4,0,1,1) both; }
+::view-transition-new(screen) { animation: screen-in-right .38s cubic-bezier(.22,.8,.24,1) both; }
+:root[data-nav="back"]::view-transition-old(screen) { animation-name: screen-out-right; }
+:root[data-nav="back"]::view-transition-new(screen) { animation-name: screen-in-left; }
+@keyframes screen-out-left { to { transform: translateX(-22%); opacity: 0; } }
+@keyframes screen-out-right { to { transform: translateX(22%); opacity: 0; } }
+@keyframes screen-in-right { from { transform: translateX(22%); opacity: 0; } }
+@keyframes screen-in-left { from { transform: translateX(-22%); opacity: 0; } }
+
+/* ---------- Reduce Motion: nothing moves ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
 
 /* ---------- Look & feel (Settings) ---------- */
 .themecards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-2); }
