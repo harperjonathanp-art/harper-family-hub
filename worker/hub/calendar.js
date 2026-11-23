@@ -119,6 +119,11 @@ export function shape(cal, item, calendarZone) {
   const end = allDay ? dayStart(item.end.date, item.end.timeZone || calendarZone || TZ) : new Date(item.end.dateTime);
   if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
   const date = allDay ? item.start.date : local(start).iso;
+  // The last day it's on, so an event over several days shows on each of them. An all-day event's end
+  // is the day after its last; a timed one that ends at midnight is over by the end of the day before.
+  const til = local(end);
+  let endDate = allDay ? isoAdd(item.end.date, -1) : til.hhmm === "00:00" && end > start ? isoAdd(til.iso, -1) : til.iso;
+  if (endDate < date) endDate = date;
   return {
     cal: cal.name,
     color: cal.color,
@@ -126,7 +131,8 @@ export function shape(cal, item, calendarZone) {
     allDay: allDay,
     date: date,
     start: local(start).time12,
-    end: local(end).time12,
+    end: til.time12,
+    endDate: endDate,
     sort: (allDay ? dayStart(date) : start).getTime(),
   };
 }

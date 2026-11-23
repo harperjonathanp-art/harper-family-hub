@@ -39,11 +39,43 @@ function chip(name) {
   const initial = (name || "?").slice(0, 1);
   return name ? `<span class="chip ${esc(name)}" title="${esc(name)}">${initial}</span>` : "";
 }
-function eventRow(e, past) {
-  const time = e.allDay ? "All day" : e.start;
-  return `<div class="ev${past === true ? " past" : ""}"><span class="dot" style="background:${esc(e.color)}"></span>
+/* ----- calendar events ----- */
+// Each calendar in its person's color (the same as their chip on Today and Tasks); any other
+// calendar keeps the color Google gives it.
+const CAL_COLORS = { Jon: "--p-jon", Maggie: "--p-maggie", Family: "--p-family", Clayton: "--p-clayton", Heidi: "--p-heidi", MCHS: "--gold" };
+const CAL_ORDER = ["Jon", "Maggie", "Clayton", "Heidi", "Family", "MCHS"];
+function calColor(cal, fallback) { return CAL_COLORS[cal] ? `var(${CAL_COLORS[cal]})` : esc(fallback || "var(--faint)"); }
+// The last day an event is on (endDate comes from the Worker; until a phone has fresh data, it's the start day)
+function lastDay(e) { return e.endDate && e.endDate > e.date ? e.endDate : e.date; }
+function onDay(e, d) { return e.date <= d && d <= lastDay(e); }
+function weekdayShort(iso) { return new Date(iso + "T12:00:00").toLocaleDateString([], { weekday: "short" }); }
+function shortDate(iso) { return new Date(iso + "T12:00:00").toLocaleDateString([], { month: "short", day: "numeric" }); }
+function minutesOf(s) {
+  const m = /^(\d{1,2}):(\d{2})\s*([AP]M)$/i.exec(s || "");
+  return m ? (Number(m[1]) % 12 + (/p/i.test(m[3]) ? 12 : 0)) * 60 + Number(m[2]) : 0;
+}
+/* Everything on day d: all-day things (and ones carrying on from an earlier day) first, then by time. */
+function eventsOn(d) {
+  const whole = e => e.allDay || e.date < d;
+  return DATA.events.filter(e => onDay(e, d))
+    .sort((a, b) => (whole(b) - whole(a)) || (whole(a) ? 0 : minutesOf(a.start) - minutesOf(b.start)) || a.title.localeCompare(b.title));
+}
+/* Is a timed event over, on its last day, by now? (One that runs past midnight ends then.) */
+function evOver(e, d, now = new Date()) {
+  if (e.allDay || d !== todayStr() || lastDay(e) !== d) return false;
+  const s = minutesOf(e.start), f = e.end ? minutesOf(e.end) : s;
+  return (e.date !== d || f > s ? f : s) < now.getHours() * 60 + now.getMinutes();
+}
+/* One event as a row, as it looks on day d (an event over several days says how long it runs). */
+function eventRow(e, past, d) {
+  d = d || e.date;
+  const end = lastDay(e), multi = end > e.date, first = d === e.date, last = d === end;
+  const time = e.allDay || (multi && !first && !last) ? "All day" : multi && !first ? e.end : e.start;
+  let sub = e.cal;
+  if (multi) sub += " · " + (!last ? "through " + (isoPlus(d, 6) < end ? shortDate(end) : weekdayShort(end)) : e.allDay ? "last day" : "ends");
+  return `<div class="ev${past === true ? " past" : ""}"><span class="dot" style="background:${calColor(e.cal, e.color)}"></span>
     <span class="time">${esc(time)}</span>
-    <span class="etitle">${esc(e.title)}<span class="cal">${esc(e.cal)}</span></span></div>`;
+    <span class="etitle">${esc(e.title)}<span class="cal">${esc(sub)}</span></span></div>`;
 }
 const GRIP_SVG = `<svg width="12" height="18" viewBox="0 0 12 18" aria-hidden="true" fill="currentColor">
   <circle cx="3" cy="3" r="1.6"/><circle cx="9" cy="3" r="1.6"/><circle cx="3" cy="9" r="1.6"/>
@@ -122,6 +154,7 @@ function render() {
   document.getElementById("main").innerHTML = v.render();
   restoreDraft();
   if (VIEW === "checkins" && CHECKIN_OPEN) ckPaint(false); // the card it was on, without a slide
+  if (VIEW === "calendar") calPaint(false); // the week and day it was on
   document.querySelectorAll("#main .meal input").forEach(mealLinks);
   document.getElementById("main").addEventListener("input", saveDraft);
   if (ENTER) {
@@ -272,7 +305,7 @@ function pullReset() {
 document.addEventListener("touchstart", e => {
   PULL.y0 = null;
   if (PULL.busy || window.scrollY > 0 || e.touches.length !== 1 || panelUp() || TD || DRAG || !cfg.signedIn) return;
-  if (e.target.closest && e.target.closest("input, textarea, select, .grip, nav")) return;
+  if (e.target.closest && e.target.closest("input, textarea, select, .grip, nav, .wk-deck")) return;
   PULL.y0 = e.touches[0].clientY;
 }, { passive: true });
 document.addEventListener("touchmove", e => {

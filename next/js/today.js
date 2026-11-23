@@ -40,9 +40,10 @@ function tonightsDinner() {
   return { text: m.meal || "", note: m.note || "", parts: mealParts(m.meal) };
 }
 function daySentence(now = new Date()) {
-  const t = todayStr(), evs = DATA.events.filter(e => e.date === t);
-  const allDay = [...new Set(evs.filter(e => e.allDay).map(e => e.title.trim()))]; // the same title from two calendars, once
-  const left = evs.filter(e => !e.allDay).map(e => ({ e, ...evWhen(e) }))
+  const t = todayStr(), evs = DATA.events.filter(e => onDay(e, t));
+  // all day, or carrying on from an earlier day; the same title from two calendars, once
+  const allDay = [...new Set(evs.filter(e => e.allDay || e.date < t).map(e => e.title.trim()))];
+  const left = evs.filter(e => !e.allDay && e.date === t).map(e => ({ e, ...evWhen(e) }))
     .filter(x => x.start && (x.end ? x.end > now : x.start > now)).sort((a, b) => a.start - b.start);
   const bits = left.slice(0, 2).map(x => x.start <= now && x.end
     ? `${x.e.title} until ${clock(x.e.end)}` : `${x.e.title} at ${clock(x.e.start)}`);
@@ -50,7 +51,7 @@ function daySentence(now = new Date()) {
   const dinner = tonightsDinner().parts.name;
   let s;
   if (bits.length) s = listJoin(bits) + (dinner ? `, then ${dinner} for dinner.` : ".");
-  else if (evs.some(e => !e.allDay)) s = "Nothing else on the calendar today" + (dinner ? `, and it's ${dinner} for dinner.` : ".");
+  else if (evs.some(e => !e.allDay && e.date === t)) s = "Nothing else on the calendar today" + (dinner ? `, and it's ${dinner} for dinner.` : ".");
   else s = "A clear calendar today" + (dinner ? `, and it's ${dinner} for dinner.` : ".");
   if (!dinner) s += " Dinner isn't planned yet.";
   if (allDay.length) s = `${listJoin(allDay)} today. ${s}`;
@@ -179,9 +180,9 @@ function renderToday() {
   if (any) h += `<div class="block">${mixRows(plate, rems).join("")}</div>`;
 
   // The whole day, with what's over dimmed
-  const todays = DATA.events.filter(e => e.date === t);
+  const todays = eventsOn(t);
   h += `<h2>Today's schedule</h2>`;
-  h += todays.length ? `<div class="block">${todays.map(e => { const w = evWhen(e); return eventRow(e, !e.allDay && (w.end || w.start) < now); }).join("")}</div>`
+  h += todays.length ? `<div class="block">${todays.map(e => eventRow(e, evOver(e, t, now), t)).join("")}</div>`
                      : `<div class="block"><div class="empty">Nothing on the calendar today.</div></div>`;
   if (onDeck.length) h += `<h2>On deck this period</h2><div class="block">${onDeck.map(taskRow).join("")}</div>`;
   return h;
