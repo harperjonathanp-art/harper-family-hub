@@ -144,11 +144,13 @@ function render() {
   document.documentElement.dataset.view = VIEW; // the + button shows on Tasks
   drawNav();
 }
-/* The tab bar is drawn once and then only marked, so the active pill can glide between tabs. */
+/* The tab bar is drawn once and then only marked. Behind the tabs a single glass lens glides to the
+   open one, following it as its label opens up (each frame it closes part of the gap, so it eases in). */
+const LENS = { x: null, w: 0, raf: 0, until: 0 };
 function drawNav() {
   const nav = document.getElementById("nav");
   if (!nav.childElementCount) {
-    nav.innerHTML = Object.keys(VIEWS).map(k => `<button type="button" data-view="${k}" aria-label="${VIEWS[k].label}" onclick="go('${k}')">
+    nav.innerHTML = `<span class="nav-lens" aria-hidden="true"></span>` + Object.keys(VIEWS).map(k => `<button type="button" data-view="${k}" aria-label="${VIEWS[k].label}" onclick="go('${k}')">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${VIEWS[k].icon}"/></svg><span class="lbl" aria-hidden="true">${VIEWS[k].label}</span></button>`).join("");
   }
   nav.querySelectorAll("button").forEach(b => {
@@ -156,7 +158,21 @@ function drawNav() {
     b.classList.toggle("active", on);
     if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
   });
+  LENS.until = performance.now() + 600;
+  if (!LENS.raf) LENS.raf = requestAnimationFrame(glideLens);
 }
+function glideLens(now) {
+  const nav = document.getElementById("nav"), lens = nav.querySelector(".nav-lens"), b = nav.querySelector("button.active");
+  if (!lens || !b) { LENS.raf = 0; return; }
+  const x = b.offsetLeft, w = b.offsetWidth, snap = LENS.x === null || calm();
+  LENS.x = snap ? x : LENS.x + (x - LENS.x) * 0.22;
+  LENS.w = snap ? w : LENS.w + (w - LENS.w) * 0.22;
+  lens.style.transform = `translateX(${LENS.x.toFixed(2)}px)`;
+  lens.style.width = LENS.w.toFixed(2) + "px";
+  const settled = Math.abs(x - LENS.x) < 0.3 && Math.abs(w - LENS.w) < 0.3;
+  LENS.raf = settled && now > LENS.until ? 0 : requestAnimationFrame(glideLens);
+}
+window.addEventListener("resize", () => { LENS.x = null; drawNav(); });
 function go(v) {
   if (v === VIEW) { render(); window.scrollTo({ top: 0, behavior: calm() ? "auto" : "smooth" }); return; }
   const order = Object.keys(VIEWS);

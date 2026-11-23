@@ -37,10 +37,12 @@ header { margin-bottom: var(--space-5); }
 h1 { font-family: var(--font-display); font-size: 34px; line-height: 1.05; font-weight: var(--display-weight); letter-spacing: -0.02em; margin-top: var(--space-3); text-wrap: balance; }
 .subtitle { color: var(--muted); font-size: 12.5px; line-height: 17px; margin-top: var(--space-2); }
 .icon-btn {
-  border: 1px solid var(--line-strong); background: none; color: var(--muted);
-  min-width: 44px; min-height: 44px;
-  border-radius: var(--radius-md); font-size: 16px; cursor: pointer;
+  width: 44px; height: 44px; min-width: 44px; flex: none; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); border-radius: 50%; background: var(--card); color: var(--ink);
+  font-size: 16px; cursor: pointer;
 }
+.icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 /* ---------- section heads ---------- */
 h2 {
   font-size: 11px; line-height: 12px; font-weight: 700; letter-spacing: 0.11em;
@@ -344,22 +346,41 @@ details.subs.tsubs .task.sub { padding: var(--space-2) 0; }
   margin-top: var(--space-4); margin-bottom: var(--space-1);
 }
 
-/* ---------- the floating tab bar ---------- */
+/* ---------- the floating tab bar, in glass ----------
+   Translucent: what scrolls under it shows through, blurred and a little brighter, with a bright rim
+   along the top and a soft shadow beneath. A single glass lens (js/shell.js) glides to the open tab.
+   (Apple's glass also bends what's behind it like a lens; Safari can't do that on a web page.) */
 nav {
   position: fixed; z-index: 20; left: 0; right: 0; margin: 0 auto;
   bottom: calc(12px + env(safe-area-inset-bottom));
   width: calc(100% - 28px); max-width: 460px; height: 64px; box-sizing: border-box;
   padding: 0 7px; border-radius: 32px;
   display: flex; align-items: center; justify-content: space-between;
-  background: var(--nav-bg); box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+  background: var(--glass); border: 1px solid var(--glass-rim);
+  -webkit-backdrop-filter: blur(22px) saturate(1.8); backdrop-filter: blur(22px) saturate(1.8);
+  box-shadow: inset 0 1px 1px var(--glass-shine), inset 0 -1px 1px rgba(0,0,0,0.05),
+              0 12px 32px rgba(0,0,0,0.16), 0 2px 6px rgba(0,0,0,0.08);
   view-transition-name: tabbar;
 }
+nav::before { /* the sheen across the top of the glass */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(180deg, var(--glass-shine) 0%, transparent 48%); opacity: .55;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  nav { background: var(--card); } /* no blur to be had: solid, so the icons stay readable */
+}
+.nav-lens {
+  position: absolute; left: 0; top: 7px; height: 50px; width: 0; border-radius: 25px; pointer-events: none;
+  background: var(--lens); border: 1px solid var(--glass-rim);
+  box-shadow: inset 0 1px 1px var(--glass-shine), 0 2px 10px rgba(0,0,0,0.12);
+}
 nav button {
+  position: relative; z-index: 1; /* over the lens */
   height: 50px; min-width: 48px; padding: 0 13px; border: 0; border-radius: 25px;
   display: flex; align-items: center; justify-content: center;
-  background: transparent; color: var(--nav-muted); cursor: pointer;
+  background: transparent; color: var(--muted); cursor: pointer;
   font: 700 14px/1 var(--font-ui);
-  transition: background-color .3s ease, color .3s ease, padding .34s cubic-bezier(.22,.8,.24,1);
+  transition: color .3s ease, padding .34s cubic-bezier(.22,.8,.24,1);
 }
 nav button svg {
   flex: none; width: 22px; height: 22px;
@@ -369,9 +390,18 @@ nav button .lbl {
   display: block; max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap;
   transition: max-width .34s cubic-bezier(.22,.8,.24,1), opacity .22s ease, padding .34s cubic-bezier(.22,.8,.24,1);
 }
-nav button.active { background: var(--nav-active-bg); color: var(--nav-active-ink); padding: 0 16px; }
+nav button.active { color: var(--ink); padding: 0 16px; }
 nav button.active .lbl { max-width: 96px; opacity: 1; padding-left: 7px; }
-nav button:focus-visible { outline: 2px solid var(--nav-active-bg); outline-offset: 2px; }
+nav button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* the glass, light and dark: tinted with the theme's own page color */
+:root[data-scheme="light"] {
+  --glass: color-mix(in srgb, var(--bg) 58%, transparent); --lens: color-mix(in srgb, var(--card) 82%, transparent);
+  --glass-rim: rgba(255,255,255,0.55); --glass-shine: rgba(255,255,255,0.75);
+}
+:root[data-scheme="dark"] {
+  --glass: color-mix(in srgb, var(--card) 55%, transparent); --lens: rgba(255,255,255,0.13);
+  --glass-rim: rgba(255,255,255,0.14); --glass-shine: rgba(255,255,255,0.20);
+}
 
 /* ---------- the panel that rises from the bottom ---------- */
 .panel-back {

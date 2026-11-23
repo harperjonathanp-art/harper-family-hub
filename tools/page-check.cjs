@@ -95,7 +95,6 @@ const PAIRS = [
   ["crit", "bg"], ["crit", "card"], ["warn", "bg"], ["warn", "card"], ["ok", "bg"], ["ok", "card"],
   ["p-jon-ink", "p-jon"], ["p-maggie-ink", "p-maggie"], ["p-clayton-ink", "p-clayton"],
   ["p-heidi-ink", "p-heidi"], ["p-family-ink", "p-family"],
-  ["nav-active-ink", "nav-active-bg"], ["nav-muted", "nav-bg", 3], // resting tab icons: 3:1, as for any icon
   ["warm", "bg"], ["warm", "card"], ["cool", "card"], ["gold", "card"], ["card", "crit"], // the swipe's Delete
   ["ink", "warm-tint"], ["ink", "cool-tint"], ["ink", "gold-tint"], ["ink", "accent-tint"], // check-in cards
 ];
