@@ -80,6 +80,7 @@ async function refresh(quiet, asked) {
              reminders: REM.show ? keepGoodReminders(d.reminders) : undefined }; // never kept on a device that hides them
     localStorage.setItem("fd_cache", JSON.stringify(DATA));
     note(asked ? "Updated just now" : "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+    if (asked && VIEW === "meals" && DINNER_TAB === "recipes") loadRecipes(true); // pulled down on Recipes: those too
     if (hasUnsavedEdits()) { note("Synced — your unsaved edits are kept"); return; }
     render();
   } catch (e) {

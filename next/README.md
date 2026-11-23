@@ -16,6 +16,7 @@ sign-in and data as the live Hub, so a signed-in phone can open it straight away
 | `js/data.js` | Who's signed in, talking to the Worker, drafts |
 | `js/shell.js` | Shared helpers, the screen list and floating tab bar, sliding between screens, row and tick motion, and the panel that rises from the bottom |
 | `js/today.js`, `calendar.js`, `dinner.js`, `tasks.js`, `checkins.js` | One file per screen |
+| `js/recipes.js` | Recipes under Dinner: browse and search, a recipe's page, cooking a step at a time, adding to groceries |
 | `js/settings.js` | Sign-in, Settings (including Look & feel), devices, notifications |
 | `js/boot.js` | Starts the Hub; always loaded last |
 | `manifest.json` | Lets the preview be added to a home screen as its own icon |

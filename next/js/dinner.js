@@ -4,6 +4,7 @@
 /* ----- Meals ----- */
 function fromNotion() { return !!(DATA.mealsFrom && DATA.mealsFrom.source === "notion"); }
 function renderMeals() {
+  if (fromNotion() && DINNER_TAB === "recipes") return renderRecipes(); // js/recipes.js
   if (fromNotion()) return renderNotionMeals();
   const dayIdx = (new Date().getDay() + 6) % 7;
   const rows = DAYS.map((d, i) => {
@@ -40,7 +41,7 @@ function renderNotionMeals() {
       <div class="mealbody">
         ${m.meal ? `<div class="mname">${esc(parts.name || "Recipe")}</div>` : `<div class="mname none">Not planned yet</div>`}
         ${m.note ? `<div class="muted">${esc(m.note)}</div>` : ""}
-        ${recipeLinks(parts.links)}
+        ${recipeLinks(parts.links, openRecipeButtons(d))}
       </div>
     </div>`;
   }).join("");
@@ -49,7 +50,7 @@ function renderNotionMeals() {
   const status = f.error
     ? `<span class="tiny" style="color:var(--warn)">Couldn't reach Notion at the last check, so this is the last plan it sent.</span>`
     : `<span class="tiny">From the Notion meal plan${at ? `, checked ${esc(at)}` : ""}. Change it in Notion and the Hub catches up within 10 minutes.</span>`;
-  return `<div class="weekcard">${rows}</div>
+  return `${dinnerSwitch()}<div class="weekcard">${rows}</div>
     <div class="actions">${status}</div>
     ${renderGroceries()}`;
 }

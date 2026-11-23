@@ -22,9 +22,9 @@ function mealParts(text) {
   const name = String(text || "").replace(URL_RE, " ").replace(/\s+/g, " ").replace(/^[\s\-–—:|,(]+|[\s\-–—:|,(]+$/g, "");
   return { name, links };
 }
-function recipeLinks(links) {
-  if (!links.length) return "";
-  return `<div class="recipes">${links.map(u => {
+function recipeLinks(links, first = "") { // first: buttons to go before the links (a recipe to open)
+  if (!links.length && !first) return "";
+  return `<div class="recipes">${first}${links.map(u => {
     let site = u;
     try { site = new URL(u).hostname.replace(/^www\./, ""); } catch (e) {}
     return `<a class="recipe" href="${esc(u)}" target="_blank" rel="noopener">${esc(site)} ↗\uFE0E</a>`;
@@ -88,7 +88,7 @@ const VIEWS = {
     icon: "M12 8a4 4 0 1 1 0 8a4 4 0 1 1 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" },
   calendar: { label: "Calendar", title: () => "Calendar", render: () => renderCalendar(),
     icon: "M6 5h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3zM3 10h18M8 3v4M16 3v4" },
-  meals: { label: "Dinner", title: () => "This Week's Dinners", render: () => renderMeals(),
+  meals: { label: "Dinner", title: () => (DINNER_TAB === "recipes" && fromNotion() ? "Recipes" : "This Week's Dinners"), render: () => renderMeals(),
     icon: "M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 1.5-3 4-3 7h3v11" },
   tasks: { label: "Tasks", title: () => "Tasks", render: () => renderTasks(),
     icon: "M9 11l3 3 7-7M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" },
@@ -305,7 +305,7 @@ function pullReset() {
 document.addEventListener("touchstart", e => {
   PULL.y0 = null;
   if (PULL.busy || window.scrollY > 0 || e.touches.length !== 1 || panelUp() || TD || DRAG || !cfg.signedIn) return;
-  if (e.target.closest && e.target.closest("input, textarea, select, .grip, nav, .wk-deck")) return;
+  if (e.target.closest && e.target.closest("input, textarea, select, .grip, nav, .wk-deck, .cook, .chips.scroll, .rcards")) return;
   PULL.y0 = e.touches[0].clientY;
 }, { passive: true });
 document.addEventListener("touchmove", e => {

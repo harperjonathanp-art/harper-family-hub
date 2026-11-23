@@ -15,6 +15,8 @@ is `index.html`, on GitHub Pages.
 | | `hub/notify.js` | Notifications: what to send, to whom, and when |
 | | `hub/todoist.js` | Jon's Todoist tasks, read-only |
 | | `hub/notion.js` | Dinners in from Notion; check-ins out to Notion |
+| | `hub/recipes.js` | The Recipes database, read-only: `?action=recipes` (the list) and `?action=recipe&id=…` (one, with its page) |
+| `/recipe-photo` | `hub/recipes.js` | A recipe's photo, by a signed link the list gives (an `<img>` can't carry the sign-in) |
 | | `hub/calendar.js` | The next 14 days of the family's Google calendars |
 | | `hub/api.js` | The requests and the timer that tie those together |
 | | `hub/time.js` | What day and time it is at home (a Worker runs on UTC) |
@@ -58,6 +60,7 @@ one failing doesn't stop the rest.
 | every run | The calendar's events are read from Google; then whatever notifications are due are sent |
 | every 10 min | Todoist is read; the week's dinners are read from Notion |
 | every 30 min | New check-ins are copied to Notion |
+| every run | Recipes: the list is read every 6 hours, and up to 15 requests' worth of recipe pages each run (new or edited ones), so the first full read takes a few hours |
 | once a day | Ticks for days and weeks already over are set aside (kept, but no longer loaded with every request) |
 
 What gets sent, and when, is described in "Notifications" in
@@ -82,6 +85,7 @@ across deploys.
 | `NOTION_TOKEN` | Secret | The Notion integration's secret. Leave it out to plan dinners in the Hub |
 | `NOTION_MEALS_SOURCE` | Secret | The Meal Plan database's data source ID |
 | `NOTION_CHECKINS_SOURCE` | Secret | The Weekly Check-Ins database's data source ID |
+| `NOTION_RECIPES_SOURCE` | Text | Optional. The Recipes database's data source ID. Left unset, it's the database the meal plan's Recipe column links to |
 | `VAPID_SUBJECT` | Text | Optional: `mailto:` and an address push services can contact |
 | `HUB_ORIGIN` | Text | Optional. Where the Hub's page is served from, if not GitHub Pages. Only pages from here may read the Worker's answers |
 
@@ -141,6 +145,7 @@ them. To look inside: Cloudflare dashboard → **Storage & Databases → D1**.
 | `hub_tasks`, `hub_completions`, `hub_completions_old` | Tasks and their ticks; ticks for periods that are over |
 | `hub_meals`, `hub_checkins` | The week's dinners; check-ins |
 | `hub_devices`, `hub_notifyprefs` | Phones signed up for notifications; each person's notification settings |
+| `recipe_store`, `recipe_bodies`, `recipe_photos` | The recipe list as one copy, each recipe page as read (and the words its ingredients use, for search), and photos, kept a week |
 | `props` | Bookkeeping, as text by key: what notifications have gone out, the last good copy of Todoist, the calendar's events and the (encrypted) access to it, and `rev` |
 
 Two phones saving at once can't undo each other: every change carries the
