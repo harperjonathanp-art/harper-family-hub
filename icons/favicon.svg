@@ -1,24 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs><linearGradient id="door" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1f7a52"/><stop offset="1" stop-color="#17603f"/></linearGradient></defs>
-  <rect width="512" height="512" rx="112" fill="url(#door)"/>
-  <g transform="translate(0 0) scale(1)">
-    <g transform="rotate(-6 256 270)">
-      <rect x="140" y="138" width="232" height="262" rx="20" fill="#000" opacity=".2" transform="translate(4 12)"/>
-      <rect x="140" y="138" width="232" height="262" rx="20" fill="#f3f0e8"/>
-      <rect x="190" y="208" width="44" height="146" rx="6" fill="#1b1b1f"/>
-      <rect x="278" y="208" width="44" height="146" rx="6" fill="#1b1b1f"/>
-      <rect x="190" y="262" width="132" height="38" fill="#1b1b1f"/>
-    </g>
-    
-  <circle cx="254.72" cy="157.48" r="34" fill="#000" opacity=".22"/>
-  <circle cx="252" cy="150" r="34" fill="#c8461f"/>
-  <circle cx="241.12" cy="138.44" r="11.56" fill="#fff" opacity=".32"/>
-    
-  <circle cx="390.4" cy="388.6" r="30" fill="#000" opacity=".22"/>
-  <circle cx="388" cy="382" r="30" fill="#2f5fcc"/>
-  <circle cx="378.4" cy="371.8" r="10.200000000000001" fill="#fff" opacity=".32"/>
-  <circle cx="119.92" cy="141.28" r="24" fill="#000" opacity=".22"/>
-  <circle cx="118" cy="136" r="24" fill="#f0b429"/>
-  <circle cx="110.32" cy="127.84" r="8.16" fill="#fff" opacity=".32"/>
+  <rect width="512" height="512" rx="112" fill="#2F5D46"/>
+  <g transform="translate(103.62 103.62) scale(12.6984)" stroke="#F2EFE4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.5 11L12 4l8.5 7M6 9.5V20h12V9.5" fill="none" stroke-width="1.6"/>
+    <path d="M12 17.2s-3-1.8-3-3.7c0-1 .8-1.7 1.6-1.7.6 0 1.1.3 1.4.8.3-.5.8-.8 1.4-.8.8 0 1.6.7 1.6 1.7 0 1.9-3 3.7-3 3.7z" fill="#F2EFE4" stroke-width="0.8"/>
   </g>
 </svg>

@@ -68,8 +68,8 @@ or text below 4.5:1 contrast, and saves screenshots to `tools/page-check/out/`.
 
 ## Icons
 
-`icons/` holds the Fridge Door icon in every size the app uses, and the
-link-preview image. They're all drawn from one design by
+`icons/` holds the icon (the Evergreen home with a heart, from the redesign
+mock-ups) in every size the app uses, and the link-preview image. They're all drawn from one design by
 `node tools/icons.cjs` (Playwright), so a change to the design is one edit
 and one run.
 
