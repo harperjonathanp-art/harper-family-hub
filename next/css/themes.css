@@ -1,0 +1,150 @@
+/* ============================================================
+   Harper Family Hub — themes
+   Every color, font and corner size the Hub uses, once per theme and
+   scheme. js/theme.js sets data-theme (fridge | evergreen | journal) and
+   data-scheme (light | dark) on <html>; everything else reads these names.
+
+   bg / card / sunk     the page, a card on it, a field set into it
+   ink / muted / faint  text: main, secondary, quietest (all pass 4.5:1)
+   line / line-strong   rules between rows, and stronger edges
+   accent (+ -tint, on-accent)   the theme's one main color
+   warm / cool / gold (+ -tint)  "now", "scheduled" and "ceremony" markers
+   ok / warn / crit / focus      states, never decoration
+   p-<person> (+ -ink)  each person's circle and the letter on it
+   ============================================================ */
+
+/* ---------- Fridge Door: bright, rounded, a color for everyone ---------- */
+:root[data-theme="fridge"] {
+  --font-ui: "Bricolage Grotesque", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: var(--font-ui);
+  --font-talk: var(--font-ui);
+  --font-mono: var(--font-ui);
+  --display-weight: 800;
+  --radius-sm: 8px; --radius-md: 14px; --radius-lg: 24px;
+}
+:root[data-theme="fridge"][data-scheme="light"] {
+  --bg: #f3f0e8; --card: #ffffff; --sunk: #ebe7dd;
+  --ink: #1b1b1f; --muted: #50505a; --faint: #5f5f69;
+  --line: rgba(27,27,31,0.10); --line-strong: rgba(27,27,31,0.30);
+  --accent: #1f7a52; --accent-tint: #dff4e8; --on-accent: #ffffff;
+  --warm: #a63a17; --warm-tint: #fcdccf;
+  --cool: #2851b0; --cool-tint: #dce6fb;
+  --gold: #6e4e00; --gold-tint: #fbe7a6;
+  --ok: #1a6b47; --warn: #7a5600; --crit: #b42318; --focus: #2f5fcc;
+  --p-jon: #2f5fcc; --p-jon-ink: #ffffff;
+  --p-maggie: #c8461f; --p-maggie-ink: #ffffff;
+  --p-clayton: #1f7a52; --p-clayton-ink: #ffffff;
+  --p-heidi: #f0b429; --p-heidi-ink: #2e2302;
+  --p-family: #6d4fc2; --p-family-ink: #ffffff;
+  --shadow-raise: 0 1px 2px rgba(27,27,31,0.05), 0 8px 24px rgba(27,27,31,0.07);
+  --shadow-bar: 0 -1px 0 rgba(27,27,31,0.10);
+}
+:root[data-theme="fridge"][data-scheme="dark"] {
+  --bg: #101114; --card: #1c1e23; --sunk: #16181c;
+  --ink: #f3f3f6; --muted: #a6a8b2; --faint: #8e919b;
+  --line: rgba(243,243,246,0.10); --line-strong: rgba(243,243,246,0.32);
+  --accent: #6fd3a2; --accent-tint: #173527; --on-accent: #0a2117;
+  --warm: #ffa586; --warm-tint: #45241a;
+  --cool: #9db8ff; --cool-tint: #1c2944;
+  --gold: #f2cb5a; --gold-tint: #3b3010;
+  --ok: #6fd3a2; --warn: #f2cb5a; --crit: #ff8a7a; --focus: #9db8ff;
+  --p-jon: #9db8ff; --p-jon-ink: #0f1a33;
+  --p-maggie: #ffa586; --p-maggie-ink: #33150b;
+  --p-clayton: #6fd3a2; --p-clayton-ink: #0a2117;
+  --p-heidi: #f2cb5a; --p-heidi-ink: #2e2302;
+  --p-family: #c3aefa; --p-family-ink: #1e1438;
+  --shadow-raise: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.45);
+  --shadow-bar: 0 -1px 0 rgba(243,243,246,0.10);
+}
+
+/* ---------- Evergreen: the Hub's green, grown up ---------- */
+:root[data-theme="evergreen"] {
+  --font-ui: "Schibsted Grotesk", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: var(--font-ui);
+  --font-talk: Newsreader, Georgia, "Times New Roman", serif;
+  --font-mono: var(--font-ui);
+  --display-weight: 700;
+  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 18px;
+}
+:root[data-theme="evergreen"][data-scheme="light"] {
+  --bg: #eef1ea; --card: #ffffff; --sunk: #e4e9e1;
+  --ink: #17201b; --muted: #4f5b53; --faint: #5a655e;
+  --line: rgba(23,32,27,0.10); --line-strong: rgba(23,32,27,0.30);
+  --accent: #2f5d46; --accent-tint: #dce8df; --on-accent: #ffffff;
+  --warm: #a3441f; --warm-tint: #f7e2d8;
+  --cool: #3f5d73; --cool-tint: #d7e2ea;
+  --gold: #765520; --gold-tint: #ece0c4;
+  --ok: #2f6b43; --warn: #7d5a0e; --crit: #9c3320; --focus: #a3441f;
+  --p-jon: #3e6e9e; --p-jon-ink: #ffffff;
+  --p-maggie: #a8456a; --p-maggie-ink: #ffffff;
+  --p-clayton: #2f7a55; --p-clayton-ink: #ffffff;
+  --p-heidi: #8a5b0e; --p-heidi-ink: #ffffff;
+  --p-family: #6b5ba8; --p-family-ink: #ffffff;
+  --shadow-raise: 0 1px 2px rgba(23,32,27,0.05), 0 6px 16px rgba(23,32,27,0.06);
+  --shadow-bar: 0 -1px 0 rgba(23,32,27,0.10);
+}
+:root[data-theme="evergreen"][data-scheme="dark"] {
+  --bg: #0e1411; --card: #18201b; --sunk: #0b100d;
+  --ink: #eaf0ea; --muted: #a7b2aa; --faint: #8e9a92;
+  --line: rgba(234,240,234,0.10); --line-strong: rgba(234,240,234,0.34);
+  --accent: #86c29e; --accent-tint: #1e3227; --on-accent: #0b120e;
+  --warm: #f2967a; --warm-tint: #3a2219;
+  --cool: #86aac4; --cool-tint: #1f2c36;
+  --gold: #d0a552; --gold-tint: #322916;
+  --ok: #77b98c; --warn: #dcae4e; --crit: #ef8a6c; --focus: #f2967a;
+  --p-jon: #8db6dd; --p-jon-ink: #0e1a26;
+  --p-maggie: #e79ab0; --p-maggie-ink: #2a1018;
+  --p-clayton: #7fcb9f; --p-clayton-ink: #0c1f15;
+  --p-heidi: #e4b866; --p-heidi-ink: #2a1d05;
+  --p-family: #b3a6e8; --p-family-ink: #1a1530;
+  --shadow-raise: 0 1px 2px rgba(0,0,0,0.35), 0 8px 20px rgba(0,0,0,0.42);
+  --shadow-bar: 0 -1px 0 rgba(234,240,234,0.10);
+}
+
+/* ---------- Home Journal: warm paper, a serif to talk in ---------- */
+:root[data-theme="journal"] {
+  --font-ui: "Instrument Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: Fraunces, Georgia, "Times New Roman", serif;
+  --font-talk: Fraunces, Georgia, "Times New Roman", serif;
+  --font-mono: var(--font-ui);
+  --display-weight: 600;
+  --radius-sm: 3px; --radius-md: 5px; --radius-lg: 8px;
+}
+:root[data-theme="journal"][data-scheme="light"] {
+  --bg: #f4eee4; --card: #fbf8f2; --sunk: #ece4d6;
+  --ink: #2a211c; --muted: #62564c; --faint: #67594f;
+  --line: rgba(42,33,28,0.13); --line-strong: rgba(42,33,28,0.32);
+  --accent: #a44c2b; --accent-tint: #f4e4d9; --on-accent: #fbf8f2;
+  --warm: #9a4627; --warm-tint: #eed8ca;
+  --cool: #3f5f86; --cool-tint: #dfe6ef;
+  --gold: #6e5210; --gold-tint: #efe2c2;
+  --ok: #4b6b2f; --warn: #7a5410; --crit: #a3361f; --focus: #a44c2b;
+  --p-jon: #3f5f86; --p-jon-ink: #fbf8f2;
+  --p-maggie: #a04f4a; --p-maggie-ink: #fbf8f2;
+  --p-clayton: #4b7a49; --p-clayton-ink: #fbf8f2;
+  --p-heidi: #8c6110; --p-heidi-ink: #fbf8f2;
+  --p-family: #6f5a93; --p-family-ink: #fbf8f2;
+  --shadow-raise: 0 0 0 1px rgba(42,33,28,0.13);
+  --shadow-bar: 0 -1px 0 rgba(42,33,28,0.13);
+}
+:root[data-theme="journal"][data-scheme="dark"] {
+  --bg: #1b1613; --card: #252019; --sunk: #15110f;
+  --ink: #f2eadf; --muted: #b9aa9c; --faint: #a09284;
+  --line: rgba(242,234,223,0.12); --line-strong: rgba(242,234,223,0.32);
+  --accent: #e8957a; --accent-tint: #3b261c; --on-accent: #2a1510;
+  --warm: #e8957a; --warm-tint: #3b261c;
+  --cool: #9fb8d6; --cool-tint: #212b38;
+  --gold: #e6c37a; --gold-tint: #352a14;
+  --ok: #b9c584; --warn: #e6c37a; --crit: #f08a70; --focus: #e8957a;
+  --p-jon: #9fb8d6; --p-jon-ink: #14202e;
+  --p-maggie: #e5a3a0; --p-maggie-ink: #2c1413;
+  --p-clayton: #9cc79a; --p-clayton-ink: #122012;
+  --p-heidi: #e6c37a; --p-heidi-ink: #2a1d05;
+  --p-family: #c2b2d9; --p-family-ink: #1e1630;
+  --shadow-raise: 0 0 0 1px rgba(242,234,223,0.12);
+  --shadow-bar: 0 -1px 0 rgba(242,234,223,0.12);
+}
+
+/* Checkboxes, date and time fields and dropdowns follow the scheme too. */
+:root[data-scheme="light"] { color-scheme: light; }
+:root[data-scheme="dark"] { color-scheme: dark; }

@@ -1,0 +1,404 @@
+/* ============================================================
+   Harper Family Hub — layout and components
+   Colors, fonts and corners come from css/themes.css. Rules that
+   matter: separate with `line`, not shadow; one `--warm` "now"
+   marker per screen; one `--shadow-raise` per screen.
+   ============================================================ */
+:root {
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px;
+  --radius-pill: 999px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.45;
+  padding: var(--space-4) var(--space-4) calc(76px + env(safe-area-inset-bottom));
+}
+.page { max-width: 640px; margin: 0 auto; }
+
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
+
+/* ---------- header ---------- */
+header { margin-bottom: var(--space-5); }
+.header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); }
+.eyebrow {
+  display: inline-block;
+  font-size: 11px; line-height: 12px; font-weight: 700; letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--accent); background: var(--accent-tint);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+h1 { font-family: var(--font-display); font-size: 34px; line-height: 1.05; font-weight: var(--display-weight); letter-spacing: -0.02em; margin-top: var(--space-3); text-wrap: balance; }
+.subtitle { color: var(--muted); font-size: 12.5px; line-height: 17px; margin-top: var(--space-2); }
+.icon-btn {
+  border: 1px solid var(--line-strong); background: none; color: var(--muted);
+  min-width: 44px; min-height: 44px;
+  border-radius: var(--radius-md); font-size: 16px; cursor: pointer;
+}
+.sync-note {
+  font-family: var(--font-mono);
+  font-size: 11px; line-height: 14px; letter-spacing: 0.04em;
+  color: var(--faint); margin-top: var(--space-2); min-height: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- section heads ---------- */
+h2 {
+  font-size: 11px; line-height: 12px; font-weight: 700; letter-spacing: 0.11em;
+  text-transform: uppercase; color: var(--faint);
+  display: flex; align-items: center; gap: var(--space-3);
+  margin: var(--space-6) 0 var(--space-3);
+}
+h2::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+h2 .hint { letter-spacing: 0; text-transform: none; font-weight: 400; color: var(--faint); }
+
+/* ---------- ledger blocks: rules, not cards ---------- */
+.block { border-top: 1px solid var(--line); }
+h2 + .block { border-top: 0; }
+.block > *:last-child { border-bottom-color: var(--line-strong); }
+
+/* button chrome reset — declared BEFORE the surfaces so they set the background */
+.tappable {
+  background: none; border: 0; font: inherit; color: inherit;
+  cursor: pointer; width: 100%; text-align: left; display: block;
+}
+.tappable .muted { display: block; }
+
+/* Two surface tiers. A .sheet is an object at rest; a .lineup is the one
+   thing on the screen that is happening now. Peers take the same tier —
+   a lifted surface beside a flat one implies a hierarchy that isn't there. */
+.sheet {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+.lineup {
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raise);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.lineup h3, .ttl-lg { font-family: var(--font-display); font-size: 18px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em; margin-top: var(--space-2); display: block; }
+.lineup .muted, .sheet .muted { margin-top: var(--space-1); }
+
+.muted { color: var(--muted); font-size: 12.5px; line-height: 17px; }
+.tiny  { color: var(--faint); font-size: 11.5px; line-height: 16px; }
+.empty { color: var(--muted); font-size: 14px; line-height: 20px; padding: var(--space-3) 0; border-bottom: 1px solid var(--line); }
+.empty.good { color: var(--ok); font-weight: 500; }
+
+/* ---------- markers ---------- */
+.marker {
+  display: inline-block;
+  font-size: 11px; line-height: 12px; font-weight: 700; letter-spacing: 0.11em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.marker.now { background: var(--warm-tint); color: var(--warm); }
+.marker.scheduled { background: var(--cool-tint); color: var(--cool); }
+.marker.team { background: var(--accent-tint); color: var(--accent); }
+.marker.ceremony { background: var(--gold-tint); color: var(--gold); }
+
+/* ---------- buttons ---------- */
+button.primary, button.ghost, button.danger, a.primary {
+  font-family: var(--font-ui); font-size: 14px; line-height: 20px; font-weight: 500;
+  border-radius: var(--radius-md); padding: 11px 18px; min-height: 44px;
+  cursor: pointer; border: 1px solid transparent; background: none;
+}
+button.primary, a.primary { background: var(--accent); color: var(--on-accent); }
+a.primary { display: inline-flex; align-items: center; text-decoration: none; }
+.signcode { font-family: var(--font-ui); font-size: 28px; line-height: 36px; font-weight: 700; letter-spacing: 0.18em; }
+button.ghost { border-color: var(--line-strong); color: var(--ink); }
+button.danger { border-color: var(--crit); color: var(--crit); }
+button[disabled] { opacity: .45; cursor: default; }
+.actions { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-top: var(--space-4); }
+
+/* ---------- form controls ---------- */
+input[type=text], input[type=password], input[type=url], input[type=time], input[type=date], input[type=number], select, textarea {
+  font-family: var(--font-ui); font-size: 16px; /* 16px: stops iOS zooming on focus */
+  color: var(--ink);
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  width: 100%;
+  min-height: 44px;
+}
+textarea { resize: vertical; min-height: 64px; font-family: var(--font-talk); font-size: 16px; line-height: 25px; }
+label.f {
+  display: block;
+  font-size: 11px; line-height: 12px; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase;
+  color: var(--muted); margin: var(--space-4) 0 var(--space-2);
+}
+
+/* ---------- notification settings ---------- */
+.nrow { padding: var(--space-3) 0; border-bottom: 1px solid var(--line); }
+.ncheck { display: flex; gap: var(--space-3); align-items: flex-start; cursor: pointer; min-height: 44px; }
+.ncheck input { width: 20px; height: 20px; accent-color: var(--accent); flex: 0 0 20px; margin-top: 1px; cursor: pointer; }
+.ncheck .ttl { font-size: 16px; line-height: 22px; font-weight: 500; }
+.ncheck .tiny { display: block; font-weight: 400; margin-top: 2px; }
+.nwhen { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin: var(--space-2) 0 0 calc(20px + var(--space-3)); }
+.nwhen input, .nwhen select { width: auto; min-width: 120px; }
+.nwhen select { min-width: 88px; }
+
+/* ---------- the initial dot ---------- */
+.chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: var(--radius-pill);
+  font-size: 12px; font-weight: 600;
+  background: var(--sunk); color: var(--muted);
+  flex: 0 0 26px;
+}
+/* each person keeps one color in every theme's way (css/themes.css) */
+.chip.Jon { background: var(--p-jon); color: var(--p-jon-ink); }
+.chip.Maggie { background: var(--p-maggie); color: var(--p-maggie-ink); }
+.chip.Clayton { background: var(--p-clayton); color: var(--p-clayton-ink); }
+.chip.Heidi { background: var(--p-heidi); color: var(--p-heidi-ink); }
+.chip.Family { background: var(--p-family); color: var(--p-family-ink); }
+
+/* ---------- ruled rows: events, tasks, meals ---------- */
+.ev, .task, .meal {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+  min-height: 44px;
+}
+.ev .dot { width: 8px; height: 8px; border-radius: var(--radius-pill); flex: 0 0 8px; }
+.ev .time {
+  font-family: var(--font-mono); font-size: 13px; line-height: 18px; font-weight: 500;
+  color: var(--muted); flex: 0 0 66px; font-variant-numeric: tabular-nums;
+}
+.ev .etitle { font-size: 16px; line-height: 22px; font-weight: 500; flex: 1; min-width: 0; }
+.ev .cal { display: block; font-size: 12.5px; line-height: 17px; font-weight: 400; color: var(--muted); }
+
+.dayhead {
+  font-family: var(--font-display); font-size: 18px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em;
+  margin: var(--space-6) 0 var(--space-2);
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+}
+
+.task input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); flex: 0 0 20px; cursor: pointer; }
+.task .ttl { flex: 1; min-width: 0; font-size: 16px; line-height: 22px; font-weight: 500; }
+.task.done .ttl { text-decoration: line-through; color: var(--faint); }
+.task.done .ttl .tiny { text-decoration: none; }
+.task .del {
+  background: none; border: none; color: var(--faint);
+  font-size: 18px; cursor: pointer; padding: var(--space-2); min-width: 44px; min-height: 44px;
+  border-radius: var(--radius-md);
+}
+/* ---------- adding a task: title, then who / due / repeat ---------- */
+.addform { display: grid; gap: var(--space-2); margin-bottom: var(--space-5); }
+.addrow { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+.addrow > select, .addrow > input[type=date] { flex: 1 1 120px; width: auto; min-width: 0; }
+.addrow > input[type=time] { flex: 1 1 104px; width: auto; min-width: 0; }
+.addrow > .ghost { flex: 0 0 auto; padding: 8px 14px; }
+.addrow > input[type=number] { width: 72px; }
+.addrow .grow { flex: 1; min-width: 0; }
+.daypick { display: flex; gap: var(--space-1); flex-wrap: wrap; }
+.daypick label { position: relative; cursor: pointer; }
+.daypick input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.daypick span {
+  display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px;
+  border-radius: var(--radius-pill); border: 1px solid var(--line-strong);
+  font-size: 13px; font-weight: 600; color: var(--muted);
+}
+.daypick input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.daypick input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* due date and repeat under a task's title */
+.task .ttl .meta { display: block; font-size: 12.5px; line-height: 17px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+.task.done .ttl .meta { text-decoration: none; }
+.task .ttl .meta .overdue { color: var(--crit); font-weight: 500; }
+details.later > summary {
+  cursor: pointer; list-style: none; font-size: 14px; line-height: 20px; font-weight: 500;
+  padding: var(--space-3) 0; color: var(--muted); min-height: 44px; display: flex; align-items: center; gap: var(--space-2);
+}
+details.later > summary::-webkit-details-marker { display: none; }
+details.later > summary::before { content: "\25B8"; color: var(--faint); font-size: 11px; }
+details.later[open] > summary::before { content: "\25BE"; }
+
+/* a task's title is the way into editing it */
+.task .tedit {
+  align-self: stretch; text-align: left; background: none; border: 0; padding: 0;
+  font: inherit; color: inherit; cursor: pointer; border-radius: var(--radius-sm);
+}
+.task .tedit:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* a subtask sits under its parent, indented past the parent's tick */
+.task.sub { margin-left: 30px; }
+.task.sub .ttl { font-size: 15px; }
+
+/* a reminder's subtasks, folded under it and indented past its tick and dot */
+.task.has-subs { border-bottom: 0; }
+details.subs { border-bottom: 1px solid var(--line); padding: 0 0 var(--space-1) calc(20px + 26px + var(--space-3) * 2); }
+details.subs > summary {
+  cursor: pointer; list-style: none; min-height: 44px; margin-top: calc(var(--space-3) * -1);
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: 12.5px; line-height: 17px; font-weight: 500; color: var(--muted);
+}
+details.subs > summary::-webkit-details-marker { display: none; }
+details.subs > summary::before { content: "\25B8"; color: var(--faint); font-size: 11px; }
+details.subs[open] > summary::before { content: "\25BE"; }
+details.subs .task { padding: var(--space-2) 0; }
+details.subs .task:last-child { border-bottom: 0; }
+/* a Hub task's subtasks fold the same way; its rows keep their own indent */
+details.subs.tsubs { padding-left: 0; }
+details.subs.tsubs > summary { padding-left: 30px; }
+details.subs.tsubs .task.sub { padding: var(--space-2) 0; }
+
+.meal .d {
+  flex: 0 0 44px;
+  font-family: var(--font-mono); font-size: 11px; line-height: 14px; font-weight: 500;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--faint);
+}
+.meal.today { background: var(--warm-tint); margin-inline: calc(var(--space-2) * -1); padding-inline: var(--space-2); border-radius: var(--radius-sm); }
+.meal.today .d { color: var(--warm); }
+.meal { align-items: flex-start; }
+.meal .d { margin-top: 15px; } /* centred on the 44px field, even with a recipe link below it */
+.meal .mealbody { flex: 1; min-width: 0; }
+.meal.ro .d { margin-top: 3px; } /* read-only rows (Notion plan): level with the name, not a field */
+.meal.past { opacity: .7; } /* earlier in this plan week */
+.meal .mname { font-size: 16px; line-height: 22px; font-weight: 500; }
+.meal .mname.none { color: var(--faint); font-weight: 400; }
+.recipe {
+  display: inline-flex; align-items: center; min-height: 32px; max-width: 100%;
+  font-size: 12.5px; line-height: 17px; font-weight: 500; color: var(--accent);
+  text-decoration: underline; text-underline-offset: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.recipes { display: flex; gap: var(--space-3); flex-wrap: wrap; }
+.grocery-add { display: flex; gap: var(--space-2); align-items: flex-start; margin-bottom: var(--space-3); }
+.grocery-add textarea {
+  flex: 1; min-width: 0; min-height: 44px; height: 44px; resize: none; overflow: hidden;
+  font-family: var(--font-ui); line-height: 22px;
+}
+.task label.ttl { cursor: pointer; }
+.grip {
+  flex: 0 0 28px; min-height: 44px; margin-left: calc(var(--space-2) * -1);
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 0; color: var(--faint); cursor: grab;
+  touch-action: none; -webkit-user-select: none; user-select: none; border-radius: var(--radius-sm);
+}
+.grip-space { flex: 0 0 28px; margin-left: calc(var(--space-2) * -1); }
+.grocery-list .task { transition: transform .15s ease; }
+.grocery-list .task.dragging, .task.dragging {
+  transition: none; position: relative; z-index: 5; cursor: grabbing;
+  background: var(--card); box-shadow: var(--shadow-raise); border-radius: var(--radius-sm);
+}
+.task.dragging[data-tid] { opacity: .92; } /* the drop line and target show through */
+.task.dragging-sub, details.subs.dragging-sub { position: relative; z-index: 4; background: var(--card); opacity: .85; }
+.task.drop-into { background: var(--accent-tint); border-radius: var(--radius-sm); }
+.drop-line { position: absolute; z-index: 6; height: 3px; margin-top: -2px; border-radius: 2px; background: var(--accent); pointer-events: none; }
+/* while a task is dragged: where it can go, and what dropping it would do */
+.td-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 40; background: var(--card); box-shadow: var(--shadow-bar);
+  padding: calc(var(--space-2) + env(safe-area-inset-top)) var(--space-4) var(--space-3);
+}
+.td-hint { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--muted); min-height: 18px; margin-bottom: var(--space-2); }
+.td-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); }
+.td-chip {
+  min-height: 44px; display: flex; align-items: center; justify-content: center; text-align: center;
+  border: 1px dashed var(--line-strong); border-radius: var(--radius-md);
+  font-size: 13px; line-height: 17px; font-weight: 600; color: var(--muted);
+}
+.td-chip.on { background: var(--accent-tint); border: 1px solid var(--accent); color: var(--accent); }
+.td-chip.off { opacity: .4; }
+@media (prefers-reduced-motion: reduce) { .grocery-list .task { transition: none; } }
+.lineup .recipes { margin-top: var(--space-1); }
+
+/* ---------- prompts: the serif marks the shift to talking ---------- */
+.q { display: flex; gap: var(--space-3); padding: var(--space-4) 0; border-bottom: 1px solid var(--line); }
+.q .num {
+  flex: 0 0 24px;
+  font-family: var(--font-mono); font-size: 13px; line-height: 28px; font-weight: 500;
+  color: var(--faint); font-variant-numeric: tabular-nums;
+}
+.q .body { flex: 1; min-width: 0; }
+.q .body p {
+  font-family: var(--font-talk); font-size: 19px; line-height: 28px; font-weight: 400;
+  color: var(--ink); margin-bottom: var(--space-2); text-wrap: pretty;
+}
+.q .body .tiny {
+  font-family: var(--font-talk); font-style: italic;
+  font-size: 14px; line-height: 21px; color: var(--muted);
+  margin: calc(var(--space-1) * -1) 0 var(--space-2);
+}
+
+.hist { border-bottom: 1px solid var(--line); padding: var(--space-3) 0; }
+.hist summary {
+  cursor: pointer; font-size: 14px; line-height: 20px; font-weight: 500;
+  list-style: none; display: flex; gap: var(--space-2); align-items: baseline;
+  min-height: 24px;
+}
+.hist summary::-webkit-details-marker { display: none; }
+.hist summary::before { content: "\25B8"; color: var(--faint); font-size: 11px; }
+.hist[open] summary::before { content: "\25BE"; }
+.hist .ans {
+  font-family: var(--font-talk); font-size: 16px; line-height: 25px;
+  margin: var(--space-2) 0 var(--space-1) var(--space-5);
+}
+.hist .ans b {
+  display: block; font-family: var(--font-ui);
+  font-size: 11px; line-height: 12px; font-weight: 700; letter-spacing: 0.11em;
+  color: var(--faint); text-transform: uppercase;
+  margin-top: var(--space-4); margin-bottom: var(--space-1);
+}
+
+/* ---------- bottom nav: the thumb index ---------- */
+nav {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  background: var(--card);
+  box-shadow: var(--shadow-bar);
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-1);
+  padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom));
+  z-index: 20;
+}
+nav button {
+  background: none; border: none; cursor: pointer;
+  font-family: var(--font-ui); font-size: 12.5px; line-height: 17px; font-weight: 500;
+  color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: var(--space-2) var(--space-1);
+  border-radius: var(--radius-md);
+}
+nav button.active { color: var(--accent); background: var(--accent-tint); font-weight: 600; }
+
+/* ---------- overlay ---------- */
+.overlay {
+  position: fixed; inset: 0; z-index: 30;
+  background: var(--bg);
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-4) calc(var(--space-7) + env(safe-area-inset-bottom));
+}
+.hidden { display: none !important; }
+
+/* ---------- Look & feel (Settings) ---------- */
+.themecards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-2); }
+.themecard {
+  display: flex; flex-direction: column; text-align: left; padding: 0; overflow: hidden; cursor: pointer;
+  border-radius: 14px; border: 2px solid var(--line); background: none; color: inherit; font: inherit;
+  min-height: 44px;
+}
+.themecard[aria-pressed="true"] { border-color: var(--ink); }
+.themecard .tc-face { padding: 10px 10px 6px; font-size: 26px; line-height: 1; }
+.themecard .tc-dots { display: flex; gap: 4px; padding: 0 10px 10px; }
+.themecard .tc-dots span { width: 12px; height: 12px; border-radius: 50%; }
+.themecard .tc-name { padding: 8px 10px 9px; font-family: var(--font-ui); font-size: 12.5px; line-height: 16px; font-weight: 600; }
+.segmented {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; margin-top: var(--space-3);
+  border-radius: var(--radius-md); background: var(--sunk);
+}
+.segmented button {
+  min-height: 40px; border: 0; border-radius: calc(var(--radius-md) - 4px); background: none; cursor: pointer;
+  font-family: var(--font-ui); font-size: 14px; font-weight: 600; color: var(--muted);
+}
+.segmented button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.14); }
+

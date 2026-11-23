@@ -15,6 +15,10 @@ self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (url.origin !== self.location.origin) return; // live data (Apps Script, the Hub's Worker): never cached
   if (e.request.mode === "navigate") {
+    // Only the live page is saved for offline use. The redesign's preview (next/) shares this
+    // worker but goes straight to the network, so it never replaces the live page's saved copy.
+    const home = new URL(self.registration.scope).pathname;
+    if (url.pathname !== home && url.pathname !== home + "index.html") return;
     const network = fetch(e.request, { cache: "no-cache" });
     // Save each good copy for offline use; waitUntil keeps the worker alive until it's written.
     e.waitUntil(network.then(res => {
