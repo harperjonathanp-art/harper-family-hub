@@ -84,6 +84,25 @@ test("a recipe page parses the way it's laid out in Notion", () => {
   assert.equal(chili.raw, undefined, "a page that follows the layout has no raw text");
 });
 
+test("checkbox ingredients under their own headings, with no Ingredients heading (Poutine)", () => {
+  const h2s = s => blk("heading_2", t(s));
+  const poutine = parseRecipe([
+    para(t("Not an everyday meal, but a favorite.")),
+    para(t("Serves:", true), t(" 2 as a main · "), t("Cost:", true), t(" $7 total")),
+    h2s("Fries"), todo("2 to 3 medium russet potatoes, sliced into sticks"), todo("2 tbsp vegetable oil"),
+    h2s("Gravy"), todo("2 tbsp butter"), todo("1½ cups vegetable broth"),
+    h2s("Steps"), num(t("Heat the oven to 400°F.")), num(t("Bake 20 minutes.")),
+  ]);
+  assert.deepEqual(poutine.about, ["Not an everyday meal, but a favorite."]);
+  assert.deepEqual(poutine.ingredients, [{ h: "Fries" }, { t: "2 to 3 medium russet potatoes, sliced into sticks" }, { t: "2 tbsp vegetable oil" },
+    { h: "Gravy" }, { t: "2 tbsp butter" }, { t: "1½ cups vegetable broth" }]);
+  assert.equal(poutine.steps.length, 2);
+  assert.ok(ingredientWords(poutine).includes("potatoes"));
+  // An idea collection (checkboxes, no steps) is still shown as written
+  const ideas = parseRecipe([h2s("Sweet"), todo("Peanut butter and banana"), h2s("Savory"), todo("Egg and chili crisp")]);
+  assert.deepEqual([ideas.ingredients, ideas.raw.length], [[], 4]);
+});
+
 test("a page that doesn't follow the layout keeps its text as written", () => {
   const odd = parseRecipe(ODD);
   assert.deepEqual(odd.raw, [{ t: "Mix it all up." }, { t: "A handful of this", list: "bulleted_list_item" }, { t: "Some of that", list: "bulleted_list_item" }]);
