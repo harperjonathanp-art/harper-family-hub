@@ -1,8 +1,16 @@
-// Service worker: makes the app installable, lets the shell open offline,
-// and shows push notifications.
-const CACHE = "family-hub-v13";
-const SHELL = ["./index.html", "./manifest.json", "./favicon.svg", "./favicon-32.png",
-  "./apple-touch-icon.png", "./icon-192.png", "./icon-512.png", "./icon-512-maskable.png"];
+// Service worker: makes the app installable, lets it open offline, and shows push notifications.
+//
+// The page itself always comes from the network when it can (so an update shows the first time the
+// app opens), with the last good copy kept for offline. Every other file of the Hub's own carries its
+// release number (?v=), so once fetched it never changes: it's kept and served from here, which is
+// what lets the whole app open offline. Live data (the Hub's Worker, fonts, photos) is never kept.
+// Raise CACHE when this file changes; that also clears the files of older releases.
+const CACHE = "family-hub-v14";
+const RELEASE = "25"; // the ?v= in index.html, so the first install can open offline straight away
+const SHELL = ["./index.html", "./manifest.json", "./icons/favicon.svg", "./icons/favicon-32.png",
+  "./icons/apple-touch-icon.png", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-512-maskable.png"]
+  .concat(["css/themes.css", "css/app.css"].concat(["theme", "data", "shell", "today", "calendar", "dinner", "recipes",
+    "tasks", "checkins", "settings", "boot"].map(f => "js/" + f + ".js")).map(f => "./" + f + "?v=" + RELEASE));
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
@@ -13,12 +21,10 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
-  if (url.origin !== self.location.origin) return; // live data (Apps Script, the Hub's Worker): never cached
+  if (url.origin !== self.location.origin) return; // live data (the Hub's Worker, fonts, photos): never kept
   if (e.request.mode === "navigate") {
-    // Only the live page is saved for offline use. The redesign's preview (next/) shares this
-    // worker but goes straight to the network, so it never replaces the live page's saved copy.
     const home = new URL(self.registration.scope).pathname;
-    if (url.pathname !== home && url.pathname !== home + "index.html") return;
+    if (url.pathname !== home && url.pathname !== home + "index.html") return; // other pages (privacy) as they are
     const network = fetch(e.request, { cache: "no-cache" });
     // Save each good copy for offline use; waitUntil keeps the worker alive until it's written.
     e.waitUntil(network.then(res => {
@@ -29,7 +35,11 @@ self.addEventListener("fetch", e => {
     e.respondWith(latestPage(network));
     return;
   }
-  e.respondWith(caches.match(e.request).then(hit => hit || fetch(e.request)));
+  // The Hub's own files: from here if kept, else fetched and kept (a new release has new addresses).
+  e.respondWith(caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+    if (res.ok && url.searchParams.has("v")) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
+    return res;
+  })));
 });
 
 // The page itself: the latest from the network, so an update shows the first
@@ -49,7 +59,7 @@ self.addEventListener("push", e => {
   e.waitUntil(self.registration.showNotification(d.title || "Family Hub", {
     body: d.body || "",
     tag: d.tag,
-    icon: "icon-192.png",
+    icon: "icons/icon-192.png",
     data: { view: d.view || "today", checkin: d.checkin || null },
   }));
 });

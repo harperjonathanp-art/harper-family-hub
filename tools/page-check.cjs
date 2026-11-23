@@ -1,6 +1,6 @@
 // Page check: run before each preview goes out (see the build plan).
 //
-//   node tools/page-check.cjs [page]      page: next/ (default) or ./ for the live Hub
+//   node tools/page-check.cjs [page]      page: the Hub at the repo root (default), or another folder
 //
 // Serves this repo on a local port, answers the Hub's Worker with sample data, and for
 // every theme in light and dark: opens each screen and Settings, saves a screenshot to
@@ -14,7 +14,7 @@ const { chromium } = require("playwright");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT = path.join(__dirname, "page-check", "out");
-const PAGE = process.argv[2] || "next/";
+const PAGE = process.argv[2] || "";
 const HUB = "https://family-hub-push.harper-jonathan-p.workers.dev";
 const THEMES = ["fridge", "evergreen", "journal"];
 const SCHEMES = ["light", "dark"];
@@ -409,7 +409,7 @@ function contrast(a, b) {
   }
 
   // switching tabs: the slide finishes on the new screen, and Reduce Motion switches at once
-  if (PAGE.startsWith("next")) {
+  {
     for (const reducedMotion of ["no-preference", "reduce"]) {
       const c = await browser.newContext({ reducedMotion, viewport: { width: 390, height: 844 } });
       await c.addInitScript(() => { localStorage.setItem("fd_token", "page-check"); localStorage.setItem("fd_user", "Jon"); });
@@ -459,7 +459,7 @@ function contrast(a, b) {
   }
 
   // A computer: the sidebar, two columns, panels as windows, the keyboard alone, and resizing
-  if (PAGE.startsWith("next")) {
+  {
     for (const [theme, scheme] of [["fridge", "light"], ["evergreen", "dark"], ["journal", "light"]]) {
       const tag = `wide-${theme}-${scheme}`, want = (ok, what) => { if (!ok) problems.push(`${tag}: ${what}`); };
       const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
@@ -526,6 +526,15 @@ function contrast(a, b) {
       want(narrow.join() === "true,true,true" && again.join() === "true,true", `resizing: narrow ${narrow}, wide again ${again}`);
       await c.close();
     }
+  }
+
+  // The offline list names this release's files (sw.js RELEASE matches every ?v= in index.html)
+  {
+    const page = fs.readFileSync(path.join(ROOT, PAGE, "index.html"), "utf8"), swFile = path.join(ROOT, PAGE, "sw.js");
+    const vs = [...new Set([...page.matchAll(/\?v=(\w+)/g)].map(m => m[1]))];
+    const rel = fs.existsSync(swFile) ? (/const RELEASE = "(\w+)"/.exec(fs.readFileSync(swFile, "utf8")) || [])[1] : null;
+    if (vs.length !== 1) problems.push(`release: index.html mixes release numbers ${vs.join(", ")}`);
+    else if (rel && rel !== vs[0]) problems.push(`release: sw.js RELEASE is ${rel}, index.html is ${vs[0]}`);
   }
 
   // Every icon the page and its manifest name is there, at the size it says

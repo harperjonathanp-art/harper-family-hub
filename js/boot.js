@@ -22,8 +22,8 @@
   // iOS can reload the app while Google's page is open: pick the sign-in back up.
   if (!cfg.signedIn && loadSignin()) { pollSignin(); SIGNIN_POLL = setInterval(pollSignin, 2500); }
   if ("serviceWorker" in navigator) {
-    // The live Hub's own service worker: there is one per site, and it serves this preview too.
-    navigator.serviceWorker.register("../sw.js").catch(() => {});
+    // Offline use and notifications (sw.js)
+    navigator.serviceWorker.register("sw.js").catch(() => {});
     navigator.serviceWorker.addEventListener("message", e => openFromNotification(e.data));
   }
   syncPush();
