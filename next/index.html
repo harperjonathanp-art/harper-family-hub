@@ -18,9 +18,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Every file carries the release number, so a new page never runs with an old file. -->
-<script src="js/theme.js?v=16"></script>
-<link rel="stylesheet" href="css/themes.css?v=16">
-<link rel="stylesheet" href="css/app.css?v=16">
+<script src="js/theme.js?v=17"></script>
+<link rel="stylesheet" href="css/themes.css?v=17">
+<link rel="stylesheet" href="css/app.css?v=17">
 </head>
 <body>
 
@@ -32,7 +32,7 @@
         <!-- Sync state (js/data.js note()): tap to sync now. -->
         <button type="button" class="syncpill" id="syncNote" data-state="busy" onclick="refresh(false, true)" aria-label="Syncing. Tap to sync now.">
           <span class="dot" aria-hidden="true"></span><span class="txt">Syncing…</span></button>
-        <button class="icon-btn" onclick="openSettings()" aria-label="Settings">⚙</button>
+        <button class="icon-btn" onclick="openSettings()" aria-label="Settings">⚙&#xFE0E;</button>
       </span>
     </div>
     <h1 id="viewTitle">Today</h1>
@@ -61,14 +61,14 @@
 <div id="srAnnounce" class="sr-only" aria-live="polite"></div>
 
 <!-- In order: data and helpers first, each screen, Settings, then the start. -->
-<script src="js/data.js?v=16" defer></script>
-<script src="js/shell.js?v=16" defer></script>
-<script src="js/today.js?v=16" defer></script>
-<script src="js/calendar.js?v=16" defer></script>
-<script src="js/dinner.js?v=16" defer></script>
-<script src="js/tasks.js?v=16" defer></script>
-<script src="js/checkins.js?v=16" defer></script>
-<script src="js/settings.js?v=16" defer></script>
-<script src="js/boot.js?v=16" defer></script>
+<script src="js/data.js?v=17" defer></script>
+<script src="js/shell.js?v=17" defer></script>
+<script src="js/today.js?v=17" defer></script>
+<script src="js/calendar.js?v=17" defer></script>
+<script src="js/dinner.js?v=17" defer></script>
+<script src="js/tasks.js?v=17" defer></script>
+<script src="js/checkins.js?v=17" defer></script>
+<script src="js/settings.js?v=17" defer></script>
+<script src="js/boot.js?v=17" defer></script>
 </body>
 </html>
