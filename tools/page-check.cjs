@@ -44,6 +44,9 @@ function sample() {
       { id: "7", title: "Book the venue", assignee: "Maggie", recurrence: "once", parentId: "6", completed: true },
       { id: "8", title: "Clean out the fridge", assignee: "Family", recurrence: "weekly" },
       { id: "9", title: "Change HVAC filter", assignee: "Jon", recurrence: "monthly" },
+      { id: "10", title: "Take out the recycling", assignee: "Clayton", recurrence: "repeat", repeat: "every 2 weeks on mon,thu", due: day(2) },
+      { id: "11", title: "Book club", assignee: "Maggie", recurrence: "repeat", repeat: "every 1 month on 3rd sat", due: day(12), time: "19:30" },
+      { id: "12", title: "Fix the squeaky door", assignee: "Jon", recurrence: "once" },
     ],
     meals: {
       Mon: { meal: "Sheet Pan Chicken Fajitas | https://www.foodnetwork.com/recipes/sheet-pan-chicken-fajitas", note: "Jon cooks · Double the peppers" },
@@ -93,7 +96,7 @@ const PAIRS = [
   ["p-jon-ink", "p-jon"], ["p-maggie-ink", "p-maggie"], ["p-clayton-ink", "p-clayton"],
   ["p-heidi-ink", "p-heidi"], ["p-family-ink", "p-family"],
   ["nav-active-ink", "nav-active-bg"], ["nav-muted", "nav-bg", 3], // resting tab icons: 3:1, as for any icon
-  ["warm", "bg"], ["warm", "card"], ["cool", "card"], ["gold", "card"],
+  ["warm", "bg"], ["warm", "card"], ["cool", "card"], ["gold", "card"], ["card", "crit"], // the swipe's Delete
 ];
 function contrast(a, b) {
   const lum = hex => {
@@ -203,6 +206,30 @@ function contrast(a, b) {
       await p.waitForTimeout(700);
       const after = await p.evaluate(() => [VIEW, document.querySelector('#nav button[aria-current="page"]')?.dataset.view, document.getElementById("srAnnounce").textContent]);
       if (after.join() !== "tasks,tasks,Tasks") problems.push(`motion ${reducedMotion}: after switching to Tasks got ${after.join(" / ")}`);
+      if (reducedMotion === "no-preference") {
+        // Tasks: the + button and the filter show; every repeat opens in the panel and reads back unchanged
+        const ui = await p.evaluate(() => [getComputedStyle(document.getElementById("fab")).opacity, !!document.querySelector(".tfilter"),
+          [...document.querySelectorAll("#main h2")].map(h => h.firstChild.textContent.trim())]);
+        if (ui[0] !== "1") problems.push("Tasks: the + button isn't showing");
+        if (!ui[1]) problems.push("Tasks: no filter");
+        for (const want of ["Overdue", "Today", "This week", "Anytime", "Routines"])
+          if (!ui[2].includes(want)) problems.push(`Tasks: no ${want} section (has ${ui[2].join(", ")})`);
+        const trips = await p.evaluate(() => DATA.tasks.filter(t => t.repeat || t.due).map(t => {
+          openTaskPanel(t.id);
+          const back = { repeat: currentRepeat("tp"), ...formWhen("tp", currentRepeat("tp")), who: val("tpWho"), title: val("tpTitle") };
+          closeOverlay();
+          return [t.title, [t.repeat || "", t.due || "", t.time || "", t.assignee || "", t.title].join("|"), [back.repeat, back.due, back.time, back.who, back.title].join("|")];
+        }));
+        trips.forEach(([title, was, now]) => { if (was !== now) problems.push(`Task panel changes "${title}": ${was} → ${now}`); });
+        // the + button opens an empty New task panel, title ready for typing
+        await p.waitForTimeout(500);
+        await p.click("#fab");
+        await p.waitForTimeout(500);
+        const fresh = await p.evaluate(() => [panelUp(), document.querySelector(".tp-title").textContent, document.activeElement.id, val("tpTitle")]);
+        if (fresh.join() !== "true,New task,tpTitle,") problems.push(`+ button: got ${fresh.join(" / ")}`);
+        await p.keyboard.press("Escape");
+        await p.waitForTimeout(500);
+      }
       // a new device's sign-in can't be swiped or tapped away
       await p.evaluate(() => { showSetup(); });
       await p.waitForTimeout(450);

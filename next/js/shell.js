@@ -91,6 +91,26 @@ function slide(dir, change) {
   document.documentElement.dataset.nav = dir;
   document.startViewTransition(change);
 }
+/* A message at the bottom of the screen, with an optional action (Undo). Five seconds with an action, less without. */
+const TOAST = { timer: 0, action: null };
+function toast(text, label, action) {
+  const el = document.getElementById("toast");
+  el.querySelector(".t-text").textContent = text;
+  const btn = el.querySelector("button");
+  btn.textContent = label || "";
+  btn.hidden = !label;
+  TOAST.action = action || null;
+  el.classList.add("on");
+  clearTimeout(TOAST.timer);
+  TOAST.timer = setTimeout(() => { el.classList.remove("on"); TOAST.action = null; }, label ? 5000 : 2800);
+}
+function toastAct() {
+  const act = TOAST.action;
+  TOAST.action = null;
+  clearTimeout(TOAST.timer);
+  document.getElementById("toast").classList.remove("on");
+  if (act) act();
+}
 function announce(text) { const el = document.getElementById("srAnnounce"); if (el) el.textContent = text; }
 
 function render() {
@@ -102,7 +122,6 @@ function render() {
   document.getElementById("main").innerHTML = v.render();
   restoreDraft();
   document.querySelectorAll("#main .meal input").forEach(mealLinks);
-  if (VIEW === "tasks") repeatUI();
   document.getElementById("main").addEventListener("input", saveDraft);
   if (ENTER) {
     document.querySelectorAll("#main [data-tid], #main [data-gid]").forEach(el => {
@@ -121,6 +140,7 @@ function render() {
     if (box) box.classList.add("pop");
     FLASH = null;
   }
+  document.documentElement.dataset.view = VIEW; // the + button shows on Tasks
   drawNav();
 }
 /* The tab bar is drawn once and then only marked, so the active pill can glide between tabs. */

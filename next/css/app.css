@@ -127,7 +127,7 @@ input[type=text], input[type=password], input[type=url], input[type=time], input
   min-height: 44px;
 }
 textarea { resize: vertical; min-height: 64px; font-family: var(--font-talk); font-size: 16px; line-height: 25px; }
-label.f {
+label.f, span.f { /* span.f: the label of a group of buttons */
   display: block;
   font-size: 11px; line-height: 12px; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase;
   color: var(--muted); margin: var(--space-4) 0 var(--space-2);
@@ -588,4 +588,99 @@ html.pulling #app, html.pulling .pull { transition: none; }
 .pull.done { background: var(--accent); color: var(--on-accent); }
 .pull.done .pull-done { display: block; animation: tick-pop .34s cubic-bezier(.34,1.56,.64,1); }
 @keyframes pull-spin { to { transform: rotate(360deg); } }
+
+/* ---------- task rows: the row slides over what a swipe shows ---------- */
+.task.tswipe { display: block; padding: 0; position: relative; overflow: hidden; }
+.task.tswipe > .task-in {
+  position: relative; z-index: 1; display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) 0; min-height: 44px; background: var(--row-bg, var(--bg));
+  touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  transition: transform .34s cubic-bezier(.22,.8,.24,1);
+}
+.task.tswipe > .task-in.swiping { transition: none; }
+.task.dragging { --row-bg: var(--card); }
+.task.drop-into { --row-bg: var(--accent-tint); }
+.swipe-under { position: absolute; inset: 0; display: flex; justify-content: space-between; align-items: stretch; }
+.swipe-under .su-done {
+  display: flex; align-items: center; gap: 6px; padding-left: var(--space-4); opacity: 0;
+  font: 700 14px/1 var(--font-ui); color: var(--on-accent); transition: opacity .15s ease;
+}
+.swipe-under .su-done svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; transition: transform .2s cubic-bezier(.34,1.56,.64,1); }
+.task.sw-right .swipe-under { background: var(--line-strong); }
+.task.sw-right .su-done { opacity: 1; }
+.task.sw-ready .swipe-under { background: var(--accent); }
+.task.sw-ready .su-done svg { transform: scale(1.2); }
+.swipe-under .su-acts { display: flex; margin-left: auto; visibility: hidden; }
+.task.sw-left .su-acts { visibility: visible; }
+.su-acts button { width: 76px; border: 0; cursor: pointer; font: 700 12.5px/1.15 var(--font-ui); padding: 0 6px; }
+.su-acts .su-move { background: var(--cool-tint); color: var(--cool); }
+.su-acts .su-move + .su-move { background: var(--gold-tint); color: var(--gold); }
+.su-acts .su-del { background: var(--crit); color: var(--card); }
+.su-acts .off { opacity: .45; }
+.tasks-help { text-align: center; margin: var(--space-5) var(--space-4) 0; }
+.subhead { margin: var(--space-4) 0 var(--space-1); font-size: 12.5px; line-height: 17px; font-weight: 600; color: var(--muted); }
+h2.warn { color: var(--crit); }
+
+/* ---------- buttons you pick from: filters, Who, When, Repeat ---------- */
+.chips, .tfilter { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.tfilter { margin: calc(var(--space-2) * -1) 0 var(--space-2); }
+.chipbtn {
+  display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--card); color: var(--ink);
+  font: 600 14px/1 var(--font-ui); cursor: pointer; transition: background-color .2s ease, color .2s ease, border-color .2s ease;
+}
+.chipbtn.who { padding-left: 5px; }
+.chipbtn.who .chip { width: 30px; height: 30px; flex-basis: 30px; }
+.chipbtn.dashed { border-style: dashed; border-color: var(--line-strong); color: var(--muted); }
+.chipbtn[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.tfilter .chipbtn { min-height: 38px; }
+
+/* ---------- the task panel ---------- */
+.tp-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
+.tp-head .tp-title { margin: 0; font-family: var(--font-display); font-weight: var(--display-weight); font-size: 19px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.tp-head .tp-title::after { display: none; }
+.tp-cancel { min-height: 44px; padding: 0 4px; border: 0; background: none; color: var(--muted); font: 600 15px/1 var(--font-ui); cursor: pointer; }
+.tp-head .tp-save { min-height: 40px; padding: 0 20px; border-radius: var(--radius-pill); }
+.tp-pick { margin-top: var(--space-2); }
+.tp-pick input.hidden { display: none; }
+.tp-summary { margin-top: var(--space-3); padding: 12px 14px; border-radius: var(--radius-md); background: var(--accent-tint); color: var(--accent); font-size: 14px; line-height: 20px; font-weight: 600; }
+#tpCustom { margin-top: var(--space-3); }
+
+/* ---------- the + button (Tasks) ---------- */
+.fab {
+  position: fixed; z-index: 21; right: max(20px, calc((100vw - 460px) / 2 + 6px)); bottom: calc(92px + env(safe-area-inset-bottom));
+  width: 58px; height: 58px; border-radius: 50%; border: 0; display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: var(--on-accent); box-shadow: 0 8px 22px rgba(0,0,0,0.24); cursor: pointer;
+  opacity: 0; pointer-events: none; transform: translateY(36px) scale(.35);
+  transition: transform .5s cubic-bezier(.34,1.56,.64,1), opacity .25s ease;
+  view-transition-name: fab;
+}
+.fab svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; transform: rotate(-120deg); transition: transform .55s cubic-bezier(.34,1.56,.64,1); }
+:root[data-view="tasks"] .fab { opacity: 1; pointer-events: auto; transform: none; transition-delay: .18s; }
+:root[data-view="tasks"] .fab svg { transform: none; transition-delay: .18s; }
+:root[data-view="tasks"].panel-open .fab { opacity: 0; pointer-events: none; transform: scale(.55); transition-delay: 0s; }
+:root[data-view="tasks"].panel-open .fab svg { transform: rotate(135deg); transition-delay: 0s; }
+:root[data-view="tasks"] .fab::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; border: 3px solid var(--accent); pointer-events: none;
+  animation: fab-ring 1.1s cubic-bezier(.2,.7,.3,1) .6s 1 both;
+}
+@keyframes fab-ring { from { transform: scale(1); opacity: .55; } to { transform: scale(1.75); opacity: 0; } }
+.fab:active { transform: scale(.88) !important; transition-duration: .12s; transition-delay: 0s !important; }
+@media (hover: hover) { .fab:hover svg { transform: rotate(90deg); } }
+::view-transition-old(fab) { display: none; }
+::view-transition-new(fab) { animation: none; }
+
+/* ---------- messages with an Undo ---------- */
+.toast {
+  position: fixed; z-index: 25; left: 0; right: 0; margin: 0 auto; width: calc(100% - 32px); max-width: 440px;
+  bottom: calc(92px + env(safe-area-inset-bottom)); min-height: 52px; box-sizing: border-box; padding: 6px 6px 6px 16px;
+  display: flex; align-items: center; gap: var(--space-2); border-radius: var(--radius-md);
+  background: var(--ink); color: var(--bg); font: 600 14px/1.35 var(--font-ui); box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  opacity: 0; pointer-events: none; transform: translateY(24px);
+  transition: transform .4s cubic-bezier(.34,1.4,.64,1), opacity .25s ease;
+}
+.toast.on { opacity: 1; pointer-events: auto; transform: none; }
+.toast .t-text { flex: 1; }
+.toast button { min-height: 40px; padding: 0 14px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--bg); font: 800 14px/1 var(--font-ui); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+:root[data-view="tasks"] .toast { bottom: calc(160px + env(safe-area-inset-bottom)); } /* above the + button */
 

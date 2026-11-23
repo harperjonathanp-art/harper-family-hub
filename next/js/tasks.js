@@ -19,20 +19,27 @@ function foldTask(id, folded) {
   [...FOLDED].forEach(x => { if (!taskById(x)) FOLDED.delete(x); });
   try { localStorage.setItem("fd_task_folded", JSON.stringify([...FOLDED])); } catch (e) {}
 }
+/* A task's row. Behind it sit what a swipe shows: ✓ on the left for a swipe right (tick it), and
+   Tomorrow / Next week / Delete on the right for a swipe left. Tap the title to edit; on the Tasks
+   screen press and hold to drag it. Every one of those is also in the edit panel, for VoiceOver. */
 function taskLine(t, sub, hasSubs) {
-  const id = esc(t.id);
-  // Dragging lives on the Tasks screen, where the rows sit in order.
-  const grip = VIEW !== "tasks" ? ""
-    : t.completed || String(t.id).startsWith("tmp-") ? `<span class="grip-space"></span>`
-    : `<button class="grip" data-tgrip="${id}" aria-label="Move ${esc(t.title)} (arrow keys; right makes it a subtask, left takes it out)"
-        onpointerdown="tdStart(event, '${id}')" onpointermove="tdMove(event)"
-        onpointerup="tdEnd(false)" onpointercancel="tdEnd(true)" onkeydown="tdKey(event, '${id}')">${GRIP_SVG}</button>`;
-  return `<div class="task ${t.completed ? "done" : ""} ${sub ? "sub" : ""} ${hasSubs ? "has-subs" : ""}" data-tid="${id}" ${sub ? `data-parent="${esc(t.parentId)}"` : ""}>
-    ${grip}
-    <input type="checkbox" ${t.completed ? "checked" : ""} onchange="toggleTask('${id}')" aria-label="${esc(t.title)}">
-    ${chip(t.assignee)}
-    <button type="button" class="ttl tedit" onclick="openTaskEdit('${id}')" aria-label="Edit ${esc(t.title)}">${esc(t.title)}${t.completed && t.completedBy ? ` <span class="tiny">by ${esc(t.completedBy)}</span>` : ""}${taskMeta(t)}</button>
-    <button class="del" onclick="deleteTask('${id}')" aria-label="Delete">×</button>
+  const id = esc(t.id), saving = String(t.id).startsWith("tmp-");
+  const canMove = !!planDate(t, isoPlus(todayStr(), 1));
+  return `<div class="task tswipe ${t.completed ? "done" : ""} ${sub ? "sub" : ""} ${hasSubs ? "has-subs" : ""}" data-tid="${id}" ${sub ? `data-parent="${esc(t.parentId)}"` : ""}>
+    <div class="swipe-under" aria-hidden="true">
+      <span class="su-done"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>${t.completed ? "Undo" : "Done"}</span>
+      <span class="su-acts">
+        <button type="button" tabindex="-1" class="su-move ${canMove ? "" : "off"}" onclick="swipeAct('${id}', 'tomorrow')">Tomorrow</button>
+        <button type="button" tabindex="-1" class="su-move ${canMove ? "" : "off"}" onclick="swipeAct('${id}', 'week')">Next week</button>
+        <button type="button" tabindex="-1" class="su-del" onclick="swipeAct('${id}', 'delete')">Delete</button>
+      </span>
+    </div>
+    <div class="task-in" ${saving ? "" : `onpointerdown="rowDown(event, '${id}')"`}>
+      <input type="checkbox" ${t.completed ? "checked" : ""} onchange="toggleTask('${id}')" aria-label="${esc(t.title)}">
+      ${chip(t.assignee)}
+      <button type="button" class="ttl tedit" data-tgrip="${id}" onclick="openTaskPanel('${id}')" onkeydown="tdKey(event, '${id}')"
+        aria-label="Edit ${esc(t.title)}${VIEW === "tasks" ? " (arrow keys move it; right makes it a subtask, left takes it out)" : ""}">${esc(t.title)}${t.completed && t.completedBy ? ` <span class="tiny">by ${esc(t.completedBy)}</span>` : ""}${taskMeta(t)}</button>
+    </div>
   </div>`;
 }
 
@@ -122,8 +129,10 @@ function isLate(t) {
 }
 const taskById = id => DATA.tasks.find(t => t.id === id);
 const isSub = t => !!t.parentId && !!taskById(t.parentId); // a subtask whose parent is gone stands as a task of its own
-const subsOf = id => DATA.tasks.filter(t => t.parentId === id);
-const tops = () => DATA.tasks.filter(t => !isSub(t));
+const GONE = new Map(); // tasks deleted here, waiting out their Undo: id -> timer (left out of every list)
+const live = t => !GONE.has(t.id) && !GONE.has(t.parentId);
+const subsOf = id => DATA.tasks.filter(t => t.parentId === id && live(t));
+const tops = () => DATA.tasks.filter(t => live(t) && !isSub(t));
 const sortKey = t => t.sort == null ? 1e9 : t.sort;
 /* Subtasks: open ones first, then the order they were put in. */
 const subOrder = (a, b) => !!a.completed - !!b.completed || sortKey(a) - sortKey(b);
@@ -133,24 +142,16 @@ const cmpTask = (a, b) => (a.due || "9").localeCompare(b.due || "9") || (a.time 
 const byDue = cmpTask;
 
 /* ----- Tasks ----- */
-const REPEAT_PRESETS = [
-  ["", "Doesn't repeat"], ["every 1 day", "Daily"], ["every 1 week on mon,tue,wed,thu,fri", "Every weekday"],
-  ["every 1 week", "Weekly"], ["every 2 weeks", "Every 2 weeks"], ["every 1 month", "Monthly"],
-  ["every 3 months", "Every 3 months"], ["every 6 months", "Every 6 months"], ["every 1 year", "Yearly"], ["custom", "Custom…"],
-];
-/* The repeat picker, shared by the add form (ids "new…") and the edit screen ("ed…"). */
-function repeatSelect(p) {
-  return `<select id="${p}Repeat" aria-label="Repeat" onchange="repeatUI('${p}')">${REPEAT_PRESETS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`;
-}
+/* The custom repeat controls (every N days/weeks/months/years, which weekdays, "the third Saturday"). */
 function repeatCustom(p) {
   return `<div class="addrow hidden" id="${p}Custom">
       <span class="muted">Every</span>
-      <input type="number" id="${p}RepN" min="1" max="99" value="1" aria-label="How many" oninput="repeatUI('${p}')">
-      <select id="${p}RepUnit" aria-label="Days, weeks, months or years" onchange="repeatUI('${p}')">
+      <input type="number" id="${p}RepN" min="1" max="99" value="1" aria-label="How many" oninput="tpRefresh()">
+      <select id="${p}RepUnit" aria-label="Days, weeks, months or years" onchange="tpRefresh()">
         <option value="day">day(s)</option><option value="week" selected>week(s)</option>
         <option value="month">month(s)</option><option value="year">year(s)</option></select>
-      <div class="daypick" id="${p}RepDays">${WD.map((d, i) => `<label><input type="checkbox" value="${d}" onchange="this.closest('.daypick').dataset.touched = 1; repeatUI('${p}')"><span aria-label="${WD_LONG[i]}">${WD_LONG[i][0]}</span></label>`).join("")}</div>
-      <select id="${p}RepOn" aria-label="Which day of the month" onchange="repeatUI('${p}')"></select>
+      <div class="daypick" id="${p}RepDays">${WD.map((d, i) => `<label><input type="checkbox" value="${d}" onchange="this.closest('.daypick').dataset.touched = 1; tpRefresh()"><span aria-label="${WD_LONG[i]}">${WD_LONG[i][0]}</span></label>`).join("")}</div>
+      <select id="${p}RepOn" aria-label="Which day of the month" onchange="tpRefresh()"></select>
     </div>`;
 }
 /* Top-level tasks a task could go under: open ones (and its own parent, even if ticked), not itself, not one still saving. */
@@ -158,56 +159,59 @@ function parentOptions(selected, except) {
   return `<option value="">Not a subtask</option>` + tops().filter(x => x.id !== except && (!x.completed || x.id === selected) && !String(x.id).startsWith("tmp-"))
     .sort(cmpTask).map(x => `<option value="${esc(x.id)}" ${x.id === selected ? "selected" : ""}>${esc(x.title)}</option>`).join("");
 }
+
+/* Whose tasks show, kept on this device. Everyone's tasks (and unassigned ones) always show;
+   a task shows when it or one of its subtasks is for that person. Jon's Todoist tasks show for All and Jon. */
+const TASK_FILTERS = [["all", "All"], ["Jon", "Jon"], ["Maggie", "Maggie"], ["kids", "Kids"]];
+function taskFilter() {
+  let f = "all";
+  try { f = localStorage.getItem("fd_task_filter") || "all"; } catch (e) {}
+  return TASK_FILTERS.some(([k]) => k === f) ? f : "all";
+}
+function setTaskFilter(f) { try { localStorage.setItem("fd_task_filter", f); } catch (e) {} render(); }
+function forWhom(t, f) {
+  if (f === "all" || !t.assignee || t.assignee === "Family") return true;
+  return f === "kids" ? t.assignee === "Clayton" || t.assignee === "Heidi" : t.assignee === f;
+}
+
 function renderTasks() {
-  const options = FAMILY.map(f => `<option>${f}</option>`).join("");
-  let h = `<div class="addform">
-    <input type="text" id="newTitle" placeholder="New task…">
-    <div class="addrow">
-      <input type="date" id="newDue" aria-label="Due date" onchange="repeatUI()">
-      <input type="time" id="newTime" aria-label="Due time" onchange="repeatUI()">
-    </div>
-    <div class="addrow">
-      <select id="newWho" aria-label="Who">${options}</select>
-      ${repeatSelect("new")}
-    </div>
-    <div class="addrow">
-      <select id="newParent" aria-label="Subtask of">${parentOptions("", "")}</select>
-    </div>
-    ${repeatCustom("new")}
-    <div class="addrow">
-      <span class="tiny grow" id="newRepeatText"></span>
-      <button class="primary" onclick="addTask()">Add</button>
-    </div>
-  </div>`;
-  // Dated tasks, like Apple Reminders: overdue, today, the coming week, then later.
-  // Subtasks go with their parents, so only top-level tasks sort into sections.
-  const today = todayStr(), week = isoPlus(today, 7), shown = new Set();
-  const dated = tops().filter(x => x.due);
+  const f = taskFilter(), today = todayStr(), week = isoPlus(today, 7), shown = new Set();
+  let h = `<div class="tfilter" role="group" aria-label="Show tasks for">${TASK_FILTERS.map(([k, l]) =>
+    `<button type="button" class="chipbtn" aria-pressed="${k === f}" onclick="setTaskFilter('${k}')">${l}</button>`).join("")}</div>`;
+  // Dated tasks, like Apple Reminders: overdue, today, this week, then later; repeating tasks sit
+  // under their next date. Subtasks go with their parents, so only top-level tasks sort into sections.
+  const pool = tops().filter(t => forWhom(t, f) || subsOf(t.id).some(s => forWhom(s, f)));
+  const dated = pool.filter(x => x.due);
   const take = list => { list.forEach(x => shown.add(x.id)); return list.sort(byDue); };
   const overdue = take(dated.filter(x => x.due < today && !x.completed));
   const todays = take(dated.filter(x => !shown.has(x.id) && (x.due === today || (x.repeat && x.completed))));
   const soon = take(dated.filter(x => !shown.has(x.id) && x.due > today && x.due <= week));
   const later = take(dated.filter(x => !shown.has(x.id) && x.due > week));
-  // Jon's reminders sort into the same sections by their due date.
-  const rems = reminderTops(), rDated = rems.filter(r => r.due);
+  const anytime = take(pool.filter(x => !shown.has(x.id) && !x.due && (x.recurrence === "once" || x.recurrence === "repeat")));
+  // Jon's Todoist tasks sort into the same sections by their due date.
+  const rems = f === "all" || f === "Jon" ? reminderTops() : [], rDated = rems.filter(r => r.due);
   const rOver = rDated.filter(r => r.due < today), rToday = rDated.filter(r => r.due === today);
   const rSoon = rDated.filter(r => r.due > today && r.due <= week), rLater = rDated.filter(r => r.due > week);
   const open = (ts, rs) => ts.filter(x => !x.completed).length + rs.filter(r => !r.ticked).length;
+  const sec = (name, ts, rs, warn) => ts.length || rs.length
+    ? `<h2 class="${warn ? "warn" : ""}">${name}<span class="hint">${open(ts, rs) ? open(ts, rs) + " open" : "all done"}</span></h2>
+       <div class="block">${mixRows(ts, rs).join("")}</div>` : "";
   h += remStale();
-  if (overdue.length || rOver.length) h += `<h2>Overdue<span class="hint">${open(overdue, rOver)}</span></h2><div class="block">${mixRows(overdue, rOver).join("")}</div>`;
-  if (todays.length || rToday.length) h += `<h2>Today</h2><div class="block">${mixRows(todays, rToday).join("")}</div>`;
-  if (soon.length || rSoon.length) h += `<h2>Next 7 days</h2><div class="block">${mixRows(soon, rSoon).join("")}</div>`;
+  h += sec("Overdue", overdue, rOver, true) + sec("Today", todays, rToday) + sec("This week", soon, rSoon);
   const nLater = later.length + rLater.length;
   if (nLater) h += `<details class="later" data-sec="later" ontoggle="secToggle(this)" ${REM.open.has("later") ? "open" : ""}><summary>Later · ${nLater} task${nLater > 1 ? "s" : ""}</summary><div class="block">${mixRows(later, rLater).join("")}</div></details>`;
-  RECURS.forEach(r => {
-    const group = tops().filter(t => t.recurrence === r && !shown.has(t.id)).sort(cmpTask);
-    if (!group.length) return;
-    const hint = { once: "", daily: " · resets every day", weekly: " · resets Mondays", monthly: " · resets on the 1st", quarterly: " · resets each quarter", yearly: " · resets Jan 1" }[r];
-    h += `<h2>${RECUR_LABEL[r]}${hint ? `<span class="hint">${hint}</span>` : ""}</h2>
-      <div class="block">${group.map(taskRow).join("")}</div>`;
-  });
-  h += renderUndatedReminders(rems.filter(r => !r.due));
-  if (!DATA.tasks.length && !rems.length) h += `<div class="block"><div class="empty">No tasks yet — add the first one above.</div></div>`;
+  h += sec("Anytime", anytime, []);
+  // The Sheet's own daily/weekly/monthly lists, which reset on a schedule and keep no date
+  const routines = RECURS.filter(r => r !== "once").map(r => [r, pool.filter(t => t.recurrence === r && !shown.has(t.id)).sort(cmpTask)]).filter(([, g]) => g.length);
+  if (routines.length) {
+    h += `<h2>Routines</h2>`;
+    const resets = { daily: "resets every day", weekly: "resets Mondays", monthly: "resets on the 1st", quarterly: "resets each quarter", yearly: "resets Jan 1" };
+    routines.forEach(([r, g]) => { h += `<div class="subhead">${RECUR_LABEL[r]} · ${resets[r]}</div><div class="block">${g.map(taskRow).join("")}</div>`; });
+  }
+  h += rems.length ? renderUndatedReminders(rems.filter(r => !r.due)) : "";
+  if (!tops().length && !reminderTops().length) h += `<div class="block"><div class="empty">No tasks yet. Tap + to add the first one.</div></div>`;
+  else if (!pool.length && !rems.length) h += `<div class="block"><div class="empty">Nothing for ${f === "kids" ? "the kids" : esc(f)} right now.</div></div>`;
+  h += `<p class="tiny tasks-help">Tap a task to edit it. Swipe right to tick it off, or left to move or delete it. Press and hold to drag it into a new spot, or onto another task to tuck it under.</p>`;
   return h + remFresh();
 }
 /* ----- Jon's Todoist tasks -----
@@ -263,7 +267,7 @@ function remEmpty(rm) {
 }
 function reminderRow(r, asSub) {
   const due = dueInfo(r.due), parts = [];
-  if (!asSub) parts.push(`<span>${esc(r.list)}${r.section ? " · " + esc(r.section) : ""}</span>`);
+  if (!asSub) parts.push(`<span>Todoist · ${esc(r.list)}${r.section ? " · " + esc(r.section) : ""}</span>`);
   if (asSub && r.under) parts.push(`<span>Under ${esc(r.under)}</span>`);
   if (r.parentKey && !asSub) parts.push(`<span>Subtask of ${esc(r.parent || "a task not shown")}</span>`);
   if (due) {
@@ -377,8 +381,8 @@ function isoPlus(iso, days) {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 const val = id => (document.getElementById(id) || {}).value || "";
-/* The repeat a form describes ("new" adds, "ed" edits), in the stored text form. */
-function currentRepeat(p = "new") {
+/* The repeat the task panel describes, in the stored text form. */
+function currentRepeat(p = "tp") {
   const preset = val(p + "Repeat");
   if (preset !== "custom") return preset;
   const n = Math.max(1, Math.min(99, parseInt(val(p + "RepN"), 10) || 1)), unit = val(p + "RepUnit");
@@ -391,7 +395,7 @@ function currentRepeat(p = "new") {
   return rule;
 }
 /* Shows the custom controls that fit, and says in words what will happen. */
-function repeatUI(p = "new") {
+function repeatUI(p = "tp") {
   const box = document.getElementById(p + "Custom");
   if (!box) return;
   const custom = val(p + "Repeat") === "custom", unit = val(p + "RepUnit");
@@ -405,34 +409,40 @@ function repeatUI(p = "new") {
     days.forEach((i, n) => { i.checked = n === d.getDay(); });
   }
   // "On the same date" or "on the third Saturday" (and "last", when it is), from the due date
-  const on = document.getElementById(p + "RepOn"), keep = on.value, k = Math.ceil(d.getDate() / 7), wd = WD[d.getDay()];
+  const on = document.getElementById(p + "RepOn"), keep = on.dataset.want || on.value, k = Math.ceil(d.getDate() / 7), wd = WD[d.getDay()];
+  delete on.dataset.want;
   const isLast = d.getDate() + 7 > new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
   const choices = [["", `On day ${d.getDate()}`], [`${NTH_CODE[k]} ${wd}`, `On the ${NTH_WORD[k]} ${WD_LONG[d.getDay()]}`]]
     .concat(isLast && k !== 5 ? [[`last ${wd}`, `On the last ${WD_LONG[d.getDay()]}`]] : []);
+  // A rule already saved stays on offer even when the due date isn't that weekday (so saving can't drop it).
+  const kept = /^(1st|2nd|3rd|4th|5th|last) (sun|mon|tue|wed|thu|fri|sat)$/.exec(keep);
+  if (kept && !choices.some(c => c[0] === keep)) choices.push([keep, `On the ${NTH_WORD[NTH[kept[1]]]} ${WD_LONG[WD.indexOf(kept[2])]}`]);
   on.innerHTML = choices.map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
   if (choices.some(c => c[0] === keep)) on.value = keep;
   on.classList.toggle("hidden", unit !== "month" && unit !== "year");
   // A time with no day means today.
   const rule = currentRepeat(p), info = dueInfo(due), time = val(p + "Time");
-  const when = (info.text.toLowerCase() === "today" ? "today" : info.text) + (time ? " at " + fmtTime(time) : "");
+  const word = info.text.toLowerCase(), when = (["today", "tomorrow", "yesterday"].includes(word) ? word : info.text) + (time ? " at " + fmtTime(time) : "");
   say(p + "RepeatText", rule ? `↻ ${describeRepeat(rule, due)}, starting ${when}`
     : val(p + "Due") || time ? `Due ${when}` : "");
 }
-/* Puts a stored repeat back into the picker: a preset when it is one, otherwise the custom controls. */
+/* Puts a stored repeat back into the panel: one of its buttons when it is one, otherwise the custom controls. */
+const TP_REPEATS = [["", "Never"], ["every 1 day", "Daily"], ["every 1 week", "Weekly"], ["every 1 month", "Monthly"], ["custom", "Custom…"]];
 function fillRepeat(p, text) {
-  const sel = document.getElementById(p + "Repeat"), r = parseRepeat(text);
-  if (!text || !r) { sel.value = ""; repeatUI(p); return; }
-  if ([...sel.options].some(o => o.value === text)) { sel.value = text; repeatUI(p); return; }
-  sel.value = "custom";
+  const box = document.getElementById(p + "Repeat"), r = parseRepeat(text);
+  if (!text || !r) { box.value = ""; return; }
+  if (TP_REPEATS.some(([v]) => v === text)) { box.value = text; return; }
+  box.value = "custom";
   document.getElementById(p + "RepN").value = r.n;
   document.getElementById(p + "RepUnit").value = r.unit;
   if (r.days) {
-    const box = document.getElementById(p + "RepDays");
-    box.dataset.touched = 1;
-    box.querySelectorAll("input").forEach((i, n) => { i.checked = r.days.includes(n); });
+    const days = document.getElementById(p + "RepDays");
+    days.dataset.touched = 1;
+    days.querySelectorAll("input").forEach((i, n) => { i.checked = r.days.includes(n); });
   }
-  repeatUI(p); // builds the "on the third Saturday" choices from the due date
-  if (r.nth) { document.getElementById(p + "RepOn").value = `${NTH_CODE[r.nth.k]} ${WD[r.nth.wd]}`; repeatUI(p); }
+  // The "on the third Saturday" choices are built from the due date; the saved one is handed over first.
+  if (r.nth) document.getElementById(p + "RepOn").dataset.want = `${NTH_CODE[r.nth.k]} ${WD[r.nth.wd]}`;
+  repeatUI(p);
 }
 /* Due date and time as a form gives them: a time alone means today, a repeat needs a day, and no day means no time. */
 function formWhen(p, repeat) {
@@ -440,26 +450,136 @@ function formWhen(p, repeat) {
   if (!due && (time || repeat)) due = todayStr();
   return { due, time: due ? time : "" };
 }
-function addTask() {
-  const title = document.getElementById("newTitle").value.trim();
-  if (!title) return;
-  const repeat = currentRepeat(), { due, time } = formWhen("new", repeat), parentId = val("newParent");
-  const body = { action: "addTask", title, recurrence: "once", due, time, repeat, parentId, assignee: val("newWho"), by: cfg.user };
-  const last = Math.max(0, ...subsOf(parentId).map(x => x.sort || 0));
-  if (parentId) foldTask(parentId, false);
-  DATA.tasks.push({ id: "tmp-" + Date.now(), title, recurrence: repeat ? "repeat" : "once", repeat, due, time, parentId,
-    sort: parentId ? last + 1 : null, assignee: body.assignee, completed: false });
-  clearDraft("fd_draft_task");
-  expectNewRows();
-  send(body);
+
+/* ----- The task panel: adding and editing -----
+   One panel for both. Who, When and Repeat are buttons; Custom repeats keep the full controls
+   (every N weeks on chosen days, "the third Saturday"), and a line says in words what will happen. */
+const TP = { id: null, showDate: false, showTime: false };
+function nextSaturday() { const t = todayStr(), wd = new Date(t + "T12:00:00").getDay(); return isoPlus(t, (6 - wd + 7) % 7 || 7); }
+function whenChoices() { const t = todayStr(); return [["", "No date"], [t, "Today"], [isoPlus(t, 1), "Tomorrow"], [nextSaturday(), "Saturday"]]; }
+function personChip(name, on) {
+  return `<button type="button" class="chipbtn who" aria-pressed="${on}" data-v="${esc(name)}" onclick="tpWho('${esc(name)}')">
+    ${name ? chip(name) : ""}<span>${name === "Family" ? "Everyone" : name || "Anyone"}</span></button>`;
 }
+function openTaskPanel(id) {
+  const t = id ? taskById(id) : null;
+  if (id && (!t || String(id).startsWith("tmp-"))) return; // still saving
+  closeSwipe();
+  const subs = t ? subsOf(id) : [];
+  const who = t ? t.assignee || "" : FAMILY.includes(cfg.user) ? cfg.user : "Family";
+  const people = !t || FAMILY.includes(who) ? FAMILY : [""].concat(FAMILY);
+  const save = `saveTaskPanel(${t ? `'${esc(id)}'` : ""})`;
+  Object.assign(TP, { id: t ? id : null, showDate: false, showTime: !!(t && t.time) });
+  overlayHtml(`
+    <div class="tp-head">
+      <button type="button" class="tp-cancel" onclick="closeOverlay()">Cancel</button>
+      <h2 class="tp-title">${t ? "Edit task" : "New task"}</h2>
+      <button type="button" class="primary tp-save" onclick="${save}">${t ? "Save" : "Add"}</button>
+    </div>
+    <label class="f" for="tpTitle">Task</label>
+    <input type="text" id="tpTitle" value="${t ? esc(t.title) : ""}" maxlength="200" placeholder="What needs doing?" autocomplete="off"
+      enterkeyhint="done" onkeydown="if (event.key === 'Enter') ${save}">
+    <span class="f" id="tpWhoL">Who</span>
+    <div class="chips" role="group" aria-labelledby="tpWhoL" id="tpWhoChips">${people.map(n => personChip(n, n === who)).join("")}</div>
+    <input type="hidden" id="tpWho" value="${esc(who)}">
+    <span class="f" id="tpWhenL">When</span>
+    <div class="chips" role="group" aria-labelledby="tpWhenL" id="tpWhenChips">
+      ${whenChoices().map(([v, l]) => `<button type="button" class="chipbtn" data-v="${v}" onclick="tpWhen('${v}')">${l}</button>`).join("")}
+      <button type="button" class="chipbtn" id="tpPickDate" onclick="tpPick('date')">Pick a date…</button>
+      <button type="button" class="chipbtn dashed" id="tpPickTime" onclick="tpPick('time')">+ Time</button>
+    </div>
+    <div class="addrow tp-pick">
+      <input type="date" id="tpDue" value="${t ? esc(t.due || "") : ""}" aria-label="Due date" onchange="tpRefresh()">
+      <input type="time" id="tpTime" value="${t ? esc(t.time || "") : ""}" aria-label="Due time" onchange="tpRefresh()">
+    </div>
+    <span class="f" id="tpRepL">Repeat</span>
+    <div class="chips" role="group" aria-labelledby="tpRepL" id="tpRepChips">
+      ${TP_REPEATS.map(([v, l]) => `<button type="button" class="chipbtn" data-v="${v}" onclick="tpRep('${v}')">${l}</button>`).join("")}
+    </div>
+    <input type="hidden" id="tpRepeat" value="">
+    ${repeatCustom("tp")}
+    <div class="tp-summary" id="tpRepeatText" role="status"></div>
+    <label class="f" for="tpParent">Subtask of</label>
+    <select id="tpParent" ${subs.length ? "disabled" : ""}>${parentOptions(t && isSub(t) ? t.parentId : "", id || "")}</select>
+    ${subs.length ? `<div class="tiny" style="margin-top:var(--space-2)">It has ${subs.length} subtask${subs.length > 1 ? "s" : ""} of its own, so it can't go under another task.</div>` : ""}
+    ${t ? `<div class="actions"><button type="button" class="danger" onclick="removeTask('${esc(id)}')">Delete task</button></div>` : ""}`);
+  fillRepeat("tp", t ? t.repeat || "" : "");
+  tpRefresh();
+  if (!t) document.getElementById("tpTitle").focus(); // straight to typing (while the tap that opened it still counts)
+}
+function tpWho(name) { document.getElementById("tpWho").value = name; tpRefresh(); }
+function tpWhen(v) { document.getElementById("tpDue").value = v; TP.showDate = false; tpRefresh(); }
+function tpRep(v) { document.getElementById("tpRepeat").value = v; tpRefresh(); }
+function tpPick(which) {
+  if (which === "date") TP.showDate = true; else TP.showTime = true;
+  tpRefresh();
+  const el = document.getElementById(which === "date" ? "tpDue" : "tpTime");
+  el.focus();
+  try { el.showPicker(); } catch (e) {}
+}
+/* Marks the buttons that match the panel's values, shows the date and time fields when they're
+   wanted, and says what will happen ("↻ Weekly on Mon, Thu, starting Saturday"). */
+function tpRefresh() {
+  if (!document.getElementById("tpDue")) return;
+  const due = val("tpDue"), time = val("tpTime"), rep = val("tpRepeat"), who = val("tpWho");
+  const known = whenChoices().some(([v]) => v === due);
+  document.querySelectorAll("#tpWhoChips .chipbtn").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === who));
+  document.querySelectorAll("#tpWhenChips .chipbtn[data-v]").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === due));
+  const pick = document.getElementById("tpPickDate");
+  pick.setAttribute("aria-pressed", !known);
+  pick.textContent = known ? "Pick a date…" : dueInfo(due).text;
+  const pt = document.getElementById("tpPickTime");
+  pt.setAttribute("aria-pressed", !!time);
+  pt.textContent = time ? fmtTime(time) : "+ Time";
+  document.getElementById("tpDue").classList.toggle("hidden", known && !TP.showDate);
+  document.getElementById("tpTime").classList.toggle("hidden", !time && !TP.showTime);
+  document.querySelectorAll("#tpRepChips .chipbtn").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === rep));
+  repeatUI("tp");
+  const say = document.getElementById("tpRepeatText");
+  if (!say.textContent) say.textContent = "No due date: it goes under Anytime.";
+}
+function saveTaskPanel(id) {
+  const title = val("tpTitle").trim();
+  if (!title) { document.getElementById("tpTitle").focus(); return; }
+  const repeat = currentRepeat("tp"), { due, time } = formWhen("tp", repeat), assignee = val("tpWho");
+  if (!id) {
+    const parentId = val("tpParent");
+    const last = Math.max(0, ...subsOf(parentId).map(x => x.sort || 0));
+    if (parentId) foldTask(parentId, false);
+    DATA.tasks.push({ id: "tmp-" + Date.now(), title, recurrence: repeat ? "repeat" : "once", repeat, due, time, parentId,
+      sort: parentId ? last + 1 : null, assignee, completed: false });
+    closeOverlay();
+    expectNewRows();
+    send({ action: "addTask", title, recurrence: "once", due, time, repeat, parentId, assignee, by: cfg.user });
+    return;
+  }
+  const t = taskById(id);
+  if (!t) { closeOverlay(); return; }
+  const parentId = subsOf(id).length ? "" : val("tpParent");
+  const body = { action: "updateTask", id, title, assignee, due, time, repeat, parentId };
+  // Show it straight away; the save answers with what the database now holds.
+  if (parentId !== (t.parentId || "")) t.sort = parentId ? Math.max(0, ...subsOf(parentId).map(x => x.sort || 0)) + 1 : null;
+  if (parentId) foldTask(parentId, false);
+  if (t.repeat && (due !== t.due || repeat !== t.repeat)) t.completed = false;
+  Object.assign(t, { title, assignee, due, time, repeat, parentId,
+    recurrence: repeat ? "repeat" : t.recurrence === "repeat" ? "once" : t.recurrence });
+  closeOverlay();
+  render();
+  sendTask(body);
+}
+const openTaskEdit = openTaskPanel; // older name
+
 function toggleTask(id) {
   if (id.startsWith("tmp")) { render(); return; } // still saving
   const t = DATA.tasks.find(x => x.id === id);
   if (t) { t.completed = !t.completed; t.completedBy = t.completed ? cfg.user : null; }
   LAST_TICK = t && t.completed ? id : null; // for the all-clear's Undo
   const row = document.querySelector(`#main [data-tid="${CSS.escape(id)}"]`);
-  if (row && t) row.classList.toggle("done", t.completed);
+  if (row && t) {
+    row.classList.toggle("done", t.completed);
+    const box = row.querySelector("input[type=checkbox]");
+    if (box) box.checked = t.completed; // when a swipe ticked it, not the box itself
+  }
   // Ticking a task ticks its open subtasks too (the server does the same); unticking leaves them.
   // A subtask with a repeat of its own keeps its own schedule.
   if (t && t.completed && !isSub(t)) subsOf(id).forEach(s => {
@@ -467,77 +587,138 @@ function toggleTask(id) {
   });
   send({ action: "toggleTask", id, by: cfg.user });
 }
-function deleteTask(id) {
-  const n = subsOf(id).length;
-  if (!confirm(n ? `Delete this task and its ${n} subtask${n > 1 ? "s" : ""}?` : "Delete this task?")) { render(); return; }
+
+/* Deleting waits five seconds behind an Undo, then goes to the Worker. Leaving the app sends it at once. */
+function removeTask(id) {
+  const t = taskById(id);
+  if (!t || GONE.has(id)) return;
+  const n = subsOf(id).length, sel = CSS.escape(id);
   closeOverlay();
-  const sel = CSS.escape(id);
-  leaveRow([...document.querySelectorAll(`#main [data-tid="${sel}"], #main [data-parent="${sel}"], #main details[data-for="${sel}"]`)], () => {
-    DATA.tasks = DATA.tasks.filter(x => x.id !== id && x.parentId !== id);
-    send({ action: "deleteTask", id });
+  GONE.set(id, setTimeout(() => finishRemove(id), 5000));
+  leaveRow([...document.querySelectorAll(`#main [data-tid="${sel}"], #main [data-parent="${sel}"], #main details[data-for="${sel}"]`)], () => render());
+  toast(`Deleted “${t.title}”${n ? ` and ${n} subtask${n > 1 ? "s" : ""}` : ""}`, "Undo", () => {
+    clearTimeout(GONE.get(id)); GONE.delete(id); expectNewRows(); render();
   });
 }
+function finishRemove(id) {
+  if (!GONE.has(id)) return;
+  clearTimeout(GONE.get(id));
+  GONE.delete(id);
+  DATA.tasks = DATA.tasks.filter(x => x.id !== id && x.parentId !== id);
+  send({ action: "deleteTask", id });
+}
+const deleteTask = removeTask; // older name
+document.addEventListener("visibilitychange", () => { if (document.hidden) [...GONE.keys()].forEach(finishRemove); });
 /* Edits go one at a time, in order, so a quick run of moves can't land out of order. */
 let TASK_Q = Promise.resolve();
 function sendTask(body) { TASK_Q = TASK_Q.then(() => send(body)); return TASK_Q; }
 
-/* ----- Editing a task -----
-   Tap a task's title. Everything the add form sets can be changed, and a
-   task can be put under another one (or taken out) as a subtask. */
-function openTaskEdit(id) {
-  const t = taskById(id);
-  if (!t || String(id).startsWith("tmp-")) return; // still saving
-  const subs = subsOf(id), who = FAMILY.includes(t.assignee) ? FAMILY : [""].concat(FAMILY);
-  overlayHtml(`
-    <header><span class="eyebrow">Edit task</span></header>
-    <label class="f" for="edTitle">Task</label>
-    <input type="text" id="edTitle" value="${esc(t.title)}" maxlength="200" onkeydown="if (event.key === 'Enter') saveTaskEdit('${esc(id)}')">
-    <label class="f" for="edWho">Who</label>
-    <select id="edWho">${who.map(f => `<option value="${esc(f)}" ${f === (t.assignee || "") ? "selected" : ""}>${esc(f || "Anyone")}</option>`).join("")}</select>
-    <label class="f" for="edDue">Due</label>
-    <div class="addrow">
-      <input type="date" id="edDue" value="${esc(t.due || "")}" aria-label="Due date" onchange="repeatUI('ed')">
-      <input type="time" id="edTime" value="${esc(t.time || "")}" aria-label="Due time" onchange="repeatUI('ed')">
-      <button type="button" class="ghost" onclick="clearWhen()">Clear</button>
-    </div>
-    <label class="f" for="edRepeat">Repeat</label>
-    <div class="addrow">${repeatSelect("ed")}</div>
-    ${repeatCustom("ed")}
-    <div class="tiny" id="edRepeatText" style="margin-top:var(--space-2)"></div>
-    <label class="f" for="edParent">Subtask of</label>
-    <select id="edParent" ${subs.length ? "disabled" : ""}>${parentOptions(isSub(t) ? t.parentId : "", id)}</select>
-    ${subs.length ? `<div class="tiny" style="margin-top:var(--space-2)">It has ${subs.length} subtask${subs.length > 1 ? "s" : ""} of its own, so it can't go under another task.</div>` : ""}
-    <div class="actions">
-      <button class="primary" onclick="saveTaskEdit('${esc(id)}')">Save</button>
-      <button class="ghost" onclick="closeOverlay()">Cancel</button>
-      <button class="danger" onclick="deleteTask('${esc(id)}')">Delete</button>
-    </div>
-    <div class="tiny" style="margin-top:var(--space-5)">On the Tasks screen, drag a task by its handle: onto another task to make it a subtask, between tasks to move it, or onto Today, Tomorrow, Next week or No date.</div>`);
-  fillRepeat("ed", t.repeat || "");
+/* ----- Swiping a task row, and pressing and holding to drag it -----
+   A sideways move swipes; an up-and-down one scrolls the page as usual. Past about 90 px to the
+   right, letting go ticks it. To the left it opens Tomorrow / Next week / Delete, until a tap
+   anywhere else. On the Tasks screen, holding still for under half a second starts a drag. */
+const SWIPE = { id: null, el: null, x0: 0, y0: 0, lx: 0, ly: 0, dx: 0, mode: null, pid: null, hold: 0 };
+const SWIPE_ACTS = 228, SWIPE_TICK = 90, HOLD_MS = 450;
+function swipePaint(el, dx) {
+  el.style.transform = dx ? `translateX(${dx}px)` : "";
+  const row = el.closest(".task");
+  row.classList.toggle("sw-right", dx > 0);
+  row.classList.toggle("sw-left", dx < 0);
+  row.classList.toggle("sw-ready", dx > SWIPE_TICK);
 }
-function clearWhen() {
-  document.getElementById("edDue").value = "";
-  document.getElementById("edTime").value = "";
-  document.getElementById("edRepeat").value = "";
-  repeatUI("ed");
+function swipeSnap(el, dx) {
+  el.classList.remove("swiping");
+  el.dataset.open = dx ? "1" : "";
+  swipePaint(el, dx);
 }
-function saveTaskEdit(id) {
+function closeSwipe(except) {
+  document.querySelectorAll('#main .task-in[data-open="1"]').forEach(el => { if (el !== except) swipeSnap(el, 0); });
+}
+function rowDown(e, id) {
+  if ((e.button && e.button > 0) || TD || DRAG || panelUp()) return;
+  if (e.pointerType === "mouse" && e.target.closest("input, button")) return; // a click on a control is a click
+  const el = e.currentTarget;
+  closeSwipe(el);
+  Object.assign(SWIPE, { id, el, x0: e.clientX, y0: e.clientY, lx: e.clientX, ly: e.clientY, dx: 0, mode: null, pid: e.pointerId });
+  el.addEventListener("pointermove", rowMove);
+  el.addEventListener("pointerup", rowUp);
+  el.addEventListener("pointercancel", rowCancel);
+  clearTimeout(SWIPE.hold);
   const t = taskById(id);
-  if (!t) { closeOverlay(); return; }
-  const title = val("edTitle").trim();
-  if (!title) { document.getElementById("edTitle").focus(); return; }
-  const repeat = currentRepeat("ed"), { due, time } = formWhen("ed", repeat);
-  const parentId = subsOf(id).length ? "" : val("edParent");
-  const body = { action: "updateTask", id, title, assignee: val("edWho"), due, time, repeat, parentId };
-  // Show it straight away; the save answers with what the Sheet now holds.
-  if (parentId !== (t.parentId || "")) t.sort = parentId ? Math.max(0, ...subsOf(parentId).map(x => x.sort || 0)) + 1 : null;
-  if (parentId) foldTask(parentId, false);
-  if (t.repeat && (due !== t.due || repeat !== t.repeat)) t.completed = false;
-  Object.assign(t, { title, assignee: body.assignee, due, time, repeat, parentId,
-    recurrence: repeat ? "repeat" : t.recurrence === "repeat" ? "once" : t.recurrence });
-  closeOverlay();
-  render();
-  sendTask(body);
+  if (VIEW === "tasks" && t && !t.completed) SWIPE.hold = setTimeout(rowHold, HOLD_MS);
+}
+function rowMove(e) {
+  if (e.pointerId !== SWIPE.pid) return;
+  if (TD) { tdMove(e); return; }
+  const dx = e.clientX - SWIPE.x0, dy = e.clientY - SWIPE.y0;
+  SWIPE.lx = e.clientX; SWIPE.ly = e.clientY;
+  if (!SWIPE.mode) {
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearTimeout(SWIPE.hold);
+    if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.3) {
+      SWIPE.mode = "swipe";
+      try { SWIPE.el.setPointerCapture(e.pointerId); } catch (err) {}
+      SWIPE.el.classList.add("swiping");
+    } else if (Math.abs(dy) > 10) { rowRelease(); return; } // it's a scroll
+    else return;
+  }
+  const base = SWIPE.el.dataset.open ? -SWIPE_ACTS : 0;
+  SWIPE.dx = Math.max(-SWIPE_ACTS - 36, Math.min(130, base + dx));
+  swipePaint(SWIPE.el, SWIPE.dx);
+}
+function rowUp() {
+  clearTimeout(SWIPE.hold);
+  if (TD) { rowRelease(); tdEnd(false); return; }
+  if (SWIPE.mode === "swipe") {
+    const { id, el, dx } = SWIPE;
+    if (dx > SWIPE_TICK) { swipeSnap(el, 0); toggleTask(id); }
+    else if (dx < -SWIPE_ACTS / 2) swipeSnap(el, -SWIPE_ACTS);
+    else swipeSnap(el, 0);
+  }
+  rowRelease();
+}
+function rowCancel() {
+  clearTimeout(SWIPE.hold);
+  if (TD) { rowRelease(); tdEnd(true); return; }
+  if (SWIPE.mode === "swipe") swipeSnap(SWIPE.el, SWIPE.el.dataset.open ? -SWIPE_ACTS : 0);
+  rowRelease();
+}
+function rowRelease() {
+  const el = SWIPE.el;
+  if (el) {
+    el.removeEventListener("pointermove", rowMove);
+    el.removeEventListener("pointerup", rowUp);
+    el.removeEventListener("pointercancel", rowCancel);
+  }
+  Object.assign(SWIPE, { id: null, el: null, mode: null, pid: null });
+}
+/* Held still: pick it up, as the dot handle used to. */
+function rowHold() {
+  if (SWIPE.mode || !SWIPE.el) return;
+  SWIPE.mode = "drag";
+  if (navigator.vibrate) navigator.vibrate(12);
+  tdStart({ preventDefault() {}, currentTarget: SWIPE.el, pointerId: SWIPE.pid, clientX: SWIPE.lx, clientY: SWIPE.ly }, SWIPE.id);
+}
+/* While a row is being swiped or dragged, the page doesn't scroll under the finger. */
+document.addEventListener("touchmove", e => { if (TD || SWIPE.mode === "swipe") e.preventDefault(); }, { passive: false });
+/* A tap anywhere but an open row closes it. */
+document.addEventListener("pointerdown", e => {
+  if (!e.target.closest || !e.target.closest('.task-in[data-open="1"], .swipe-under')) closeSwipe();
+});
+/* What the buttons behind a row do. Moving keeps its time; each can be undone. */
+function swipeAct(id, what) {
+  const t = taskById(id);
+  if (!t) return;
+  closeSwipe();
+  if (what === "delete") { removeTask(id); return; }
+  const plan = planDate(t, isoPlus(todayStr(), what === "tomorrow" ? 1 : 7));
+  if (!plan) { toast("This one resets on its own schedule, so it keeps no date."); return; }
+  const before = { due: t.due || "", time: t.time || "" };
+  commitPlan(t, plan);
+  toast(what === "tomorrow" ? `Moved to tomorrow` : `Moved to next ${dueInfo(plan.due).text}`, "Undo", () => {
+    Object.assign(t, before);
+    render();
+    sendTask({ action: "updateTask", id, due: before.due, time: before.time });
+  });
 }
 
 /* ----- Dragging tasks -----
