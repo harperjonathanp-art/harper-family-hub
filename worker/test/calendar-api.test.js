@@ -81,7 +81,7 @@ test("the timer reads the calendars and the Hub is shown them", async () => {
   await cron();
   const d = await (await h.get("/api?action=all", jon)).json();
   assert.deepEqual(d.events.map(e => [e.cal, e.title, e.allDay, e.date]), [["Jon", "Dentist", false, "2026-11-22"], ["MCHS", "No school", true, "2026-11-23"], ["Maggie", "Book club", false, "2026-11-23"], ["Family", "Grandma visits", true, "2026-11-25"]]);
-  assert.deepEqual(d.events[3], { cal: "Family", color: "#F6BF26", title: "Grandma visits", allDay: true, date: "2026-11-25", start: "7:00 PM", end: "7:00 PM", sort: Date.parse("2026-11-25T05:00:00Z") });
+  assert.deepEqual(d.events[3], { cal: "Family", color: "#F6BF26", title: "Grandma visits", allDay: true, date: "2026-11-25", start: "7:00 PM", end: "7:00 PM", endDate: "2026-11-27", sort: Date.parse("2026-11-25T05:00:00Z") });
   const s = await (await h.get("/auth/calendar", jon)).json();
   assert.deepEqual([s.connected, s.errors, s.readAt], [true, {}, Date.parse(NOW)]);
 

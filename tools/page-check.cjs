@@ -62,8 +62,11 @@ function sample() {
       ev(-180, 30, "School drop-off", "Family", "#46647b"),
       ev(35, 75, "Soccer practice", "MCHS", "#2f5d46"),
       ev(165, 120, "Small group", "Jon", "#856224"),
-      { date: day(1), allDay: true, title: "Picture day", cal: "Heidi", color: "#b0452a" },
-      { date: day(2), start: "5:00 PM", title: "Piano lesson", cal: "Heidi", color: "#b0452a" },
+      { date: day(1), allDay: true, title: "Picture day", cal: "Maggie", color: "#009688" },
+      { date: day(2), start: "5:00 PM", title: "Piano lesson", cal: "Maggie", color: "#009688" },
+      // over several days: all day Tue–Thu, and an overnight from 4 PM to 11 AM the next day
+      { date: day(1), endDate: day(3), allDay: true, title: "Grandma visits", cal: "Family", color: "#F6BF26" },
+      { date: day(5), endDate: day(6), start: "4:00 PM", end: "11:00 AM", title: "Camping trip", cal: "MCHS", color: "#C5B783" },
     ],
     checkins: [{ date: day(-1), type: "huddle", answers: { rose: "Clayton scored twice", fun: "Bike ride Saturday" } }],
     groceries: [{ id: "a", item: "Milk" }, { id: "b", item: "Tortillas" }, { id: "c", item: "Bell peppers" }, { id: "d", item: "Coffee", done: true }],
@@ -168,6 +171,46 @@ function contrast(a, b) {
         if (ck.join() !== "8,1 of 7,1") problems.push(`${tag}: check-in cards: ${ck.join(" / ")}`);
         await shot("checkin-card");
         await page.evaluate(() => { CHECKIN_OPEN = null; render(); });
+        // Calendar: the week strip, a dot per calendar, events over several days on each of their days
+        if (await page.evaluate(() => typeof calPaint === "function")) {
+          await page.evaluate(() => go("calendar"));
+          await page.waitForTimeout(650);
+          const D = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+          const cal = await page.evaluate(D => {
+            const day = d => document.querySelector(`.wkday[data-day="${d}"]`);
+            const dots = d => (day(d) ? day(d).querySelectorAll(".dots i").length : -1);
+            const text = () => document.getElementById("calDay").textContent.replace(/\s+/g, " ");
+            const out = {
+              days: document.querySelectorAll(".wkday").length, weeks: calWeeks().length,
+              picked: [...document.querySelectorAll('.wkday[aria-pressed="true"]')].map(b => b.dataset.day),
+              title: document.getElementById("wkTitle").textContent, todayBtn: document.getElementById("wkToday").hidden,
+              dots: [dots(D[0]), dots(D[1]), dots(D[2]), dots(D[3]), dots(D[4])], key: document.querySelectorAll(".cal-key span").length,
+            };
+            calPick(D[2]); out.mid = text(); out.todayBtn2 = document.getElementById("wkToday").hidden;
+            calPick(D[3]); out.end = text();
+            calPick(D[6]); out.camp = text();
+            calToday(); calWeek(1);
+            out.next = [document.getElementById("wkTitle").textContent, document.getElementById("wkTrack").style.transform, CAL.day];
+            calToday();
+            out.back = [document.getElementById("wkTitle").textContent, CAL.day];
+            return out;
+          }, [0, 1, 2, 3, 4, 5, 6].map(D));
+          const want = (ok, what) => { if (!ok) problems.push(`${tag}: calendar: ${what}`); };
+          want(cal.days === cal.weeks * 7 && cal.weeks >= 2, `${cal.days} days in ${cal.weeks} weeks`);
+          want(cal.picked.join() === D(0), `the day picked is ${cal.picked.join()}`);
+          want(/^This week/.test(cal.title) && cal.todayBtn, `opens on "${cal.title}" (Today button hidden: ${cal.todayBtn})`);
+          want(cal.dots[0] >= 2 && cal.dots[1] >= 2 && cal.dots[2] >= 2 && cal.dots[3] === 1 && cal.dots[4] === 0, `dots ${cal.dots.join()}`);
+          want(cal.key === 4, `the key has ${cal.key} calendars`);
+          want(/Grandma visits.*through/.test(cal.mid) && !cal.todayBtn2, `the middle day reads "${cal.mid.slice(0, 120)}"`);
+          want(/Grandma visits.*last day/.test(cal.end), `the last day reads "${cal.end.slice(0, 120)}"`);
+          want(/11:00 AM Camping trip.*ends/.test(cal.camp), `the overnight's second day reads "${cal.camp.slice(0, 120)}"`);
+          want(/^Next week/.test(cal.next[0]) && cal.next[1] === "translateX(-100%)", `next week shows "${cal.next.join(" / ")}"`);
+          want(/^This week/.test(cal.back[0]) && cal.back[1] === D(0), `Today goes back to "${cal.back.join(" / ")}"`);
+          await page.evaluate(D => calPick(D), D(2));
+          await page.waitForTimeout(450);
+          await shot("calendar-day");
+          await page.evaluate(() => calToday());
+        }
         // Today: a greeting, the day in a sentence, Up next, and the pill once synced
         await page.evaluate(() => go("today"));
         await page.waitForTimeout(650);

@@ -65,7 +65,9 @@ test("the same events as getEvents_ in Code.gs, whatever the day, zone or daylig
       const diff = calendar.compareEvents(mine, theirs);
       assert.deepEqual([diff.onlyMine, diff.onlyTheirs, diff.mine], [0, 0, theirs.length], at + " — " + JSON.stringify(diff));
       assert.deepEqual(mine.map(e => e.sort), theirs.map(e => e.sort), at + " — in the same order of time");
-      assert.deepEqual(Object.keys(mine[0] || {}), Object.keys(theirs[0] || {}), at + " — with the same fields");
+      // Every field Code.gs gave (the Worker adds endDate, for events over several days)
+      assert.deepEqual(Object.keys(mine[0] || {}).filter(k => k !== "endDate"), Object.keys(theirs[0] || {}), at + " — with the same fields");
+      mine.forEach(e => assert.ok(e.endDate >= e.date, at + " — ends on or after the day it starts: " + JSON.stringify(e)));
       seen.events += mine.length; seen.allDay += mine.filter(e => e.allDay).length; if (!mine.length) seen.empty++;
       seen.utcAllDay += mine.filter(e => e.allDay && e.cal === "Family" && e.start !== "12:00 AM").length;
       const homeDay = today(new Date(clock.now));
