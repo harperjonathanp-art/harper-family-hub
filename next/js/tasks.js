@@ -105,7 +105,7 @@ function taskMeta(t) {
     parts.push(`<span class="${late ? "overdue" : ""}">${esc(text)}${late ? " · overdue" : ""}</span>`);
   }
   if (t.repeat) parts.push(`<span>↻ ${esc(describeRepeat(t.repeat, t.due))}</span>`);
-  if (t.badRepeat) parts.push(`<span class="overdue">Can't read the repeat "${esc(t.badRepeat)}" — fix it in the Sheet</span>`);
+  if (t.badRepeat) parts.push(`<span class="overdue">Can't read the repeat "${esc(t.badRepeat)}". Tap the task to set it again</span>`);
   return parts.length ? `<span class="meta">${parts.join(" &nbsp;")}</span>` : "";
 }
 function isDailyRepeat(t) {
@@ -203,7 +203,7 @@ function renderTasks() {
   if (nLater) h += `<details class="later" data-sec="later" ontoggle="secToggle(this)" ${REM.open.has("later") ? "open" : ""}><summary>Later · ${nLater} task${nLater > 1 ? "s" : ""}</summary><div class="block">${mixRows(later, rLater).join("")}</div></details>`;
   if (wide()) h += `</div><div class="col">`;
   h += sec("Anytime", anytime, []);
-  // The Sheet's own daily/weekly/monthly lists, which reset on a schedule and keep no date
+  // The routines: daily/weekly/monthly lists that reset on a schedule and keep no date
   const routines = RECURS.filter(r => r !== "once").map(r => [r, pool.filter(t => t.recurrence === r && !shown.has(t.id)).sort(cmpTask)]).filter(([, g]) => g.length);
   if (routines.length) {
     h += `<h2>Routines</h2>`;
@@ -212,9 +212,11 @@ function renderTasks() {
   }
   h += rems.length ? renderUndatedReminders(rems.filter(r => !r.due)) : "";
   if (wide()) h += `</div></div>`;
-  if (!tops().length && !reminderTops().length) h += `<div class="block"><div class="empty">No tasks yet. Tap + to add the first one.</div></div>`;
+  if (!tops().length && !reminderTops().length) h += `<div class="block"><div class="empty">No tasks yet. ${wide() ? "Add the first one with New task." : "Tap + to add the first one."}</div></div>`;
   else if (!pool.length && !rems.length) h += `<div class="block"><div class="empty">Nothing for ${f === "kids" ? "the kids" : esc(f)} right now.</div></div>`;
-  h += `<p class="tiny tasks-help">Tap a task to edit it. Swipe right to tick it off, or left to move or delete it. Press and hold to drag it into a new spot, or onto another task to tuck it under.</p>`;
+  h += wide()
+    ? `<p class="tiny tasks-help">Click a task to edit it. Drag it right to tick it off, or left to move or delete it. Hold it a moment, then drag, to put it in a new spot or onto another task to tuck it under.</p>`
+    : `<p class="tiny tasks-help">Tap a task to edit it. Swipe right to tick it off, or left to move or delete it. Press and hold to drag it into a new spot, or onto another task to tuck it under.</p>`;
   return h + remFresh();
 }
 /* ----- Jon's Todoist tasks -----
@@ -762,7 +764,7 @@ function planPlace(t, r, where) {
   // Beside a top-level task: it takes that task's day and time, so it sorts where it's dropped.
   let due = t.due || "", time = t.time || "";
   if (r.due) {
-    if (t.recurrence !== "once" && t.recurrence !== "repeat") return null; // the Sheet's own daily/weekly lists keep no date
+    if (t.recurrence !== "once" && t.recurrence !== "repeat") return null; // the daily/weekly routines keep no date
     due = r.due; time = r.time || "";
   } else if (due || t.recurrence !== r.recurrence) return null; // undated lists only reorder
   const group = tops().filter(x => open(x) && (x.due || "") === due && (x.time || "") === time &&

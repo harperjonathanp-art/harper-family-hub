@@ -21,7 +21,7 @@ function renderMeals() {
   return `${hint}<div class="weekcard">${rows}</div>
     <div class="actions">
       <button class="primary" onclick="saveMeals()">Save week</button>
-      <span class="tiny">Also editable straight from the Google Sheet.</span>
+      <span class="tiny">Saved for everyone, and kept on this phone while you type.</span>
     </div>
     ${renderGroceries()}`;
 }

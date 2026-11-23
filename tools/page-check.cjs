@@ -528,6 +528,28 @@ function contrast(a, b) {
     }
   }
 
+  // Every icon the page and its manifest name is there, at the size it says
+  {
+    const c = await browser.newContext(), p = await c.newPage();
+    await c.route(HUB + "/**", worker);
+    await p.goto(base);
+    const icons = await p.evaluate(async () => {
+      const man = await (await fetch(document.querySelector('link[rel="manifest"]').href)).json();
+      const list = man.icons.map(i => [new URL(i.src, document.querySelector('link[rel="manifest"]').href).href, i.sizes])
+        .concat([...document.querySelectorAll('link[rel~="icon"], link[rel="apple-touch-icon"]')].map(l => [l.href, l.sizes.value || (l.rel === "apple-touch-icon" ? "180x180" : "")]));
+      const out = [];
+      for (const [href, sizes] of list) {
+        const img = new Image(); img.src = href;
+        const ok = await img.decode().then(() => true, () => false);
+        const got = ok ? img.naturalWidth + "x" + img.naturalHeight : "missing";
+        if (!ok || (sizes && sizes !== "any" && got !== sizes)) out.push(href.split("/").slice(-2).join("/") + ": " + got + (sizes ? " (wants " + sizes + ")" : ""));
+      }
+      return out;
+    });
+    icons.forEach(x => problems.push("icons: " + x));
+    await c.close();
+  }
+
   // "Auto" follows the phone's setting
   const ctx = await browser.newContext({ colorScheme: "dark" });
   const page = await ctx.newPage();

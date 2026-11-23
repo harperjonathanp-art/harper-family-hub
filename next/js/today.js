@@ -162,7 +162,7 @@ function renderToday() {
   </section>`;
   if (Array.isArray(DATA.groceries)) {
     const want = DATA.groceries.filter(g => !g.done).map(g => g.item);
-    const names = want.length ? want.slice(0, 4).join(", ") + (want.length > 4 ? ` and ${want.length - 4} more` : "") : "Everything's got";
+    const names = want.length ? want.slice(0, 4).join(", ") + (want.length > 4 ? ` and ${want.length - 4} more` : "") : "Nothing on the list";
     h += `<button type="button" class="grorow" onclick="go('meals')" aria-label="${esc(`Groceries: ${want.length} to get. Opens Dinner.`)}">
       <span class="count" data-count="gro">${want.length}</span>
       <span class="gr-text"><span class="gr-label">Groceries to get</span><span class="gr-items">${esc(names)}</span></span>

@@ -6,22 +6,31 @@
 <meta name="robots" content="noindex">
 <title>Family Hub — Privacy</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap">
+<!-- In the Hub's Fridge Door look (next/css/themes.css), light and dark. -->
 <style>
-  body { margin: 0; background: #e7eae0; color: #1f2a24; font: 17px/1.6 -apple-system, system-ui, sans-serif; }
-  main { max-width: 40rem; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
-  h1 { font-size: 1.7rem; line-height: 1.25; margin: 0 0 .5rem; }
-  h2 { font-size: 1.1rem; margin: 2rem 0 .25rem; }
-  p, li { margin: .5rem 0; }
-  .lede { color: #4d5852; }
-  a { color: #2f5d46; }
+  :root { --bg: #f3f0e8; --ink: #1b1b1f; --muted: #50505a; --accent: #1f7a52; --line: rgba(27,27,31,0.10); }
   @media (prefers-color-scheme: dark) {
-    body { background: #161b18; color: #e6ebe4; } .lede { color: #a5b0a9; } a { color: #8fc7a8; }
+    :root { --bg: #101114; --ink: #f3f3f6; --muted: #a6a8b2; --accent: #6fd3a2; --line: rgba(243,243,246,0.10); }
   }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 "Bricolage Grotesque", -apple-system, system-ui, sans-serif; }
+  main { max-width: 40rem; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+  .eyebrow { display: inline-block; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+  h1 { font-size: 2.2rem; line-height: 1.1; font-weight: 800; letter-spacing: -0.02em; margin: .75rem 0; }
+  h2 { font-size: 1.15rem; font-weight: 800; margin: 2.25rem 0 .25rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
+  p, li { margin: .5rem 0; }
+  .lede { color: var(--muted); font-size: 1.1rem; }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  .back { display: inline-block; margin-top: 1.5rem; padding: 10px 18px; border-radius: 14px; background: var(--accent); color: var(--bg); font-weight: 600; text-decoration: none; }
 </style>
 </head>
 <body>
 <main>
-<h1>Family Hub: privacy</h1>
+<span class="eyebrow">Harper Family Hub</span>
+<h1>Privacy</h1>
 <p class="lede">The Family Hub is a private app for one family: a shared view of the day's tasks, dinners, calendar and check-ins. It is not offered to the public, and only family members can sign in.</p>
 
 <h2>Signing in with Google</h2>
@@ -39,14 +48,14 @@
 <p>The Hub's use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
 
 <h2>What the Hub keeps, and where</h2>
-<p>What the family puts into the Hub (tasks, grocery lists, dinner plans, check-ins, notification settings) and the copies described above are kept in the Hub's own database, hosted by Cloudflare. To do its job the Hub also reads the family's own task list and meal plan from Todoist and Notion, and saves the family's check-ins to the family's Notion.</p>
+<p>What the family puts into the Hub (tasks, grocery lists, dinner plans, check-ins, notification settings) and the copies described above are kept in the Hub's own database, hosted by Cloudflare. To do its job the Hub also reads the family's own task list from Todoist, and the meal plan and recipe collection from Notion, keeping a copy of the recipes (and a week's copy of their photos) so they open quickly. It saves to the family's Notion what the family asks it to: check-ins, how a dinner went, favorite recipes and dinners planned in the Hub.</p>
 
 <h2>What the Hub does not do</h2>
 <p>Nothing is sold, shared with anyone outside the family, or used for advertising. There is no tracking or analytics. Nothing from Google is used to train or improve any AI or machine-learning model.</p>
 
 <h2>Questions</h2>
 <p>Ask the family member who set the Hub up, or see the app's source at <a href="https://github.com/harperjonathanp-art/harper-family-hub">github.com/harperjonathanp-art/harper-family-hub</a>.</p>
-<p><a href="./">Back to the Family Hub</a></p>
+<p><a class="back" href="./">Back to the Family Hub</a></p>
 </main>
 </body>
 </html>
