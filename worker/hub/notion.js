@@ -20,7 +20,7 @@ const NOTION_VERSION = "2025-09-03";
 const NOTION_WEEK_START = "Sat";        // the plan week runs Saturday to Friday
 const RECIPE_CACHE_MS = 6 * 3600 * 1000; // a recipe's link is looked up at most every 6 hours
 // The Meal Plan database's property names, as they read in Notion.
-const NOTION_PROPS = { date: "Date", meal: "Meal", type: "Meal Type", status: "Status", notes: "Notes", who: "Who Cooks", recipe: "Recipe" };
+export const NOTION_PROPS = { date: "Date", meal: "Meal", type: "Meal Type", status: "Status", notes: "Notes", who: "Who Cooks", recipe: "Recipe" };
 const NOTION_RECIPE_LINK = "Source"; // the Recipes database's link to the recipe online
 // "Who Cooks" as the Hub words it. Anything else (Leftovers, Eating out) is shown as is.
 const NOTION_WHO = { Jon: "Jon cooks", Maggie: "Maggie cooks", Together: "Cooking together" };
@@ -60,17 +60,29 @@ const parse = function (text, empty) { try { return JSON.parse(text || "") || em
 export function notionMealsInfo(c, env) {
   if (!notionOn(env)) return null;
   const s = parse(c.props[STATE], {});
-  return { source: "notion", syncedAt: s.at || 0, error: s.error || "", weekStarts: NOTION_WEEK_START };
+  // recipes: each day's recipes in the Recipes database, { Mon: [pageId, …] }, so the Hub can open them
+  return { source: "notion", syncedAt: s.at || 0, error: s.error || "", weekStarts: NOTION_WEEK_START, recipes: s.recipes || {} };
 }
 
-export function notionMealsDone(c, week) { c.props[STATE] = JSON.stringify({ at: c.now.getTime(), error: "", week: week }); }
+export function notionMealsDone(c, week, recipes) {
+  c.props[STATE] = JSON.stringify({ at: c.now.getTime(), error: "", week: week, recipes: recipes || {} });
+}
+/** Each day's recipe pages, from fetchDinners' answer: { Mon: [id, …] }, only the days that have some. */
+export function weekOfRecipes(dinners, week) {
+  const out = {};
+  for (let i = 0; i < 7; i++) {
+    const d = dinners[isoAdd(week, i)];
+    if (d && d.recipes && d.recipes.length) out[isoDay(isoAdd(week, i))] = d.recipes;
+  }
+  return out;
+}
 export function notionMealsFailed(c, message) {
   const s = parse(c.props[STATE], {});
   s.error = String(message).slice(0, 200);
   c.props[STATE] = JSON.stringify(s);
 }
 
-async function notion(env, method, path, body) {
+export async function notion(env, method, path, body) {
   const res = await fetch("https://api.notion.com/v1" + path, {
     method: method,
     headers: Object.assign({ Authorization: "Bearer " + secret(env, "NOTION_TOKEN"), "Notion-Version": NOTION_VERSION },
@@ -109,15 +121,17 @@ export async function fetchDinners(env, week, recipes, nowMs) {
     const date = String((p[P.date] && p[P.date].date && p[P.date].date.start) || "").slice(0, 10);
     if (!date) continue;
     const name = plainText(p[P.meal] && p[P.meal].title);
-    const links = [];
+    const links = [], ids = [];
     for (const r of ((p[P.recipe] && p[P.recipe].relation) || [])) {
+      ids.push(r.id);
       const link = await recipeLink(env, r.id, recipes, nowMs);
       if (link) links.push(link);
     }
     const who = selectName(p[P.who]);
     const notes = plainText(p[P.notes] && p[P.notes].rich_text);
-    const d = byDate[date] || (byDate[date] = { names: [], links: [], notes: [] });
+    const d = byDate[date] || (byDate[date] = { names: [], links: [], notes: [], ids: [] });
     if (name) d.names.push(name);
+    ids.forEach(function (id) { if (d.ids.indexOf(id) < 0) d.ids.push(id); });
     links.forEach(function (u) { if (d.links.indexOf(u) < 0) d.links.push(u); });
     [who ? (NOTION_WHO[who] || who) : "", notes].forEach(function (n) {
       if (n && d.notes.indexOf(n) < 0) d.notes.push(n);
@@ -128,7 +142,7 @@ export async function fetchDinners(env, week, recipes, nowMs) {
     const d = byDate[date];
     // Recipe links go after the name, the way they're typed into the Hub: "Pad Thai | https://…".
     const name = d.names.join(" + ");
-    out[date] = { meal: [name, d.links.join(" ")].filter(String).join(" | "), note: d.notes.join(" · ") };
+    out[date] = { meal: [name, d.links.join(" ")].filter(String).join(" | "), note: d.notes.join(" · "), recipes: d.ids };
   });
   return out;
 }
@@ -183,10 +197,10 @@ export function saveRecipes(c, recipes) {
   if (text !== (c.props[RECIPES] || "{}")) c.props[RECIPES] = text;
 }
 
-function plainText(parts) {
+export function plainText(parts) {
   return (parts || []).map(function (t) { return t.plain_text || ""; }).join("").replace(/\s+/g, " ").trim();
 }
-function selectName(prop) { return (prop && prop.select && prop.select.name) || ""; }
+export function selectName(prop) { return (prop && prop.select && prop.select.name) || ""; }
 
 // ---------- check-ins ----------
 

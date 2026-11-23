@@ -5,6 +5,7 @@
  *   /auth/…           sign-in with Google, or by a parent's say-so (auth.js)
  *   /auth/calendar…   a parent letting the Hub read the calendar (calendar-auth.js)
  *   /api              the Hub's data, for a signed-in device (api.js)
+ *   /recipe-photo     a recipe's photo, by a signed link (hub/recipes.js)
  * and, every five minutes, the timer: calendar, Todoist, Notion, notifications
  * (hub/api.js).
  *
@@ -15,7 +16,8 @@
 import { handleAuth, sessionFor } from "./auth.js";
 import { handleCalendarAuth } from "./calendar-auth.js";
 import { handleApi } from "./api.js";
-import { tick } from "./hub/api.js";
+import { tick, nowOf } from "./hub/api.js";
+import { recipePhoto } from "./hub/recipes.js";
 import { json, cors } from "./util.js";
 
 export default {
@@ -24,6 +26,11 @@ export default {
     const isAuth = url.pathname.indexOf("/auth/") === 0, isApi = url.pathname === "/api";
     if (!isAuth && !isApi) {
       if (request.method === "GET" && url.pathname === "/") return new Response("Family Hub is running.\n");
+      // A recipe's photo: signed links from /api?action=recipes, since an <img> can't carry the sign-in.
+      if (request.method === "GET" && url.pathname === "/recipe-photo" && env.DB) {
+        try { return await recipePhoto(env, url, nowOf(env)); }
+        catch (err) { console.error(String(err && err.stack || err).slice(0, 300)); return new Response("error", { status: 500 }); }
+      }
       return json({ ok: false, error: "not_found" }, 404);
     }
 

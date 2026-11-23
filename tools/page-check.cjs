@@ -57,7 +57,8 @@ function sample() {
       Sat: { meal: "Chicken Pot Pie | https://www.americastestkitchen.com/recipes/6140", note: "Cooking together" },
       Sun: { meal: "Mustard-Maple Roasted Salmon", note: "" },
     },
-    mealsFrom: { source: "notion", syncedAt: Date.now(), weekStarts: "Sat" },
+    mealsFrom: { source: "notion", syncedAt: Date.now(), weekStarts: "Sat",
+      recipes: { [["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()]]: ["potpie"], Fri: ["chili"] } },
     events: [
       ev(-180, 30, "School drop-off", "Family", "#46647b"),
       ev(35, 75, "Soccer practice", "MCHS", "#2f5d46"),
@@ -75,6 +76,56 @@ function sample() {
       { key: "r2", title: "Email the coach", list: "Kids", due: day(0), time: "3:00 PM" },
     ] },
   };
+}
+
+// ---- recipes, as the Worker reads them from Notion ----
+const PHOTO = HUB + "/recipe-photo?id=";
+const recipe = (id, name, more) => Object.assign({ id, name, emoji: "🍲", category: "Dinner", cuisine: ["American"], protein: "Chicken",
+  method: ["Weeknight"], status: "Tried", rating: 4, time: 40, servings: 6, cost: null, costTotal: null, kid: false, lastMade: "",
+  source: "https://www.budgetbytes.com/" + id + "/", notes: "", edited: "2026-11-10T00:00:00.000Z", url: "https://www.notion.so/" + id, words: "" }, more);
+function recipes() {
+  const ago = n => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+  return [
+    recipe("chili", "Vegetarian Chili", { emoji: "🌶️", protein: "Vegetarian", kid: true, cost: 1.65, lastMade: ago(16), img: PHOTO + "chili",
+      words: "olive oil onion garlic bell pepper tomato paste kidney black pinto beans corn chili powder cumin" }),
+    recipe("divan", "Chicken Divan", { emoji: "🍗", status: "To Try", rating: 0, time: 75, method: [], source: "", notes: "Susan's recipe from the family cookbook.",
+      img: PHOTO + "divan", words: "frozen broccoli chicken breasts lemon juice mayo cream soup water sharp cheese ritz crackers butter" }),
+    recipe("potpie", "Chicken Pot Pie with Savory Crumble Topping", { emoji: "🥧", method: ["Weekend"], time: 105, lastMade: ago(9), img: PHOTO + "potpie",
+      words: "chicken breasts broth vegetable oil onion carrots celery cremini mushrooms soy sauce tomato paste butter flour milk lemon parsley peas" }),
+    recipe("salmon", "Mustard-Maple Roasted Salmon", { emoji: "🐟", protein: "Fish", time: 25, status: "Family Favorite", rating: 5, kid: true, lastMade: ago(3),
+      words: "salmon mustard maple syrup" }),
+    recipe("salad", "Grandma's Mystery Salad", { emoji: "🥗", category: "Side", protein: "Vegetarian", source: "", words: "" }),
+    recipe("tacos", "Sheet Pan Chicken Tacos", { emoji: "🌮", time: 30, method: ["Weeknight", "Sheet pan"], status: "To Try", rating: 0, words: "chicken tortillas peppers" }),
+  ];
+}
+const BODIES = {
+  potpie: { about: ["Classic chicken pot pie filling under a crumbly Parmesan-biscuit topping that you pre-bake so it stays crisp."],
+    facts: "Time: 105 min · Serves: 6 · From: America's Test Kitchen",
+    ingredients: [{ h: "Filling" }, { t: "1½ lb boneless, skinless chicken breasts and/or thighs" }, { t: "3 cups low-sodium chicken broth" },
+      { t: "2 Tbsp vegetable oil, divided" }, { t: "10 oz cremini mushrooms, trimmed and sliced thin" }, { t: "Table salt and ground black pepper" },
+      { h: "Crumble topping" }, { t: "2 cups (10 oz) all-purpose flour" }, { t: "1 oz Parmesan cheese, finely grated (about ½ cup)" }],
+    steps: [{ lead: "Poach the chicken.", t: "Put the chicken and broth in a Dutch oven, cover, and bring to a simmer. Cook until just done, 8–12 minutes." },
+      { t: "Move the chicken to a large bowl and strain the broth." }, { lead: "Make the topping.", t: "Whisk together the flour, baking powder and salt." },
+      { t: "Bake until the filling bubbles and the topping is deeply browned, 12–15 minutes." }],
+    notes: [{ t: "Pre-baking the crumble is what keeps it crunchy." }] },
+  divan: { about: ["Broccoli and chicken casserole."], facts: "Time: about 1¼ hours · From: Susan (family cookbook, 02/15/10)",
+    ingredients: [{ t: "2 boxes frozen chopped broccoli" }, { t: "4 boneless, skinless chicken breasts" }],
+    steps: [{ t: "Thaw the broccoli and cover the bottom of a Pyrex dish." }, { t: "Bake at 350°F for 45 minutes." }], notes: [] },
+  salad: { about: [], facts: "", ingredients: [], steps: [], notes: [], raw: [{ t: "Mix it all up." }, { t: "A handful of this", list: "bulleted_list_item" }] },
+};
+const PHOTO_SVG = c => `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><defs><linearGradient id="g" x2="1" y2="1">
+  <stop offset="0" stop-color="${c}"/><stop offset="1" stop-color="#3b2a1a"/></linearGradient></defs><rect width="400" height="300" fill="url(#g)"/></svg>`;
+/* The pretend Worker: the Hub's data, the recipes, one recipe, a photo. */
+function worker(r) {
+  const u = new URL(r.request().url()), a = u.searchParams.get("action");
+  if (u.pathname === "/recipe-photo") return r.fulfill({ contentType: "image/svg+xml", body: PHOTO_SVG({ chili: "#b5522c", divan: "#7a8a3a", potpie: "#c08a3e" }[u.searchParams.get("id")] || "#888") });
+  if (a === "recipes") return r.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true, on: true, recipes: recipes(), pagesLeft: 0 }) });
+  if (a === "recipe") {
+    const info = recipes().find(x => x.id === u.searchParams.get("id"));
+    const body = BODIES[info && info.id] || { about: [], facts: "", ingredients: [], steps: [], notes: [], raw: [{ t: "Just a note." }] };
+    return r.fulfill({ contentType: "application/json", body: JSON.stringify(info ? { ok: true, recipe: Object.assign({}, info, { body }) } : { ok: false, error: "not_found" }) });
+  }
+  return r.fulfill({ contentType: "application/json", body: JSON.stringify(sample()) });
 }
 
 // ---- a tiny static server for the repo ----
@@ -98,7 +149,7 @@ const PAIRS = [
   ["crit", "bg"], ["crit", "card"], ["warn", "bg"], ["warn", "card"], ["ok", "bg"], ["ok", "card"],
   ["p-jon-ink", "p-jon"], ["p-maggie-ink", "p-maggie"], ["p-clayton-ink", "p-clayton"],
   ["p-heidi-ink", "p-heidi"], ["p-family-ink", "p-family"],
-  ["warm", "bg"], ["warm", "card"], ["cool", "card"], ["gold", "card"], ["card", "crit"], // the swipe's Delete
+  ["warm", "bg"], ["warm", "card"], ["cool", "card"], ["gold", "card"], ["gold", "bg"], ["card", "crit"], // the swipe's Delete; stars
   ["ink", "warm-tint"], ["ink", "cool-tint"], ["ink", "gold-tint"], ["ink", "accent-tint"], // check-in cards
 ];
 function contrast(a, b) {
@@ -126,7 +177,7 @@ function contrast(a, b) {
         localStorage.setItem("fd_token", "page-check"); localStorage.setItem("fd_user", "Jon");
         localStorage.setItem("fd_theme", t); localStorage.setItem("fd_scheme", s);
       }, [theme, scheme]);
-      await ctx.route(HUB + "/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(sample()) }));
+      await ctx.route(HUB + "/**", worker);
       await ctx.route("https://fonts.googleapis.com/**", r => r.abort()); // no network needed; fallbacks are fine
       const page = await ctx.newPage();
       page.on("pageerror", e => problems.push(`${tag}: script error: ${e.message}`));
@@ -211,6 +262,79 @@ function contrast(a, b) {
           await shot("calendar-day");
           await page.evaluate(() => calToday());
         }
+        // Recipes: under Dinner; search, filters, a recipe page, groceries, cooking
+        if (await page.evaluate(() => typeof renderRecipes === "function")) {
+          const want = (ok, what) => { if (!ok) problems.push(`${tag}: recipes: ${what}`); };
+          await page.evaluate(() => { go("meals"); });
+          await page.waitForTimeout(650);
+          want(await page.evaluate(() => !!document.querySelector(".dinner-switch") && !!document.querySelector(".weekcard .open-recipe")), "no switch, or no Recipe button on This week");
+          await page.evaluate(() => dinnerTab("recipes"));
+          await page.waitForTimeout(900);
+          const list = await page.evaluate(() => ({
+            title: document.getElementById("viewTitle").textContent,
+            rows: [...document.querySelectorAll(".rrow .rr-name")].map(x => x.textContent),
+            lately: document.querySelectorAll(".rcard").length,
+          }));
+          want(list.title === "Recipes", `title "${list.title}"`);
+          want(list.rows.length === 5 && list.lately === 3, `${list.rows.length} dinners, ${list.lately} cooked lately`);
+          await shot("recipes");
+          const found = await page.evaluate(() => {
+            const names = () => [...document.querySelectorAll(".rrow .rr-name")].map(x => x.textContent);
+            const out = {};
+            recipeSearch("mushrooms"); out.mushrooms = names();
+            recipeSearch("chicken"); out.chicken = names();
+            recipeSearch(""); recipeToggle("family"); out.family = names(); recipeToggle("family");
+            recipeToggle("quick"); out.quick = names(); recipeToggle("quick");
+            recipeCat("Side"); out.sides = names(); recipeCat("Dinner");
+            return out;
+          });
+          want(found.mushrooms.join() === "Chicken Pot Pie with Savory Crumble Topping", `"mushrooms" finds ${found.mushrooms.join(" / ")}`);
+          want(found.chicken.length === 3 && /^Chicken/.test(found.chicken[0]), `"chicken" finds ${found.chicken.join(" / ")}`);
+          want(found.family.join() === "Chicken Divan", `Family cookbook finds ${found.family.join(" / ")}`);
+          want(found.quick.join() === "Mustard-Maple Roasted Salmon,Sheet Pan Chicken Tacos", `Under 30 min finds ${found.quick.join(" / ")}`);
+          want(found.sides.join() === "Grandma's Mystery Salad", `Sides finds ${found.sides.join(" / ")}`);
+
+          await page.evaluate(() => openRecipe("potpie"));
+          await page.waitForTimeout(900);
+          const pie = await page.evaluate(() => ({
+            name: (document.querySelector(".rtitle") || {}).textContent,
+            ing: document.querySelectorAll(".ringr .task").length, groups: document.querySelectorAll(".ringr .rsub").length,
+            steps: document.querySelectorAll(".rsteps li").length, lead: (document.querySelector(".rsteps li b") || {}).textContent,
+            notes: document.querySelectorAll(".rnotes li").length, img: !!document.querySelector(".rhero img"),
+          }));
+          want(pie.name === "Chicken Pot Pie with Savory Crumble Topping" && pie.ing === 7 && pie.groups === 2 && pie.steps === 4 &&
+            pie.lead === "Poach the chicken." && pie.notes === 1 && pie.img, `the pot pie shows ${JSON.stringify(pie)}`);
+          await shot("recipe");
+          await page.evaluate(() => openGroceryPick("potpie"));
+          await page.waitForTimeout(500);
+          const pick = await page.evaluate(() => [[...document.querySelectorAll("#gpList input")].map(x => (x.checked ? "✓" : "·")).join(""),
+            [...document.querySelectorAll("#gpList span")].map(x => x.textContent)[3], document.getElementById("gpAdd").textContent]);
+          want(pick.join(" | ") === "✓✓·✓·✓✓ | 10 oz cremini mushrooms | Add 5 to the list", `groceries ${pick.join(" | ")}`);
+          await page.screenshot({ path: path.join(OUT, `${tag}-recipe-groceries.png`) });
+          await page.evaluate(() => closeOverlay());
+          await page.waitForTimeout(450);
+          await page.evaluate(() => startCooking("potpie"));
+          await page.waitForTimeout(500);
+          const cook = await page.evaluate(() => {
+            const out = [document.querySelectorAll(".cook-card").length, document.getElementById("cookCount").textContent,
+              (document.querySelector(".cook-card .ck-timer") || {}).textContent];
+            cookGo(3); out.push(document.getElementById("cookCount").textContent, document.getElementById("cookNext").textContent);
+            cookGo(4); out.push(document.getElementById("cookCount").textContent, document.getElementById("cookNext").hidden);
+            cookGo(0);
+            return out.map(x => String(x).replace(/\s+/g, " ").trim());
+          });
+          want(cook.join(" | ") === "5 | 1 of 4 | Timer · 8 min | 4 of 4 | Finish | Done | true", `cooking ${cook.join(" | ")}`);
+          await page.waitForTimeout(450);
+          await page.screenshot({ path: path.join(OUT, `${tag}-cooking.png`) });
+          await page.evaluate(() => stopCooking());
+          await page.waitForTimeout(400);
+          await page.evaluate(() => openRecipe("salad"));
+          await page.waitForTimeout(900);
+          want(await page.evaluate(() => document.querySelectorAll(".rraw p").length === 2), "a page off the layout isn't shown as written");
+          await page.evaluate(() => { RECIPE_OPEN = null; DINNER_TAB = "week"; go("today"); });
+          await page.waitForTimeout(650);
+          want(await page.evaluate(() => !!document.querySelector(".tonight .open-recipe, .open-recipe")), "Tonight has no Recipe button");
+        }
         // Today: a greeting, the day in a sentence, Up next, and the pill once synced
         await page.evaluate(() => go("today"));
         await page.waitForTimeout(650);
@@ -247,7 +371,7 @@ function contrast(a, b) {
     for (const reducedMotion of ["no-preference", "reduce"]) {
       const c = await browser.newContext({ reducedMotion });
       await c.addInitScript(() => { localStorage.setItem("fd_token", "page-check"); localStorage.setItem("fd_user", "Jon"); });
-      await c.route(HUB + "/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(sample()) }));
+      await c.route(HUB + "/**", worker);
       const p = await c.newPage();
       p.on("pageerror", e => problems.push(`motion ${reducedMotion}: script error: ${e.message}`));
       await p.goto(base);
@@ -295,7 +419,7 @@ function contrast(a, b) {
   // "Auto" follows the phone's setting
   const ctx = await browser.newContext({ colorScheme: "dark" });
   const page = await ctx.newPage();
-  await ctx.route(HUB + "/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(sample()) }));
+  await ctx.route(HUB + "/**", worker);
   await page.goto(base);
   const scheme = await page.evaluate(() => document.documentElement.dataset.scheme);
   if (scheme && scheme !== "dark")

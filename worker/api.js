@@ -10,12 +10,16 @@
 
 import { json } from "./util.js";
 import { isGroceryAction, groceryAction, listGroceries } from "./groceries.js";
-import { hubGet, hubPost } from "./hub/api.js";
+import { hubGet, hubPost, nowOf } from "./hub/api.js";
+import { recipeList, recipeOne } from "./hub/recipes.js";
 
 export async function handleApi(request, env, url, session, headers, ctx) {
   const reply = (obj, status) => json(obj, status, headers);
 
   if (request.method === "GET") {
+    // Recipes, read from Notion (hub/recipes.js); everyone signed in may read them.
+    if (url.searchParams.get("action") === "recipes") return reply(await recipeList(env, url.origin, nowOf(env)));
+    if (url.searchParams.get("action") === "recipe") return reply(await recipeOne(env, url.origin, nowOf(env), String(url.searchParams.get("id") || "")));
     const action = url.searchParams.get("action") === "notify" ? "notify" : "all";
     const data = await hubGet(env, session, action, url.searchParams.get("reminders") === "1");
     if (action === "all") data.groceries = await listGroceries(env);
