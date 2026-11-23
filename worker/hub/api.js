@@ -20,6 +20,7 @@ import * as notify from "./notify.js";
 import * as todoist from "./todoist.js";
 import * as notion from "./notion.js";
 import * as calendar from "./calendar.js";
+import * as recipes from "./recipes.js";
 
 const CORE = ["Tasks", "Completions", "Meals", "CheckIns"];
 const ALL = CORE.concat(["Devices", "NotifyPrefs"]);
@@ -149,6 +150,7 @@ async function send(env, outbox, devices) {
  *   once a day       old ticks set aside
  *   every 10 min     Todoist; the Notion dinners (on the other five minutes)
  *   every 30 min     check-ins to Notion
+ *   every run        recipes: the list every 6 hours, and a few recipe pages each run (recipes.js)
  */
 export async function tick(env) {
   const now = nowOf(env), minute = now.getUTCMinutes(), report = {};
@@ -164,6 +166,7 @@ export async function tick(env) {
     const r = await notion.syncNotionCheckins(env, all);
     return r.status + " — " + r.message;
   });
+  await job("recipes", notion.notionOn(env), () => recipes.syncRecipes(env, now));
   await job("old ticks", now.getUTCHours() === 9 && minute < 5, () => setAsideOldTicks(env, now));
   await job("notify", true, async () => {
     const due = await transact(env, ALL, c => {
@@ -231,13 +234,14 @@ export async function syncNotionMeals(env) {
   const now = nowOf(env), week = notion.weekStart(today(now));
   try {
     const recipes = await transact(env, [], c => notion.loadRecipes(c), { now });
-    const meals = notion.weekOfDinners(await notion.fetchDinners(env, week, recipes, now.getTime()), week);
+    const dinners = await notion.fetchDinners(env, week, recipes, now.getTime());
+    const meals = notion.weekOfDinners(dinners, week);
     // Notion is read first; the save is only the last, quick step.
     return await transact(env, ["Meals"], c => {
       const changed = !notion.sameMeals(core.getMeals(c), meals);
       if (changed) core.saveMeals(c, meals);
       notion.saveRecipes(c, recipes);
-      notion.notionMealsDone(c, week);
+      notion.notionMealsDone(c, week, notion.weekOfRecipes(dinners, week));
       return changed ? "updated" : "current";
     }, { now });
   } catch (err) {

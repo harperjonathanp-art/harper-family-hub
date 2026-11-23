@@ -175,7 +175,11 @@ test("Notion dinners: the same week, links and notes as Notion.gs", async () => 
     } catch (err) { notion.notionMealsFailed(c, err.message); ours = { status: "error" }; }
     assert.equal(ours.status, theirs.status, `round ${round}: ${theirs.message || ""}`);
     assert.deepEqual(plain(core.getMeals(c)), gs.run("getMeals_"), `round ${round}: the week's dinners`);
-    assert.deepEqual(plain(notion.notionMealsInfo(c, ENV)), gs.run("notionMealsInfo_"), `round ${round}: what the Hub is told about the sync`);
+    // All Notion.gs told the Hub (the Worker adds each day's recipe pages, for the Recipes screen)
+    const told = plain(notion.notionMealsInfo(c, ENV));
+    assert.equal(typeof told.recipes, "object", `round ${round}: the days' recipes`);
+    delete told.recipes;
+    assert.deepEqual(told, gs.run("notionMealsInfo_"), `round ${round}: what the Hub is told about the sync`);
     if (ours.status === "updated") seen.changed++;
     if (ours.status === "error") { seen.failed++; assert.equal(JSON.stringify(core.getMeals(c)), before, "a failed read leaves the last plan"); }
     const meals = Object.values(core.getMeals(c)).map(m => m.meal);
