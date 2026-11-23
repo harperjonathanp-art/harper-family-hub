@@ -506,11 +506,13 @@ html.panel-open, html.panel-open body { overflow: hidden; }
 .upnext .un-ring circle { fill: none; stroke: currentColor; stroke-width: 6; }
 .upnext .un-track { opacity: .25; }
 .upnext .un-fill { stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
+/* the time sits inside the ring with AM/PM under it, so even "10:00 AM" fits */
 .upnext .un-clock {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 1px;
-  font-family: var(--font-display); font-weight: var(--display-weight); font-size: 17px; font-variant-numeric: tabular-nums;
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-weight: var(--display-weight); font-size: 15px; line-height: 1;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
 }
-.upnext .un-clock small { font-size: 10px; font-weight: 700; }
+.upnext .un-clock small { margin-top: 2px; font-family: var(--font-ui); font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; }
 .upnext.is-now { animation: now-breathe 1.6s ease-in-out infinite; }
 @keyframes now-breathe { 50% { transform: scale(1.015); } }
 

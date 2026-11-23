@@ -27,7 +27,7 @@ function recipeLinks(links) {
   return `<div class="recipes">${links.map(u => {
     let site = u;
     try { site = new URL(u).hostname.replace(/^www\./, ""); } catch (e) {}
-    return `<a class="recipe" href="${esc(u)}" target="_blank" rel="noopener">${esc(site)} ↗</a>`;
+    return `<a class="recipe" href="${esc(u)}" target="_blank" rel="noopener">${esc(site)} ↗\uFE0E</a>`;
   }).join("")}</div>`;
 }
 function mealLinks(input) {

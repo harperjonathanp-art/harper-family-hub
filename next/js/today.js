@@ -41,7 +41,7 @@ function tonightsDinner() {
 }
 function daySentence(now = new Date()) {
   const t = todayStr(), evs = DATA.events.filter(e => e.date === t);
-  const allDay = evs.filter(e => e.allDay).map(e => e.title);
+  const allDay = [...new Set(evs.filter(e => e.allDay).map(e => e.title.trim()))]; // the same title from two calendars, once
   const left = evs.filter(e => !e.allDay).map(e => ({ e, ...evWhen(e) }))
     .filter(x => x.start && (x.end ? x.end > now : x.start > now)).sort((a, b) => a.start - b.start);
   const bits = left.slice(0, 2).map(x => x.start <= now && x.end
