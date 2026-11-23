@@ -190,7 +190,6 @@ label.f, span.f { /* span.f: the label of a group of buttons */
   border-radius: var(--radius-md);
 }
 /* ---------- adding a task: title, then who / due / repeat ---------- */
-.addform { display: grid; gap: var(--space-2); margin-bottom: var(--space-5); }
 .addrow { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
 .addrow > select, .addrow > input[type=date] { flex: 1 1 120px; width: auto; min-width: 0; }
 .addrow > input[type=time] { flex: 1 1 104px; width: auto; min-width: 0; }
@@ -262,12 +261,6 @@ details.subs.tsubs .task.sub { padding: var(--space-2) 0; }
 .meal.past { opacity: .7; } /* earlier in this plan week */
 .meal .mname { font-size: 16px; line-height: 22px; font-weight: 500; }
 .meal .mname.none { color: var(--faint); font-weight: 400; }
-.recipe {
-  display: inline-flex; align-items: center; min-height: 32px; max-width: 100%;
-  font-size: 12.5px; line-height: 17px; font-weight: 500; color: var(--accent);
-  text-decoration: underline; text-underline-offset: 2px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
 .recipes { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 .grocery-add { display: flex; gap: var(--space-2); align-items: flex-start; margin-bottom: var(--space-3); }
 .grocery-add textarea {
@@ -307,24 +300,6 @@ details.subs.tsubs .task.sub { padding: var(--space-2) 0; }
 .td-chip.off { opacity: .4; }
 @media (prefers-reduced-motion: reduce) { .grocery-list .task { transition: none; } }
 .lineup .recipes { margin-top: var(--space-1); }
-
-/* ---------- prompts: the serif marks the shift to talking ---------- */
-.q { display: flex; gap: var(--space-3); padding: var(--space-4) 0; border-bottom: 1px solid var(--line); }
-.q .num {
-  flex: 0 0 24px;
-  font-family: var(--font-mono); font-size: 13px; line-height: 28px; font-weight: 500;
-  color: var(--faint); font-variant-numeric: tabular-nums;
-}
-.q .body { flex: 1; min-width: 0; }
-.q .body p {
-  font-family: var(--font-talk); font-size: 19px; line-height: 28px; font-weight: 400;
-  color: var(--ink); margin-bottom: var(--space-2); text-wrap: pretty;
-}
-.q .body .tiny {
-  font-family: var(--font-talk); font-style: italic;
-  font-size: 14px; line-height: 21px; color: var(--muted);
-  margin: calc(var(--space-1) * -1) 0 var(--space-2);
-}
 
 .hist { border-bottom: 1px solid var(--line); padding: var(--space-3) 0; }
 .hist summary {

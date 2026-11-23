@@ -52,3 +52,26 @@ node tools/page-check.cjs
 
 Opens every screen in every theme with sample data, fails on any script error
 or text below 4.5:1 contrast, and saves screenshots to `tools/page-check/out/`.
+
+## Icons
+
+`icons/` holds the Fridge Door icon in every size the app uses, and the
+link-preview image. They're all drawn from one design by
+`node tools/icons.cjs` (Playwright), so a change to the design is one edit
+and one run.
+
+## Becoming the live Hub
+
+When the preview replaces the live page:
+
+1. Move `index.html`, `css/`, `js/`, `icons/` and `manifest.json` up to the
+   repo root, in place of the old `index.html`, `manifest.json` and root icons.
+2. In `js/boot.js`, register `sw.js` rather than `../sw.js`; in
+   `manifest.json`, drop "(preview)" from the name and point `start_url`
+   and the icons at the root; in `index.html`, drop `next/` from the
+   link-preview addresses and the `noindex` line.
+3. In `sw.js`, raise `CACHE` and list every file (with its `?v=`) for
+   offline use, and cache the root page again.
+4. Run `node tools/page-check.cjs .` against the root page.
+5. iPhones keep the old home-screen icon until the app is removed and added
+   again; Android updates it on its own.
