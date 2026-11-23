@@ -95,8 +95,8 @@ const PAIRS = [
   ["crit", "bg"], ["crit", "card"], ["warn", "bg"], ["warn", "card"], ["ok", "bg"], ["ok", "card"],
   ["p-jon-ink", "p-jon"], ["p-maggie-ink", "p-maggie"], ["p-clayton-ink", "p-clayton"],
   ["p-heidi-ink", "p-heidi"], ["p-family-ink", "p-family"],
-  ["nav-active-ink", "nav-active-bg"], ["nav-muted", "nav-bg", 3], // resting tab icons: 3:1, as for any icon
   ["warm", "bg"], ["warm", "card"], ["cool", "card"], ["gold", "card"], ["card", "crit"], // the swipe's Delete
+  ["ink", "warm-tint"], ["ink", "cool-tint"], ["ink", "gold-tint"], ["ink", "accent-tint"], // check-in cards
 ];
 function contrast(a, b) {
   const lum = hex => {
@@ -160,6 +160,14 @@ function contrast(a, b) {
           if (blank) problems.push(`${tag}: ${v} drew nothing`);
           await shot(v);
         }
+        // a check-in, one question per card
+        await page.evaluate(() => openCheckin("couples"));
+        await page.waitForTimeout(650);
+        const ck = await page.evaluate(() => [document.querySelectorAll(".ck-card").length, document.querySelector(".ck-count").textContent,
+          document.querySelectorAll(".ck-card:not([inert])").length]);
+        if (ck.join() !== "8,1 of 7,1") problems.push(`${tag}: check-in cards: ${ck.join(" / ")}`);
+        await shot("checkin-card");
+        await page.evaluate(() => { CHECKIN_OPEN = null; render(); });
         // Today: a greeting, the day in a sentence, Up next, and the pill once synced
         await page.evaluate(() => go("today"));
         await page.waitForTimeout(650);

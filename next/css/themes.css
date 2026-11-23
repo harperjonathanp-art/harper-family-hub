@@ -149,33 +149,26 @@
 :root[data-scheme="light"] { color-scheme: light; }
 :root[data-scheme="dark"] { color-scheme: dark; }
 
-/* ---------- the tab bar and the checkmark, per theme ----------
-   nav-bg / nav-muted: the bar and its resting icons; nav-active-*: the pill of the open tab.
+/* ---------- the checkmark, per theme ----------
    check-img: the tick, drawn in that scheme's on-accent color. */
 :root[data-theme="fridge"] { --check-radius: 50%; }
 :root[data-theme="fridge"][data-scheme="light"] {
-  --nav-bg: #1b1b1f; --nav-muted: #b4b4be; --nav-active-bg: #f3f0e8; --nav-active-ink: #1b1b1f;
   --check-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='%23ffffff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 :root[data-theme="fridge"][data-scheme="dark"] {
-  --nav-bg: #f3f3f6; --nav-muted: #55575f; --nav-active-bg: #101114; --nav-active-ink: #f3f3f6;
   --check-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='%230a2117' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 :root[data-theme="evergreen"] { --check-radius: 7px; }
 :root[data-theme="evergreen"][data-scheme="light"] {
-  --nav-bg: #1d2b23; --nav-muted: #a9b8ae; --nav-active-bg: #eef1ea; --nav-active-ink: #17201b;
   --check-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='%23ffffff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 :root[data-theme="evergreen"][data-scheme="dark"] {
-  --nav-bg: #eaf0ea; --nav-muted: #4f5c54; --nav-active-bg: #0e1411; --nav-active-ink: #eaf0ea;
   --check-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='%230b120e' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 :root[data-theme="journal"] { --check-radius: 50%; }
 :root[data-theme="journal"][data-scheme="light"] {
-  --nav-bg: #2a211c; --nav-muted: #bfaf9f; --nav-active-bg: #f4eee4; --nav-active-ink: #2a211c;
   --check-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='%23fbf8f2' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 :root[data-theme="journal"][data-scheme="dark"] {
-  --nav-bg: #f2eadf; --nav-muted: #6a5d53; --nav-active-bg: #1b1613; --nav-active-ink: #f2eadf;
   --check-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='%232a1510' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }

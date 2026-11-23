@@ -60,7 +60,7 @@ const VIEWS = {
     icon: "M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 1.5-3 4-3 7h3v11" },
   tasks: { label: "Tasks", title: () => "Tasks", render: () => renderTasks(),
     icon: "M9 11l3 3 7-7M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" },
-  checkins: { label: "Check-in", title: () => "Check-Ins", render: () => renderCheckins(),
+  checkins: { label: "Check-in", title: () => (CHECKIN_OPEN ? CHECKIN_KINDS[CHECKIN_OPEN].name : "Check-Ins"), render: () => renderCheckins(),
     icon: "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" },
 };
 
@@ -121,6 +121,7 @@ function render() {
     new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
   document.getElementById("main").innerHTML = v.render();
   restoreDraft();
+  if (VIEW === "checkins" && CHECKIN_OPEN) ckPaint(false); // the card it was on, without a slide
   document.querySelectorAll("#main .meal input").forEach(mealLinks);
   document.getElementById("main").addEventListener("input", saveDraft);
   if (ENTER) {
@@ -143,11 +144,13 @@ function render() {
   document.documentElement.dataset.view = VIEW; // the + button shows on Tasks
   drawNav();
 }
-/* The tab bar is drawn once and then only marked, so the active pill can glide between tabs. */
+/* The tab bar is drawn once and then only marked. Behind the tabs a single glass lens glides to the
+   open one, following it as its label opens up (each frame it closes part of the gap, so it eases in). */
+const LENS = { x: null, w: 0, raf: 0, until: 0 };
 function drawNav() {
   const nav = document.getElementById("nav");
   if (!nav.childElementCount) {
-    nav.innerHTML = Object.keys(VIEWS).map(k => `<button type="button" data-view="${k}" aria-label="${VIEWS[k].label}" onclick="go('${k}')">
+    nav.innerHTML = `<span class="nav-lens" aria-hidden="true"></span>` + Object.keys(VIEWS).map(k => `<button type="button" data-view="${k}" aria-label="${VIEWS[k].label}" onclick="go('${k}')">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${VIEWS[k].icon}"/></svg><span class="lbl" aria-hidden="true">${VIEWS[k].label}</span></button>`).join("");
   }
   nav.querySelectorAll("button").forEach(b => {
@@ -155,7 +158,21 @@ function drawNav() {
     b.classList.toggle("active", on);
     if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
   });
+  LENS.until = performance.now() + 600;
+  if (!LENS.raf) LENS.raf = requestAnimationFrame(glideLens);
 }
+function glideLens(now) {
+  const nav = document.getElementById("nav"), lens = nav.querySelector(".nav-lens"), b = nav.querySelector("button.active");
+  if (!lens || !b) { LENS.raf = 0; return; }
+  const x = b.offsetLeft, w = b.offsetWidth, snap = LENS.x === null || calm();
+  LENS.x = snap ? x : LENS.x + (x - LENS.x) * 0.22;
+  LENS.w = snap ? w : LENS.w + (w - LENS.w) * 0.22;
+  lens.style.transform = `translateX(${LENS.x.toFixed(2)}px)`;
+  lens.style.width = LENS.w.toFixed(2) + "px";
+  const settled = Math.abs(x - LENS.x) < 0.3 && Math.abs(w - LENS.w) < 0.3;
+  LENS.raf = settled && now > LENS.until ? 0 : requestAnimationFrame(glideLens);
+}
+window.addEventListener("resize", () => { LENS.x = null; drawNav(); });
 function go(v) {
   if (v === VIEW) { render(); window.scrollTo({ top: 0, behavior: calm() ? "auto" : "smooth" }); return; }
   const order = Object.keys(VIEWS);
