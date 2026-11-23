@@ -15,7 +15,7 @@ is `index.html`, on GitHub Pages.
 | | `hub/notify.js` | Notifications: what to send, to whom, and when |
 | | `hub/todoist.js` | Jon's Todoist tasks, read-only |
 | | `hub/notion.js` | Dinners in from Notion; check-ins out to Notion |
-| | `hub/recipes.js` | The Recipes database, read-only: `?action=recipes` (the list) and `?action=recipe&id=…` (one, with its page) |
+| | `hub/recipes.js` | The Recipes database: `?action=recipes` (the list) and `?action=recipe&id=…` (one, with its page); and, for a parent only, three writes back to Notion: `rateRecipe` (Rating, Status, Kid Approved, Last Made), `favoriteRecipe` (Status) and `planRecipe` (a Dinner row in the meal plan, linked to the recipe). A write changes only those columns, never a page's text. The Notion integration needs *Update content* and *Insert content* |
 | `/recipe-photo` | `hub/recipes.js` | A recipe's photo, by a signed link the list gives (an `<img>` can't carry the sign-in) |
 | | `hub/calendar.js` | The next 14 days of the family's Google calendars |
 | | `hub/api.js` | The requests and the timer that tie those together |

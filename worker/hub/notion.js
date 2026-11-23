@@ -60,19 +60,23 @@ const parse = function (text, empty) { try { return JSON.parse(text || "") || em
 export function notionMealsInfo(c, env) {
   if (!notionOn(env)) return null;
   const s = parse(c.props[STATE], {});
-  // recipes: each day's recipes in the Recipes database, { Mon: [pageId, …] }, so the Hub can open them
+  // recipes: each night's recipes in the Recipes database, { "2026-11-23": [pageId, …] }, so the Hub can open them
   return { source: "notion", syncedAt: s.at || 0, error: s.error || "", weekStarts: NOTION_WEEK_START, recipes: s.recipes || {} };
 }
 
 export function notionMealsDone(c, week, recipes) {
-  c.props[STATE] = JSON.stringify({ at: c.now.getTime(), error: "", week: week, recipes: recipes || {} });
+  // The last few nights of the week before stay too, so Saturday morning can still ask how Friday's dinner was.
+  const kept = parse(c.props[STATE], {}).recipes || {}, all = {};
+  Object.keys(kept).forEach(function (date) { if (/^\d{4}-\d{2}-\d{2}$/.test(date) && date < week && date >= isoAdd(week, -3)) all[date] = kept[date]; });
+  Object.assign(all, recipes || {});
+  c.props[STATE] = JSON.stringify({ at: c.now.getTime(), error: "", week: week, recipes: all });
 }
-/** Each day's recipe pages, from fetchDinners' answer: { Mon: [id, …] }, only the days that have some. */
+/** Each night's recipe pages, from fetchDinners' answer: { "yyyy-MM-dd": [id, …] }, only the nights that have some. */
 export function weekOfRecipes(dinners, week) {
   const out = {};
   for (let i = 0; i < 7; i++) {
-    const d = dinners[isoAdd(week, i)];
-    if (d && d.recipes && d.recipes.length) out[isoDay(isoAdd(week, i))] = d.recipes;
+    const date = isoAdd(week, i), d = dinners[date];
+    if (d && d.recipes && d.recipes.length) out[date] = d.recipes;
   }
   return out;
 }

@@ -153,11 +153,12 @@ function renderToday() {
 
   // Tonight, then the grocery list in one line
   const din = tonightsDinner();
+  h += howWasItHtml(); // the morning after a dinner from a recipe (js/recipes.js)
   h += `<section class="tonight lineup" aria-label="Tonight's dinner"><span class="marker now">Tonight</span>
     <h3>${din.text ? esc(din.parts.name || "Tonight's recipe") : "Dinner isn't planned yet"}</h3>
     ${din.note ? `<div class="muted">${esc(din.note)}</div>` : ""}
     ${din.text ? "" : `<div class="muted">${fromNotion() ? "Nothing in the Notion meal plan for tonight." : "Plan the week on the Dinner tab."}</div>`}
-    <div class="tonight-actions">${recipeLinks(din.parts.links, openRecipeButtons(DAYS[(new Date().getDay() + 6) % 7]))}<button type="button" class="linkish" onclick="go('meals')">The whole week</button></div>
+    <div class="tonight-actions">${recipeLinks(din.parts.links, openRecipeButtons(todayStr()))}<button type="button" class="linkish" onclick="go('meals')">The whole week</button></div>
   </section>`;
   if (Array.isArray(DATA.groceries)) {
     const want = DATA.groceries.filter(g => !g.done).map(g => g.item);

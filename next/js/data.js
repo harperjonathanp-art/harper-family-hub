@@ -81,6 +81,7 @@ async function refresh(quiet, asked) {
     localStorage.setItem("fd_cache", JSON.stringify(DATA));
     note(asked ? "Updated just now" : "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
     if (asked && VIEW === "meals" && DINNER_TAB === "recipes") loadRecipes(true); // pulled down on Recipes: those too
+    flushNotionWrites(); // recipe changes saved on this phone while Notion couldn't be reached
     if (hasUnsavedEdits()) { note("Synced — your unsaved edits are kept"); return; }
     render();
   } catch (e) {
