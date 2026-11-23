@@ -18,11 +18,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Every file carries the release number, so a new page never runs with an old file. -->
-<script src="js/theme.js?v=23"></script>
-<link rel="stylesheet" href="css/themes.css?v=23">
-<link rel="stylesheet" href="css/app.css?v=23">
+<script src="js/theme.js?v=24"></script>
+<link rel="stylesheet" href="css/themes.css?v=24">
+<link rel="stylesheet" href="css/app.css?v=24">
 </head>
 <body>
+<a class="skip" href="#main" onclick="document.getElementById('main').focus()">Skip to content</a>
+
+<!-- The sections: a floating tab bar on a phone, a sidebar on a computer (js/shell.js). First, so the keyboard reaches it first. -->
+<nav id="nav" aria-label="Sections"></nav>
 
 <div class="page" id="app">
   <header>
@@ -38,7 +42,7 @@
     </div>
     <h1 id="viewTitle">Today</h1>
   </header>
-  <main id="main"></main>
+  <main id="main" tabindex="-1"></main>
 </div>
 
 <!-- Pull down to refresh (js/shell.js). -->
@@ -47,8 +51,6 @@
   <svg class="pull-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 9 9"/></svg>
   <svg class="pull-done" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
 </div>
-
-<nav id="nav" aria-label="Sections"></nav>
 
 <!-- Add a task: shows on the Tasks screen (js/tasks.js openTaskPanel). -->
 <button type="button" class="fab" id="fab" aria-label="Add a task" onclick="openTaskPanel()">
@@ -70,15 +72,15 @@
 <div id="srAnnounce" class="sr-only" aria-live="polite"></div>
 
 <!-- In order: data and helpers first, each screen, Settings, then the start. -->
-<script src="js/data.js?v=23" defer></script>
-<script src="js/shell.js?v=23" defer></script>
-<script src="js/today.js?v=23" defer></script>
-<script src="js/calendar.js?v=23" defer></script>
-<script src="js/dinner.js?v=23" defer></script>
-<script src="js/recipes.js?v=23" defer></script>
-<script src="js/tasks.js?v=23" defer></script>
-<script src="js/checkins.js?v=23" defer></script>
-<script src="js/settings.js?v=23" defer></script>
-<script src="js/boot.js?v=23" defer></script>
+<script src="js/data.js?v=24" defer></script>
+<script src="js/shell.js?v=24" defer></script>
+<script src="js/today.js?v=24" defer></script>
+<script src="js/calendar.js?v=24" defer></script>
+<script src="js/dinner.js?v=24" defer></script>
+<script src="js/recipes.js?v=24" defer></script>
+<script src="js/tasks.js?v=24" defer></script>
+<script src="js/checkins.js?v=24" defer></script>
+<script src="js/settings.js?v=24" defer></script>
+<script src="js/boot.js?v=24" defer></script>
 </body>
 </html>

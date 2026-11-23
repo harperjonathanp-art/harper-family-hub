@@ -73,11 +73,12 @@ function renderCalendar() {
 /* The chosen day, then the next few days with something on. */
 function calDayHtml() {
   const d = CAL.day, t = todayStr(), now = new Date(), evs = eventsOn(d);
-  let h = `<div class="dayhead">${esc(dayLabel(d))}${d === t ? '<span class="marker now">Today</span>' : ""}</div>`;
+  let h = `<div class="cday-main"><div class="dayhead">${esc(dayLabel(d))}${d === t ? '<span class="marker now">Today</span>' : ""}</div>`;
   h += evs.length
     ? `<div class="block">${evs.map(e => eventRow(e, evOver(e, d, now), d)).join("")}</div>`
     : `<div class="block"><div class="empty">${DATA.events.length ? "Nothing on the calendar." :
         "Nothing in the next two weeks — or the calendars aren't connected yet."}</div></div>`;
+  h += `</div>`;
 
   const later = [];
   for (let x = isoPlus(d, 1); loaded(x) && later.length < 3; x = isoPlus(x, 1)) {
@@ -85,9 +86,9 @@ function calDayHtml() {
     if (on.length) later.push([x, on]);
   }
   if (later.length) {
-    h += `<h2>Coming up</h2>`;
+    h += `<div class="cday-later"><h2>Coming up</h2>`;
     h += later.map(([x, on]) => `<button type="button" class="dayhead sm" onclick="calPick('${x}')">${esc(dayLabel(x))}</button>
-      <div class="block">${on.map(e => eventRow(e, false, x)).join("")}</div>`).join("");
+      <div class="block">${on.map(e => eventRow(e, false, x)).join("")}</div>`).join("") + `</div>`;
   }
   return h;
 }
@@ -167,7 +168,7 @@ function calDown(e) {
 document.addEventListener("touchmove", e => { if (CAL.on) e.preventDefault(); }, { passive: false });
 // The arrow keys move a day (a week with Shift) while the strip has focus.
 document.addEventListener("keydown", e => {
-  if (VIEW !== "calendar" || panelUp() || !e.target.closest || !e.target.closest(".wk-deck")) return;
+  if ((VIEW !== "calendar" && VIEW !== "today") || panelUp() || !e.target.closest || !e.target.closest(".wk-deck")) return;
   const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
   if (!step) return;
   e.preventDefault();

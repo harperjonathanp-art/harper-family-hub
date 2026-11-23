@@ -391,7 +391,7 @@ function contrast(a, b) {
         if (!today.upnext) problems.push(`${tag}: no Up next card`);
         if (today.pill.join() !== "ok,Up to date") problems.push(`${tag}: sync pill shows ${today.pill.join(" / ")}`);
         // the tab bar: five tabs, the open one marked
-        const tabs = await page.evaluate(() => [...document.querySelectorAll("#nav button")].map(b => [b.dataset.view, b.getAttribute("aria-current")]));
+        const tabs = await page.evaluate(() => [...document.querySelectorAll("#nav button[data-view]")].map(b => [b.dataset.view, b.getAttribute("aria-current")]));
         if (tabs.length !== 5) problems.push(`${tag}: the tab bar has ${tabs.length} tabs`);
         if (!tabs.some(([v, cur]) => v === "today" && cur === "page")) problems.push(`${tag}: the open tab isn't marked`);
         // the panel: rises, closes with Escape, and is gone after its slide
@@ -411,7 +411,7 @@ function contrast(a, b) {
   // switching tabs: the slide finishes on the new screen, and Reduce Motion switches at once
   if (PAGE.startsWith("next")) {
     for (const reducedMotion of ["no-preference", "reduce"]) {
-      const c = await browser.newContext({ reducedMotion });
+      const c = await browser.newContext({ reducedMotion, viewport: { width: 390, height: 844 } });
       await c.addInitScript(() => { localStorage.setItem("fd_token", "page-check"); localStorage.setItem("fd_user", "Jon"); });
       await c.route(HUB + "/**", worker);
       const p = await c.newPage();
@@ -454,6 +454,76 @@ function contrast(a, b) {
       await p.evaluate(() => panelBackTap());
       await p.waitForTimeout(450);
       if (!(await p.evaluate(() => panelUp()))) problems.push(`motion ${reducedMotion}: sign-in could be dismissed`);
+      await c.close();
+    }
+  }
+
+  // A computer: the sidebar, two columns, panels as windows, the keyboard alone, and resizing
+  if (PAGE.startsWith("next")) {
+    for (const [theme, scheme] of [["fridge", "light"], ["evergreen", "dark"], ["journal", "light"]]) {
+      const tag = `wide-${theme}-${scheme}`, want = (ok, what) => { if (!ok) problems.push(`${tag}: ${what}`); };
+      const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+      await c.addInitScript(([t, sc]) => { localStorage.setItem("fd_token", "page-check"); localStorage.setItem("fd_user", "Jon");
+        localStorage.setItem("fd_theme", t); localStorage.setItem("fd_scheme", sc); }, [theme, scheme]);
+      await c.route(HUB + "/**", worker);
+      const p = await c.newPage();
+      p.on("pageerror", e => problems.push(`${tag}: script error: ${e.message}`));
+      await p.goto(base);
+      await p.waitForTimeout(700);
+      const shot = name => p.screenshot({ path: path.join(OUT, `${tag}-${name}.png`) });
+      const side = await p.evaluate(() => {
+        const n = document.getElementById("nav").getBoundingClientRect(), lens = document.querySelector(".nav-lens").getBoundingClientRect(),
+          on = document.querySelector("#nav button.active").getBoundingClientRect();
+        return { w: Math.round(n.width), h: Math.round(n.height), labels: [...document.querySelectorAll("#nav .lbl")].every(l => l.getBoundingClientRect().width > 20),
+          tools: !!document.querySelector("#navFoot .header-tools #syncNote"), me: document.querySelector("#navMe span:last-child").textContent.trim(),
+          fab: getComputedStyle(document.getElementById("fab")).display, lens: Math.abs(lens.top - on.top) < 2 && Math.abs(lens.height - on.height) < 2 };
+      });
+      want(side.w === 240 && side.h > 700 && side.labels && side.tools && side.me === "Signed in as Jon" && side.fab === "none" && side.lens,
+        `the sidebar: ${JSON.stringify(side)}`);
+      const layouts = { today: ".today-cols .wkcal", calendar: "#calDay .cday-later", meals: ".dinner-cols .weekcard", tasks: ".tasks-cols", checkins: ".ckstart" };
+      for (const v of SCREENS) {
+        await p.evaluate(v => go(v), v);
+        await p.waitForTimeout(650);
+        want(await p.evaluate(sel => !!document.querySelector(sel), layouts[v]), `${v} isn't laid out for a computer (${layouts[v]})`);
+        if (v === "calendar") want(await p.evaluate(() => getComputedStyle(document.getElementById("calDay")).display === "grid"), "Calendar's day and Coming up aren't side by side");
+        await shot(v);
+      }
+      await p.evaluate(() => { go("meals"); }); await p.waitForTimeout(650);
+      await p.evaluate(() => dinnerTab("recipes")); await p.waitForTimeout(900);
+      const rl = await p.evaluate(() => { const l = document.querySelector(".rlist"); return l ? getComputedStyle(l).gridTemplateColumns.split(" ").length : [VIEW, DINNER_TAB, document.getElementById("main").textContent.slice(0, 200)].join(" / "); });
+      want(rl === 2, `the recipe list is ${rl}`);
+      await shot("recipes");
+      await p.evaluate(() => openRecipe("potpie")); await p.waitForTimeout(900);
+      want(await p.evaluate(() => !!document.querySelector(".recipe-cols .rsteps")), "a recipe isn't two columns");
+      await shot("recipe");
+      // a panel opens as a window in the middle
+      await p.evaluate(() => openSettings()); await p.waitForTimeout(500);
+      const box = await p.evaluate(() => { const r = document.getElementById("overlay").getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width]; });
+      want(Math.abs(box[0] - 640) < 3 && Math.abs(box[1] - 400) < 3 && box[2] <= 580, `the panel sits at ${box.map(Math.round).join(", ")}`);
+      await shot("settings");
+      await p.keyboard.press("Escape"); await p.waitForTimeout(450);
+      // the keyboard alone: skip link first, then the sections; New task opens and Escape returns
+      await p.evaluate(() => { RECIPE_OPEN = null; DINNER_TAB = "week"; });
+      await p.reload(); await p.waitForTimeout(800);
+      await p.keyboard.press("Tab");
+      const first = await p.evaluate(() => document.activeElement.className);
+      await p.keyboard.press("Tab"); await p.keyboard.press("Tab"); await p.keyboard.press("Enter");
+      await p.waitForTimeout(700);
+      const keyNav = await p.evaluate(() => VIEW);
+      await p.focus(".nav-new"); await p.keyboard.press("Enter"); await p.waitForTimeout(500);
+      const panel = await p.evaluate(() => [panelUp(), document.getElementById("overlay").contains(document.activeElement)]);
+      await p.keyboard.press("Escape"); await p.waitForTimeout(500);
+      const back = await p.evaluate(() => [panelUp(), document.activeElement.className]);
+      want(first === "skip" && keyNav === "calendar" && panel.join() === "true,true" && back.join() === "false,nav-new",
+        `keyboard: first stop "${first}", Tab Tab Enter opened ${keyNav}, New task ${panel}, after Escape ${back}`);
+      // narrow the window: the phone layout comes back, and the computer one after
+      await p.evaluate(() => go("today")); await p.waitForTimeout(650);
+      await p.setViewportSize({ width: 420, height: 800 }); await p.waitForTimeout(600);
+      const narrow = await p.evaluate(() => [Math.round(document.getElementById("nav").getBoundingClientRect().top) > 600,
+        !!document.querySelector(".header-row .header-tools"), !document.querySelector(".cols")]);
+      await p.setViewportSize({ width: 1280, height: 800 }); await p.waitForTimeout(600);
+      const again = await p.evaluate(() => [!!document.querySelector("#navFoot .header-tools"), !!document.querySelector(".cols")]);
+      want(narrow.join() === "true,true,true" && again.join() === "true,true", `resizing: narrow ${narrow}, wide again ${again}`);
       await c.close();
     }
   }

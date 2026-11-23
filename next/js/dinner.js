@@ -50,9 +50,8 @@ function renderNotionMeals() {
   const status = f.error
     ? `<span class="tiny" style="color:var(--warn)">Couldn't reach Notion at the last check, so this is the last plan it sent.</span>`
     : `<span class="tiny">From the Notion meal plan${at ? `, checked ${esc(at)}` : ""}. Change it in Notion and the Hub catches up within 10 minutes.</span>`;
-  return `${dinnerSwitch()}<div class="weekcard">${rows}</div>
-    <div class="actions">${status}</div>
-    ${renderGroceries()}`;
+  const week = `<div class="weekcard">${rows}</div><div class="actions">${status}</div>`;
+  return dinnerSwitch() + (wide() ? cols(week, renderGroceries(), "dinner-cols") : week + renderGroceries());
 }
 function saveMeals() {
   const meals = {};
