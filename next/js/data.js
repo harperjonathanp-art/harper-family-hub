@@ -133,7 +133,6 @@ function note(t) {
 function draftKey() {
   if (VIEW === "meals") return "fd_draft_meals";
   if (VIEW === "checkins" && CHECKIN_OPEN) return "fd_draft_" + CHECKIN_OPEN;
-  if (VIEW === "tasks") return "fd_draft_task";
   return null;
 }
 function saveDraft(e) {

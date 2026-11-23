@@ -60,7 +60,7 @@ const VIEWS = {
     icon: "M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 1.5-3 4-3 7h3v11" },
   tasks: { label: "Tasks", title: () => "Tasks", render: () => renderTasks(),
     icon: "M9 11l3 3 7-7M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" },
-  checkins: { label: "Check-in", title: () => "Check-Ins", render: () => renderCheckins(),
+  checkins: { label: "Check-in", title: () => (CHECKIN_OPEN ? CHECKIN_KINDS[CHECKIN_OPEN].name : "Check-Ins"), render: () => renderCheckins(),
     icon: "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" },
 };
 
@@ -121,6 +121,7 @@ function render() {
     new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
   document.getElementById("main").innerHTML = v.render();
   restoreDraft();
+  if (VIEW === "checkins" && CHECKIN_OPEN) ckPaint(false); // the card it was on, without a slide
   document.querySelectorAll("#main .meal input").forEach(mealLinks);
   document.getElementById("main").addEventListener("input", saveDraft);
   if (ENTER) {

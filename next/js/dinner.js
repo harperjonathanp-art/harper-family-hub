@@ -9,7 +9,7 @@ function renderMeals() {
   const rows = DAYS.map((d, i) => {
     const m = DATA.meals[d] || {};
     return `<div class="meal ${i === dayIdx ? "today" : ""}">
-      <span class="d">${d}</span>
+      <span class="d">${d}${i === dayIdx ? `<span class="tonight-tag">Tonight</span>` : ""}</span>
       <div class="mealbody">
         <input type="text" id="meal-${d}" value="${esc(m.meal)}" placeholder="Dinner, or paste a recipe link…" oninput="mealLinks(this)">
         <div id="meal-${d}-links"></div>
@@ -17,7 +17,7 @@ function renderMeals() {
     </div>`;
   }).join("");
   const hint = localStorage.getItem("fd_draft_meals") ? `<div class="tiny" style="color:var(--warn);margin-bottom:var(--space-3)">Unsaved edits restored — tap Save week when you're ready.</div>` : "";
-  return `${hint}<div class="block">${rows}</div>
+  return `${hint}<div class="weekcard">${rows}</div>
     <div class="actions">
       <button class="primary" onclick="saveMeals()">Save week</button>
       <span class="tiny">Also editable straight from the Google Sheet.</span>
@@ -35,12 +35,12 @@ function renderNotionMeals() {
     const d = DAYS[(date.getDay() + 6) % 7];
     const m = DATA.meals[d] || {};
     const parts = mealParts(m.meal);
-    return `<div class="meal ro ${i === back ? "today" : i < back ? "past" : ""}">
-      <span class="d">${d}<br>${date.getDate()}</span>
+    return `<div class="meal ro ${i === back ? "today" : i < back ? "past" : ""}" ${i === back ? 'aria-current="date"' : ""}>
+      <span class="d">${d}<b>${date.getDate()}</b>${i === back ? `<span class="tonight-tag">Tonight</span>` : ""}</span>
       <div class="mealbody">
         ${m.meal ? `<div class="mname">${esc(parts.name || "Recipe")}</div>` : `<div class="mname none">Not planned yet</div>`}
-        ${recipeLinks(parts.links)}
         ${m.note ? `<div class="muted">${esc(m.note)}</div>` : ""}
+        ${recipeLinks(parts.links)}
       </div>
     </div>`;
   }).join("");
@@ -49,7 +49,7 @@ function renderNotionMeals() {
   const status = f.error
     ? `<span class="tiny" style="color:var(--warn)">Couldn't reach Notion at the last check, so this is the last plan it sent.</span>`
     : `<span class="tiny">From the Notion meal plan${at ? `, checked ${esc(at)}` : ""}. Change it in Notion and the Hub catches up within 10 minutes.</span>`;
-  return `<div class="block">${rows}</div>
+  return `<div class="weekcard">${rows}</div>
     <div class="actions">${status}</div>
     ${renderGroceries()}`;
 }
@@ -68,7 +68,7 @@ function renderGroceries() {
     return `<h2>Grocery list</h2><div class="block"><div class="empty">The grocery list couldn't be loaded. It will be tried again in a minute.</div></div>`;
   }
   const left = list.filter(g => !g.done), got = list.filter(g => g.done);
-  let h = `<h2>Grocery list${left.length ? `<span class="hint">${left.length} to get</span>` : ""}</h2>
+  let h = `<h2>Grocery list${left.length ? `<span class="hint"><span class="count" data-count="gro">${left.length}</span> to get</span>` : ""}</h2>
     <div class="grocery-add">
       <textarea id="newGrocery" data-nodraft="1" rows="1" placeholder="Add an item, or paste a list…" aria-label="Add to the grocery list"
         enterkeyhint="done" onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); addGrocery(); }"></textarea>
