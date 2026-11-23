@@ -1,5 +1,5 @@
 // Draws the Hub's icons and link-preview image in the Fridge Door look, from one design.
-//   node tools/icons.cjs [out-dir]     (default: next/icons)
+//   node tools/icons.cjs [out-dir]     (default: icons)
 // A note stuck to the fridge door, marked with an H, held by Maggie's magnet, with Jon's
 // and Heidi's beside it. Every size the app uses is drawn from the same SVG with Playwright.
 "use strict";
@@ -7,7 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
 
-const OUT = path.resolve(process.argv[2] || path.join(__dirname, "..", "next", "icons"));
+const OUT = path.resolve(process.argv[2] || path.join(__dirname, "..", "icons"));
 const C = { door: "#1f7a52", doorDeep: "#17603f", note: "#f3f0e8", ink: "#1b1b1f", jon: "#2f5fcc", maggie: "#c8461f", heidi: "#f0b429" };
 
 /* A magnet: a shadow, the disc, and a soft shine. */

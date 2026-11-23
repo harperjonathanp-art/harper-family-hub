@@ -2,94 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Harper Family Hub</title>
-<!-- The redesign's preview (see the build plan). The live Hub is ../index.html; both share sign-in and data. -->
-<link rel="manifest" href="manifest.json">
-<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
-<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<meta name="description" content="What today asks of four people.">
-<!-- The link preview (tools/icons.cjs draws it). When the preview becomes the live Hub, drop "next/" from these addresses. -->
-<meta property="og:type" content="website">
-<meta property="og:title" content="Harper Family Hub">
-<meta property="og:description" content="What today asks of four people.">
-<meta property="og:url" content="https://harperjonathanp-art.github.io/harper-family-hub/next/">
-<meta property="og:image" content="https://harperjonathanp-art.github.io/harper-family-hub/next/icons/og-image.png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta name="twitter:card" content="summary_large_image">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#f3f0e8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Every file carries the release number, so a new page never runs with an old file. -->
-<script src="js/theme.js?v=25"></script>
-<link rel="stylesheet" href="css/themes.css?v=25">
-<link rel="stylesheet" href="css/app.css?v=25">
+<title>Harper Family Hub</title>
+<!-- The redesign's preview lived here until it became the Hub. A home-screen icon made from the preview still lands here: on to the Hub. -->
+<meta http-equiv="refresh" content="0; url=../">
+<script>location.replace("../" + location.hash);</script>
 </head>
-<body>
-<a class="skip" href="#main" onclick="document.getElementById('main').focus()">Skip to content</a>
-
-<!-- The sections: a floating tab bar on a phone, a sidebar on a computer (js/shell.js). First, so the keyboard reaches it first. -->
-<nav id="nav" aria-label="Sections"></nav>
-
-<div class="page" id="app">
-  <header>
-    <div class="header-row">
-      <span class="eyebrow" id="todayEyebrow">Harper Family Hub</span>
-      <span class="header-tools">
-        <!-- Sync state (js/data.js note()): tap to sync now. -->
-        <button type="button" class="syncpill" id="syncNote" data-state="busy" onclick="refresh(false, true)" aria-label="Syncing. Tap to sync now.">
-          <span class="dot" aria-hidden="true"></span><span class="txt">Syncing…</span></button>
-        <button type="button" class="icon-btn" onclick="openSettings()" aria-label="Settings">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8M14 4v6M8 14v6"/></svg></button>
-      </span>
-    </div>
-    <h1 id="viewTitle">Today</h1>
-  </header>
-  <main id="main" tabindex="-1"></main>
-</div>
-
-<!-- Pull down to refresh (js/shell.js). -->
-<div class="pull" id="pull" aria-hidden="true">
-  <svg class="pull-arrow" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
-  <svg class="pull-spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 9 9"/></svg>
-  <svg class="pull-done" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
-</div>
-
-<!-- Add a task: shows on the Tasks screen (js/tasks.js openTaskPanel). -->
-<button type="button" class="fab" id="fab" aria-label="Add a task" onclick="openTaskPanel()">
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-</button>
-
-<!-- Messages with an Undo (js/shell.js toast). -->
-<div class="toast" id="toast" role="status"><span class="t-text"></span><button type="button" onclick="toastAct()" hidden></button></div>
-
-<!-- Settings, Edit task and sign-in rise from the bottom (js/shell.js). -->
-<div class="panel-back hidden" id="panelBack" onclick="panelBackTap()"></div>
-<div class="panel hidden" id="overlay" role="dialog" aria-modal="true" aria-label="Panel" tabindex="-1">
-  <div class="panel-grab" aria-hidden="true" onpointerdown="panelGrab(event)" onpointermove="panelPull(event)"
-       onpointerup="panelLetGo()" onpointercancel="panelLetGo()"></div>
-  <div class="page" id="overlayPage"></div>
-</div>
-
-<!-- Tells VoiceOver which screen just opened. -->
-<div id="srAnnounce" class="sr-only" aria-live="polite"></div>
-
-<!-- In order: data and helpers first, each screen, Settings, then the start. -->
-<script src="js/data.js?v=25" defer></script>
-<script src="js/shell.js?v=25" defer></script>
-<script src="js/today.js?v=25" defer></script>
-<script src="js/calendar.js?v=25" defer></script>
-<script src="js/dinner.js?v=25" defer></script>
-<script src="js/recipes.js?v=25" defer></script>
-<script src="js/tasks.js?v=25" defer></script>
-<script src="js/checkins.js?v=25" defer></script>
-<script src="js/settings.js?v=25" defer></script>
-<script src="js/boot.js?v=25" defer></script>
+<body style="font-family: system-ui, sans-serif; padding: 2rem">
+<p>The preview is now the Family Hub. <a href="../">Open the Hub</a>.</p>
 </body>
 </html>

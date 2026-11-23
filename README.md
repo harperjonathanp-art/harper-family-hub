@@ -1,9 +1,18 @@
-# The redesign's preview
+# Harper Family Hub
 
-`next/` is the Hub being redesigned, one stage at a time (the build plan lives
-in Claude Docs as "Family Hub Redesign Build Plan"). GitHub Pages publishes it
-beside the live Hub, at `…/harper-family-hub/next/`. It uses the same Worker,
-sign-in and data as the live Hub, so a signed-in phone can open it straight away.
+What today asks of four people: the day, the calendar, dinners and recipes,
+tasks, and the weekly check-ins, for Jon, Maggie, Clayton and Heidi.
+
+This folder is the page: GitHub Pages publishes it from `main` at
+`https://harperjonathanp-art.github.io/harper-family-hub/`. Everything it
+reads and saves goes through the Hub's Worker (`worker/`, with its own
+README), which Cloudflare deploys from `main` too. `privacy.html` is the
+privacy page. `apps-script/` is where the Hub came from, kept for reference.
+
+The current look was built in stages from a redesign plan (in Claude Docs as
+"Family Hub Redesign Build Plan"), each tried at a preview page first. That
+preview lived in `next/`; it's now this page, and `next/` only sends a phone
+that still has the preview on its home screen here.
 
 ## Files
 
@@ -19,7 +28,9 @@ sign-in and data as the live Hub, so a signed-in phone can open it straight away
 | `js/recipes.js` | Recipes under Dinner: browse and search, a recipe's page, cooking a step at a time, adding to groceries |
 | `js/settings.js` | Sign-in, Settings (including Look & feel), devices, notifications |
 | `js/boot.js` | Starts the Hub; always loaded last |
-| `manifest.json` | Lets the preview be added to a home screen as its own icon |
+| `manifest.json` | Lets the Hub be added to a home screen as its own app |
+| `sw.js` | Offline use (the page and this release's files) and notifications |
+| `icons/` | The icon in every size, and the link-preview image |
 
 The scripts are plain files that share one scope, loaded in order with
 `defer`, so the `onclick="…"` handlers in the page keep working. There is no
@@ -41,10 +52,12 @@ The sections come first for the keyboard, after a "Skip to content" link.
 ## Release numbers
 
 Every file link in `index.html` ends in `?v=<release>`. Raise it whenever any
-file here changes, so a phone never runs a new page with an old file. When the
-preview is promoted, the live `sw.js` cache version goes up too.
+file here changes, so a phone never runs a new page with an old file, and set
+`RELEASE` in `sw.js` to match, so a new install can open offline straight away
+(the page check fails if they differ). Raise `CACHE` in `sw.js` when `sw.js`
+itself changes.
 
-## Before each preview
+## Before each change goes live
 
 ```
 node tools/page-check.cjs
@@ -60,18 +73,7 @@ link-preview image. They're all drawn from one design by
 `node tools/icons.cjs` (Playwright), so a change to the design is one edit
 and one run.
 
-## Becoming the live Hub
+## Home-screen icons
 
-When the preview replaces the live page:
-
-1. Move `index.html`, `css/`, `js/`, `icons/` and `manifest.json` up to the
-   repo root, in place of the old `index.html`, `manifest.json` and root icons.
-2. In `js/boot.js`, register `sw.js` rather than `../sw.js`; in
-   `manifest.json`, drop "(preview)" from the name and point `start_url`
-   and the icons at the root; in `index.html`, drop `next/` from the
-   link-preview addresses and the `noindex` line.
-3. In `sw.js`, raise `CACHE` and list every file (with its `?v=`) for
-   offline use, and cache the root page again.
-4. Run `node tools/page-check.cjs .` against the root page.
-5. iPhones keep the old home-screen icon until the app is removed and added
-   again; Android updates it on its own.
+iPhones keep the home-screen icon they were given until the Hub is removed
+from the home screen and added again; Android updates it on its own.
