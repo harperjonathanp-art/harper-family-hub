@@ -117,7 +117,7 @@ const notion = {
   ],
   blocks: { potpie: POT_PIE, divan: DIVAN, chili: CHILI, odd: ODD },
   reads: [],   // the pages whose blocks were read
-  queries: 0, photos: 0, dinners: [],
+  queries: 0, photos: 0, dinners: [], patched: [], made: [],
 };
 notion.recipes[1].properties.Photo = { files: [{ type: "file", name: "divan.jpeg", file: { url: "https://files.notion.example/divan.jpeg?sig=1" } }] };
 notion.recipes[1].properties.Source = { url: null };
@@ -144,7 +144,23 @@ before(async () => {
       const m = /^\/blocks\/([^/]+)\/children$/.exec(path);
       if (m) { notion.reads.push(m[1]); return MfResponse.json({ results: notion.blocks[m[1]] || [para(t("Just a note."))], has_more: false }); }
       const pg = /^\/pages\/([^/]+)$/.exec(path);
+      if (pg && request.method === "PATCH") { // a write: only the columns sent change
+        const body = JSON.parse(await request.text()), r = notion.recipes.find(x => x.id === pg[1]);
+        if (notion.refuse) return MfResponse.json({ message: "Insufficient permissions for this endpoint." }, { status: 403 });
+        notion.patched.push({ id: pg[1], properties: body.properties });
+        Object.assign(r.properties, body.properties);
+        r.last_edited_time = "2026-11-24T12:00:00.000Z";
+        return MfResponse.json(r);
+      }
       if (pg) return MfResponse.json(notion.recipes.find(r => r.id === pg[1]) || {});
+      if (path === "/pages" && request.method === "POST") {
+        const body = JSON.parse(await request.text());
+        notion.made.push(body);
+        const props = JSON.parse(JSON.stringify(body.properties)); // as Notion gives it back: its text as plain_text
+        props.Meal.title.forEach(t => { t.plain_text = t.text.content; });
+        notion.dinners.push({ properties: props }); // the meal plan now has it
+        return MfResponse.json({ id: "new-page" });
+      }
     }
     if (url.host === "img.example" || url.host === "files.notion.example") {
       notion.photos++;
@@ -259,6 +275,75 @@ test("the week's dinners carry their recipes", async () => {
     "Meal Type": { select: { name: "Dinner" } }, Recipe: { relation: [{ id: "potpie" }] } } }];
   await tick("2026-11-24T09:15:00Z"); // the dinners run on the other five minutes
   const d = await get("action=all");
-  assert.deepEqual(d.mealsFrom.recipes, { Mon: ["potpie"] });
+  assert.deepEqual(d.mealsFrom.recipes, { "2026-11-23": ["potpie"] });
   assert.match(d.meals.Mon.meal, /^Chicken Pot Pie \| https:\/\/www\.budgetbytes\.com\/x\/$/);
+});
+
+// ---- 7c: writing back to Notion, a parent only ----
+const post = async (body, token) => (await h.post("/api", body, token === undefined ? jon : token)).json();
+
+test("only a parent may rate, favorite or plan", async () => {
+  for (const action of ["rateRecipe", "favoriteRecipe", "planRecipe"]) {
+    assert.deepEqual(await post({ action, id: "potpie", stars: 5, on: true, date: "2026-11-26" }, kid), { ok: false, error: "parents_only" }, action);
+  }
+  assert.equal(notion.patched.length + notion.made.length, 0, "nothing reached Notion");
+});
+
+test("How was it? fills Rating, Status, Kid Approved and Last Made, and nothing else", async () => {
+  notion.recipes.find(r => r.id === "divan").properties["Kid Approved"] = { checkbox: false };
+  notion.recipes.find(r => r.id === "divan").properties.Status = { select: { name: "To Try" } };
+  await tick("2026-11-24T15:07:00Z"); // the list read again (six hours on), with those
+  const d = await post({ action: "rateRecipe", id: "divan", stars: 4, favorite: false, kids: true, date: "2026-11-23" });
+  assert.equal(d.ok, true, JSON.stringify(d));
+  assert.deepEqual(notion.patched.at(-1), { id: "divan", properties: {
+    Rating: { select: { name: "4 ⭐" } }, Status: { select: { name: "Tried" } },
+    "Kid Approved": { checkbox: true }, "Last Made": { date: { start: "2026-11-23" } } } });
+  assert.deepEqual([d.recipe.rating, d.recipe.status, d.recipe.kid, d.recipe.lastMade], [4, "Tried", true, "2026-11-23"]);
+  // The list's copy changed at once, and the page isn't read again for it
+  notion.reads.length = 0;
+  const listed = (await get("action=recipes")).recipes.find(r => r.id === "divan");
+  assert.deepEqual([listed.rating, listed.status, listed.lastMade], [4, "Tried", "2026-11-23"]);
+  await tick("2026-11-24T15:12:00Z");
+  assert.ok(!notion.reads.includes("divan"), "the page text didn't change, so it isn't read again");
+
+  // Family favorite; "the kids didn't like it" never un-ticks Kid Approved; an older night doesn't move Last Made back
+  await post({ action: "rateRecipe", id: "divan", stars: 5, favorite: true, kids: false, date: "2026-11-20" });
+  assert.deepEqual(notion.patched.at(-1).properties, { Rating: { select: { name: "5 ⭐" } }, Status: { select: { name: "Family Favorite" } } });
+  assert.deepEqual(await post({ action: "rateRecipe", id: "divan", stars: 9 }), { ok: false, error: "bad_stars" });
+  assert.deepEqual(await post({ action: "rateRecipe", id: "divan", stars: 3, date: "2026-12-30" }), { ok: false, error: "bad_date" });
+});
+
+test("the heart sets Family Favorite, and takes it off again", async () => {
+  let d = await post({ action: "favoriteRecipe", id: "chili", on: true });
+  assert.deepEqual([d.ok, d.recipe.status, notion.patched.at(-1)], [true, "Family Favorite", { id: "chili", properties: { Status: { select: { name: "Family Favorite" } } } }]);
+  d = await post({ action: "favoriteRecipe", id: "chili", on: false });
+  assert.deepEqual([d.recipe.status, notion.patched.at(-1).properties], ["Tried", { Status: { select: { name: "Tried" } } }]);
+  const n = notion.patched.length;
+  await post({ action: "favoriteRecipe", id: "chili", on: false });
+  assert.equal(notion.patched.length, n, "no change, no write");
+});
+
+test("Plan it adds a night to the meal plan, and the week shows it at once", async () => {
+  const d = await post({ action: "planRecipe", id: "chili", date: "2026-11-26", who: "Maggie" });
+  assert.equal(d.ok, true, JSON.stringify(d));
+  assert.deepEqual(notion.made.at(-1), {
+    parent: { type: "data_source_id", data_source_id: "meals-src" },
+    properties: {
+      Meal: { title: [{ type: "text", text: { content: "Vegetarian Chili" } }] }, Date: { date: { start: "2026-11-26" } },
+      "Meal Type": { select: { name: "Dinner" } }, Status: { select: { name: "Planned" } },
+      Recipe: { relation: [{ id: "chili" }] }, "Who Cooks": { select: { name: "Maggie" } },
+    },
+  });
+  assert.equal(d.meals.Thu.meal.split(" | ")[0], "Vegetarian Chili");
+  assert.equal(d.meals.Thu.note, "Maggie cooks");
+  assert.deepEqual(d.mealsFrom.recipes["2026-11-26"], ["chili"]);
+  assert.deepEqual(await post({ action: "planRecipe", id: "chili", date: "2026-11-01" }), { ok: false, error: "bad_date" });
+});
+
+test("when Notion refuses a write, the Hub is told why", async () => {
+  notion.refuse = true;
+  const d = await post({ action: "favoriteRecipe", id: "potpie", on: true });
+  notion.refuse = false;
+  assert.deepEqual([d.ok, d.error], [false, "notion"]);
+  assert.match(d.message, /Notion 403: Insufficient permissions/);
 });

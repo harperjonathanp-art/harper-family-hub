@@ -41,7 +41,7 @@ function renderNotionMeals() {
       <div class="mealbody">
         ${m.meal ? `<div class="mname">${esc(parts.name || "Recipe")}</div>` : `<div class="mname none">Not planned yet</div>`}
         ${m.note ? `<div class="muted">${esc(m.note)}</div>` : ""}
-        ${recipeLinks(parts.links, openRecipeButtons(d))}
+        ${recipeLinks(parts.links, openRecipeButtons(isoPlus(todayStr(), i - back)))}
       </div>
     </div>`;
   }).join("");

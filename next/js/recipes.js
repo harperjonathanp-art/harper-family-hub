@@ -1,6 +1,7 @@
 // Recipes, from the Notion Recipes database (read by the Worker): browse and search them under
 // Dinner, open one, cook it a step at a time, and add its ingredients to the grocery list.
-// Read-only for now: ratings, favorites and planning a night come later (Stage 7c).
+// A parent can also write back to Notion: "How was it?" on Today the morning after, the heart
+// (Family Favorite), and Plan it (a night in the Notion meal plan).
 "use strict";
 
 let DINNER_TAB = "week";  // "week" or "recipes"
@@ -45,6 +46,7 @@ function loadRecipes(force) {
     .finally(() => {
       RECIPES.loading = null;
       if (VIEW === "meals" && DINNER_TAB === "recipes") { if (RECIPE_OPEN) render(); else paintResults(); }
+      else if (VIEW === "today" && dayRecipes(isoPlus(todayStr(), -1)).length && !panelUp()) render(); // for How was it?
     });
   return RECIPES.loading;
 }
@@ -203,7 +205,7 @@ function renderRecipe(id) {
   let h = `${backToRecipes()}
     <div class="rhero ${r.img ? "" : "noimg"}">${r.img ? `<img src="${esc(r.img)}" alt="" onerror="this.parentElement.classList.add('noimg');this.remove()">` : ""}
       <span class="rhero-emoji" aria-hidden="true">${esc(r.emoji || "🍽️")}</span></div>
-    <h2 class="rtitle">${esc(r.name)}</h2>
+    <div class="rtitle-row"><h2 class="rtitle">${esc(r.name)}</h2>${isParent() ? heartButton(r) : ""}</div>
     <div class="rbadges">${r.status ? `<span class="rbadge ${r.status === "Family Favorite" ? "fav" : r.status === "To Try" ? "try" : ""}">${r.status === "Family Favorite" ? "♥ " : ""}${esc(r.status)}</span>` : ""}
       ${r.kid ? `<span class="rbadge kid">Kid approved</span>` : ""}${stars(r.rating)}
       ${r.lastMade ? `<span class="tiny">${esc(madeAgo(r.lastMade))}</span>` : ""}</div>
@@ -217,6 +219,7 @@ function renderRecipe(id) {
   h += `<div class="ractions">
     ${hasSteps ? `<button type="button" class="primary" onclick="startCooking('${esc(id)}')">Start cooking</button>` : ""}
     ${b && (b.ingredients || []).some(x => x.t) ? `<button type="button" class="ghost" onclick="openGroceryPick('${esc(id)}')">Add to groceries</button>` : ""}
+    ${isParent() && fromNotion() ? `<button type="button" class="ghost" onclick="openPlanIt('${esc(id)}')">Plan it</button>` : ""}
   </div>
   <div class="rlinks">${r.source ? `<a class="recipe" href="${esc(r.source)}" target="_blank" rel="noopener">${esc(siteName(r.source))} ↗︎</a>` : ""}
     ${r.url ? `<a class="recipe" href="${esc(r.url)}" target="_blank" rel="noopener">Open in Notion ↗︎</a>` : ""}</div>`;
@@ -480,8 +483,220 @@ document.addEventListener("keydown", e => {
 });
 
 /* ----- tonight's (or any night's) recipe, from Today and This week ----- */
-function dayRecipes(day) { return ((DATA.mealsFrom && DATA.mealsFrom.recipes) || {})[day] || []; }
+function dayRecipes(date) { return ((DATA.mealsFrom && DATA.mealsFrom.recipes) || {})[date] || []; }
 function openRecipeButtons(day) {
   return dayRecipes(day).map((id, i, all) => `<button type="button" class="recipe open-recipe" onclick="openRecipe('${esc(id)}')">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 5v16M8 7h7"/></svg>${all.length > 1 ? "Recipe " + (i + 1) : "Recipe"}</button>`).join("");
 }
+
+/* ============ writing back to Notion (a parent only) ============ */
+const isParent = () => ["Jon", "Maggie"].includes(cfg.user);
+const WRITES_KEY = "fd_notion_writes";
+/* A recipe as Notion now has it: into the list, this phone's copy, and the screen. */
+function mergeRecipe(fresh) {
+  const list = RECIPES.list || [], i = list.findIndex(r => r.id === fresh.id);
+  if (i >= 0) list[i] = Object.assign({}, list[i], fresh, { words: list[i].words });
+  const kept = keptBodies()[fresh.id];
+  if (kept && kept.info) kept.info = Object.assign({}, kept.info, fresh);
+  try {
+    localStorage.setItem(RECIPE_CACHE_KEY, JSON.stringify({ list, at: RECIPES.at, pagesLeft: RECIPES.pagesLeft }));
+    localStorage.setItem(BODIES_KEY, JSON.stringify(keptBodies()));
+  } catch (e) {}
+}
+/* Sends a write. If the phone is offline or Notion can't be reached, it's kept here and tried again
+   on the next sync (up to five times). Gives the Worker's answer, or null if it's waiting. */
+async function notionWrite(body) {
+  note("Saving…");
+  try {
+    const d = await apiPost(body);
+    if (d && d.ok) { if (d.recipe) mergeRecipe(d.recipe); note("Saved to Notion ✓"); return d; }
+    if (d && d.error === "notion") { queueWrite(body, d.message); note("Notion didn't take it"); return null; }
+    note("Save failed");
+    toast(d && d.error === "parents_only" ? "Only Jon and Maggie can change recipes." : "That couldn't be saved.");
+    return d;
+  } catch (e) { queueWrite(body); note("Offline — saved on this phone"); return null; }
+}
+function queueWrite(body, why) {
+  let q = [];
+  try { q = JSON.parse(localStorage.getItem(WRITES_KEY) || "[]"); } catch (e) {}
+  const tries = (body.tries || 0) + 1;
+  if (tries > 5) { toast("Notion still won't take it" + (why ? ": " + why : "") + ". Change it in Notion instead."); return; }
+  q = q.filter(w => !(w.action === body.action && w.id === body.id)); // the latest change to a recipe wins
+  q.push(Object.assign({}, body, { tries }));
+  try { localStorage.setItem(WRITES_KEY, JSON.stringify(q)); } catch (e) {}
+  toast(why ? "Notion didn't take it (" + why + "). It'll be tried again." : "Saved on this phone. It goes to Notion when you're back online.");
+}
+/* Tries the waiting writes again (after each sync). */
+async function flushNotionWrites() {
+  let q = [];
+  try { q = JSON.parse(localStorage.getItem(WRITES_KEY) || "[]"); } catch (e) {}
+  if (!q.length || flushNotionWrites.busy) return;
+  flushNotionWrites.busy = true;
+  localStorage.removeItem(WRITES_KEY);
+  for (const w of q) {
+    try {
+      const d = await apiPost(w);
+      if (d && d.ok) { if (d.recipe) mergeRecipe(d.recipe); }
+      else if (d && d.error === "notion") queueWrite(w, d.message);
+    } catch (e) { queueWrite(w); }
+  }
+  flushNotionWrites.busy = false;
+}
+
+/* ----- the heart: Family Favorite ----- */
+function heartButton(r) {
+  const on = r.status === "Family Favorite";
+  return `<button type="button" class="rheart" aria-pressed="${on}" aria-label="Family favorite" onclick="toggleFavorite('${esc(r.id)}', this)">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-9.2-9A5 5 0 0 1 12 6a5 5 0 0 1 9.2 5c-2.2 4.6-9.2 9-9.2 9z"/></svg></button>`;
+}
+async function toggleFavorite(id, btn) {
+  const r = recipeById(id) || (keptBodies()[id] || {}).info;
+  if (!r) return;
+  const on = r.status !== "Family Favorite";
+  // at once on screen; Notion follows
+  btn.setAttribute("aria-pressed", String(on));
+  if (!calm()) { btn.classList.remove("pop"); void btn.offsetWidth; btn.classList.add("pop"); }
+  const was = r.status;
+  mergeRecipe(Object.assign({}, r, { status: on ? "Family Favorite" : was === "Family Favorite" ? "Tried" : was }));
+  toast(on ? "Marked a family favorite" : "No longer a family favorite");
+  const d = await notionWrite({ action: "favoriteRecipe", id, on });
+  if (d && !d.ok) { mergeRecipe(Object.assign({}, r, { status: was })); if (RECIPE_OPEN === id) render(); }
+}
+
+/* ----- Plan it: a night in the Notion meal plan ----- */
+const PLAN = { id: null, date: "", who: "" };
+function planNights() {
+  const first = DAYS.indexOf((DATA.mealsFrom && DATA.mealsFrom.weekStarts) || "Sat");
+  const back = ((new Date().getDay() + 6) % 7 - first + 7) % 7, left = 6 - back; // nights left this plan week, after tonight
+  const out = [];
+  for (let i = 0; i <= left + 7; i++) out.push({ date: isoPlus(todayStr(), i), next: i > left });
+  return out;
+}
+function openPlanIt(id) {
+  const r = recipeById(id) || (keptBodies()[id] || {}).info;
+  if (!r) return;
+  Object.assign(PLAN, { id, date: "", who: "" });
+  const night = n => {
+    const d = new Date(n.date + "T12:00:00"), day = DAYS[(d.getDay() + 6) % 7];
+    const has = !n.next && (DATA.meals[day] || {}).meal ? mealParts(DATA.meals[day].meal).name : "";
+    return `<button type="button" class="pnight" data-date="${n.date}" aria-pressed="false" onclick="planPick('date', '${n.date}')">
+      <span class="pn-day">${n.date === todayStr() ? "Tonight" : esc(day)}</span><span class="pn-num">${d.getDate()}</span>
+      <span class="pn-has">${has ? esc(has) : "Open"}</span></button>`;
+  };
+  const nights = planNights();
+  overlayHtml(`<div class="tp-head"><h2 class="tp-title">Plan it</h2>
+      <button type="button" class="icon-btn" onclick="closeOverlay()" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <p class="muted">${esc(r.name)} goes on the Notion meal plan for the night you pick.</p>
+    <span class="f">This week</span><div class="pnights">${nights.filter(n => !n.next).map(night).join("")}</div>
+    <span class="f">Next week</span><div class="pnights">${nights.filter(n => n.next).map(night).join("")}</div>
+    <span class="f">Who cooks</span>
+    <div class="chips">${["Jon", "Maggie", "Together"].map(w => `<button type="button" class="chipbtn" data-who="${w}" aria-pressed="false" onclick="planPick('who', '${w}')">${w}</button>`).join("")}</div>
+    <p class="tiny" id="planNote"></p>
+    <div class="actions"><button type="button" class="primary" id="planGo" onclick="planIt()" disabled>Pick a night</button>
+      <button type="button" class="ghost" onclick="closeOverlay()">Cancel</button></div>`);
+}
+function planPick(what, v) {
+  PLAN[what] = PLAN[what] === v && what === "who" ? "" : v; // who cooks can be left open
+  document.querySelectorAll("#overlayPage .pnight").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.date === PLAN.date)));
+  document.querySelectorAll("#overlayPage [data-who]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.who === PLAN.who)));
+  const go = document.getElementById("planGo"), noteEl = document.getElementById("planNote");
+  if (!PLAN.date) return;
+  const d = new Date(PLAN.date + "T12:00:00"), day = d.toLocaleDateString([], { weekday: "long" });
+  go.disabled = false;
+  go.textContent = "Plan it for " + (PLAN.date === todayStr() ? "tonight" : day);
+  const next = planNights().find(n => n.date === PLAN.date).next;
+  const has = !next && (DATA.meals[DAYS[(d.getDay() + 6) % 7]] || {}).meal;
+  noteEl.textContent = next ? "It shows on This week once that week begins." : has ? "That night already has a dinner; this goes alongside it." : "";
+}
+async function planIt() {
+  const go = document.getElementById("planGo");
+  go.disabled = true; go.textContent = "Adding to Notion…";
+  const body = { action: "planRecipe", id: PLAN.id, date: PLAN.date, who: PLAN.who };
+  note("Saving…");
+  try {
+    const d = await apiPost(body);
+    if (!d || !d.ok) {
+      go.disabled = false; go.textContent = "Try again";
+      document.getElementById("planNote").textContent = d && d.error === "notion" ? "Notion didn't take it: " + d.message
+        : d && d.error === "parents_only" ? "Only Jon and Maggie can plan dinners." : "That couldn't be saved.";
+      note("Save failed");
+      return;
+    }
+    DATA.meals = d.meals || DATA.meals; DATA.mealsFrom = d.mealsFrom || DATA.mealsFrom;
+    try { localStorage.setItem("fd_cache", JSON.stringify(DATA)); } catch (e) {}
+    note("Saved to Notion ✓");
+    closeOverlay();
+    const when = PLAN.date === todayStr() ? "tonight" : new Date(PLAN.date + "T12:00:00").toLocaleDateString([], { weekday: "long" });
+    toast(`Planned for ${when}`, "See the week", () => dinnerTab("week"));
+    render();
+  } catch (e) {
+    go.disabled = false; go.textContent = "Try again";
+    document.getElementById("planNote").textContent = "The Hub couldn't be reached. Check the connection and try again.";
+    note("Offline?");
+  }
+}
+
+/* ----- How was it? On Today, the morning after a dinner from a recipe ----- */
+const HOW = { id: null, stars: 0, fav: false, kids: false };
+const HOW_KEY = "fd_howwasit"; // { date, ids }: asked and answered (or skipped) on this phone
+function howAnswered(date) {
+  try { const h = JSON.parse(localStorage.getItem(HOW_KEY) || "{}"); return h.date === date ? h.ids || [] : []; } catch (e) { return []; }
+}
+function howDone(date, id) {
+  const ids = howAnswered(date).concat(id);
+  try { localStorage.setItem(HOW_KEY, JSON.stringify({ date, ids })); } catch (e) {}
+}
+function howWasItHtml() {
+  if (!isParent() || !fromNotion()) return "";
+  const y = isoPlus(todayStr(), -1), ids = dayRecipes(y);
+  if (!ids.length) return "";
+  recipesKept();
+  if (!RECIPES.list) { loadRecipes(false); return ""; }
+  const done = howAnswered(y);
+  const r = ids.map(recipeById).find(x => x && !done.includes(x.id) && !(x.lastMade && x.lastMade >= y));
+  if (!r) return "";
+  if (HOW.id !== r.id) Object.assign(HOW, { id: r.id, stars: 0, fav: r.status === "Family Favorite", kids: false });
+  return `<section class="howwas" id="howWas" aria-label="How was last night's dinner?">
+    <div class="hw-top">${thumb(r)}<div><span class="marker ceremony">Last night</span>
+      <h3>How was the ${esc(r.name)}?</h3></div></div>
+    <div class="hw-stars" role="radiogroup" aria-label="Stars">${[1, 2, 3, 4, 5].map(n =>
+      `<button type="button" role="radio" class="${HOW.stars >= n ? "lit" : ""}" aria-checked="${HOW.stars === n}" aria-label="${n} star${n > 1 ? "s" : ""}" data-n="${n}" onclick="howStars(${n})">★</button>`).join("")}</div>
+    <div class="chips">
+      <button type="button" class="chipbtn" id="howFav" aria-pressed="${HOW.fav}" onclick="howToggle('fav')">♥ Family favorite</button>
+      <button type="button" class="chipbtn" id="howKids" aria-pressed="${HOW.kids}" onclick="howToggle('kids')">The kids liked it</button>
+    </div>
+    <div class="actions"><button type="button" class="primary" id="howSave" onclick="howSave()" ${HOW.stars ? "" : "disabled"}>${HOW.stars ? "Save to Notion" : "Pick the stars"}</button>
+      <button type="button" class="ghost" onclick="howSkip()">Skip</button></div>
+  </section>`;
+}
+function howStars(n) {
+  HOW.stars = n;
+  document.querySelectorAll("#howWas .hw-stars button").forEach(b => {
+    const k = Number(b.dataset.n);
+    b.setAttribute("aria-checked", String(k === n));
+    b.classList.toggle("lit", k <= n);
+  });
+  const save = document.getElementById("howSave");
+  save.disabled = false; save.textContent = "Save to Notion";
+}
+function howToggle(k) {
+  HOW[k] = !HOW[k];
+  document.getElementById(k === "fav" ? "howFav" : "howKids").setAttribute("aria-pressed", String(HOW[k]));
+}
+function howClose(text) {
+  const card = document.getElementById("howWas");
+  if (!card) return;
+  card.innerHTML = `<p class="hw-thanks">${esc(text)}</p>`;
+  setTimeout(() => { if (calm()) card.remove(); else { card.classList.add("leaving"); setTimeout(() => card.remove(), 450); } }, 1600);
+}
+async function howSave() {
+  const y = isoPlus(todayStr(), -1), r = recipeById(HOW.id);
+  if (!r || !HOW.stars) return;
+  const body = { action: "rateRecipe", id: r.id, stars: HOW.stars, favorite: HOW.fav, kids: HOW.kids, date: y };
+  howDone(y, r.id);
+  mergeRecipe(Object.assign({}, r, { rating: HOW.stars, lastMade: y, kid: r.kid || HOW.kids,
+    status: HOW.fav ? "Family Favorite" : !r.status || r.status === "To Try" ? "Tried" : r.status }));
+  howClose(HOW.stars >= 4 ? "Saved. Sounds like a keeper." : "Saved. Thanks!");
+  await notionWrite(body);
+}
+function howSkip() { howDone(isoPlus(todayStr(), -1), HOW.id); howClose("Skipped for this time."); }

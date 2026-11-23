@@ -994,3 +994,43 @@ html.cooking #nav, html.cooking #fab { visibility: hidden; }
 .cook-count { flex: none; min-width: 64px; text-align: center; color: var(--muted); font: 600 14px/1 var(--font-ui); font-variant-numeric: tabular-nums; }
 .rkid, .rfav { white-space: nowrap; }
 button.recipe { border: 0; font-family: var(--font-ui); cursor: pointer; }
+
+/* ---------- writing back to Notion (js/recipes.js) ---------- */
+.rtitle-row { display: flex; align-items: flex-start; gap: var(--space-3); }
+.rtitle-row .rtitle { flex: 1; min-width: 0; }
+.rheart {
+  flex: none; width: 46px; height: 46px; margin-top: -4px; display: grid; place-items: center; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--card); color: var(--muted); cursor: pointer;
+  transition: background-color .2s ease, color .2s ease, border-color .2s ease;
+}
+.rheart svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.rheart[aria-pressed="true"] { background: var(--warm-tint); border-color: transparent; color: var(--warm); }
+.rheart[aria-pressed="true"] svg { fill: currentColor; }
+.rheart.pop { animation: tick-pop .4s cubic-bezier(.34,1.56,.64,1); }
+.pnights { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-2) 0 var(--space-4); }
+.pnight {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; min-height: 74px; min-width: 0;
+  border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--card); color: var(--ink); font: inherit; cursor: pointer;
+}
+.pnight .pn-day { font: 600 12px/1.2 var(--font-ui); color: var(--muted); }
+.pnight .pn-num { font: 700 18px/1.2 var(--font-display); }
+.pnight .pn-has { max-width: 100%; font-size: 11px; line-height: 14px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pnight[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.pnight[aria-pressed="true"] .pn-day, .pnight[aria-pressed="true"] .pn-has { color: var(--bg); opacity: .8; }
+.howwas {
+  padding: var(--space-4); margin-bottom: var(--space-3); border-radius: var(--radius-lg);
+  background: var(--card); border: 1px solid var(--line); overflow: hidden;
+}
+.howwas.leaving { transition: opacity .3s ease, max-height .45s ease, margin .45s ease, padding .45s ease; opacity: 0; max-height: 0; }
+.hw-top { display: flex; align-items: center; gap: var(--space-3); }
+.hw-top h3 { margin: 6px 0 0; font-family: var(--font-display); font-weight: var(--display-weight); font-size: 19px; line-height: 1.2; }
+.hw-stars { display: flex; gap: 4px; margin: var(--space-3) 0; }
+.hw-stars button {
+  width: 48px; height: 48px; border: 0; border-radius: 50%; background: none; cursor: pointer;
+  font-size: 32px; line-height: 1; color: var(--line-strong); transition: color .15s ease, transform .15s ease;
+}
+.hw-stars button.lit { color: var(--gold); }
+.hw-stars button:active { transform: scale(.88); }
+.howwas .chips { margin-bottom: var(--space-1); }
+.howwas .actions { margin-top: var(--space-3); }
+.hw-thanks { margin: 0; font: 600 16px/1.4 var(--font-ui); color: var(--ok); }

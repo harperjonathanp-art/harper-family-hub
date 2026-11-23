@@ -58,7 +58,7 @@ function sample() {
       Sun: { meal: "Mustard-Maple Roasted Salmon", note: "" },
     },
     mealsFrom: { source: "notion", syncedAt: Date.now(), weekStarts: "Sat",
-      recipes: { [["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()]]: ["potpie"], Fri: ["chili"] } },
+      recipes: { [day(0)]: ["potpie"], [day(-1)]: ["divan"], [day(3)]: ["chili"] } }, // by night; last night's asks How was it?
     events: [
       ev(-180, 30, "School drop-off", "Family", "#46647b"),
       ev(35, 75, "Soccer practice", "MCHS", "#2f5d46"),
@@ -328,12 +328,54 @@ function contrast(a, b) {
           await page.screenshot({ path: path.join(OUT, `${tag}-cooking.png`) });
           await page.evaluate(() => stopCooking());
           await page.waitForTimeout(400);
+          // 7c: the heart and Plan it, for a parent
+          await page.evaluate(() => openRecipe("chili"));
+          await page.waitForTimeout(900);
+          const plan = await page.evaluate(() => {
+            const out = { heart: !!document.querySelector(".rheart"), planBtn: [...document.querySelectorAll(".ractions button")].some(b => b.textContent === "Plan it") };
+            openPlanIt("chili");
+            out.nights = document.querySelectorAll("#overlayPage .pnight").length;
+            out.first = document.querySelector("#overlayPage .pnight .pn-day").textContent;
+            planPick("date", document.querySelectorAll("#overlayPage .pnight")[1].dataset.date);
+            out.go = document.getElementById("planGo").textContent;
+            return out;
+          });
+          want(plan.heart && plan.planBtn && plan.nights >= 8 && plan.nights <= 14 && plan.first === "Tonight" && /^Plan it for \w+day$/.test(plan.go),
+            `Plan it: ${JSON.stringify(plan)}`);
+          await page.waitForTimeout(450);
+          await page.screenshot({ path: path.join(OUT, `${tag}-plan-it.png`) });
+          await page.evaluate(() => closeOverlay());
+          await page.waitForTimeout(450);
           await page.evaluate(() => openRecipe("salad"));
           await page.waitForTimeout(900);
           want(await page.evaluate(() => document.querySelectorAll(".rraw p").length === 2), "a page off the layout isn't shown as written");
           await page.evaluate(() => { RECIPE_OPEN = null; DINNER_TAB = "week"; go("today"); });
           await page.waitForTimeout(650);
           want(await page.evaluate(() => !!document.querySelector(".tonight .open-recipe, .open-recipe")), "Tonight has no Recipe button");
+          // How was it? (last night was Chicken Divan)
+          const how = await page.evaluate(() => {
+            const card = document.getElementById("howWas");
+            if (!card) return "no card";
+            const out = [card.querySelector("h3").textContent, document.getElementById("howSave").disabled];
+            howStars(4);
+            out.push(document.querySelectorAll("#howWas .hw-stars .lit").length, document.getElementById("howSave").disabled);
+            return out.join(" | ");
+          });
+          want(how === "How was the Chicken Divan? | true | 4 | false", `How was it: ${how}`);
+          await page.screenshot({ path: path.join(OUT, `${tag}-how-was-it.png`) });
+          // a child sees the recipes, but not the heart, Plan it or How was it?
+          const kid = await page.evaluate(() => {
+            localStorage.setItem("fd_user", "Clayton");
+            HOW.id = null; render();
+            const out = [!!document.getElementById("howWas")];
+            RECIPE_OPEN = "chili"; DINNER_TAB = "recipes"; VIEW = "meals"; render();
+            out.push(!!document.querySelector(".rheart"), [...document.querySelectorAll(".ractions button")].some(b => b.textContent === "Plan it"),
+              !!document.querySelector(".rtitle"));
+            localStorage.setItem("fd_user", "Jon");
+            RECIPE_OPEN = null; DINNER_TAB = "week"; VIEW = "today"; render();
+            return out.join();
+          });
+          want(kid === "false,false,false,true", `a child sees ${kid}`);
         }
         // Today: a greeting, the day in a sentence, Up next, and the pill once synced
         await page.evaluate(() => go("today"));

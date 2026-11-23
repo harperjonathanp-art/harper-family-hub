@@ -10,8 +10,8 @@
 
 import { json } from "./util.js";
 import { isGroceryAction, groceryAction, listGroceries } from "./groceries.js";
-import { hubGet, hubPost, nowOf } from "./hub/api.js";
-import { recipeList, recipeOne } from "./hub/recipes.js";
+import { hubGet, hubPost, nowOf, syncNotionMeals } from "./hub/api.js";
+import { recipeList, recipeOne, recipeAction, RECIPE_ACTIONS } from "./hub/recipes.js";
 
 export async function handleApi(request, env, url, session, headers, ctx) {
   const reply = (obj, status) => json(obj, status, headers);
@@ -31,6 +31,16 @@ export async function handleApi(request, env, url, session, headers, ctx) {
     try { body = await request.json(); } catch (err) { return reply({ ok: false, error: "bad_json" }, 400); }
     if (!body || typeof body !== "object" || Array.isArray(body)) return reply({ ok: false, error: "bad_json" }, 400);
     if (isGroceryAction(body.action)) return reply(await groceryAction(env, body, session.person));
+    // Recipes written back to Notion (a parent only). Planning a night reads the week again at once,
+    // and answers with the Hub's whole state, so it shows on This week straight away.
+    if (RECIPE_ACTIONS.indexOf(body.action) >= 0) {
+      const r = await recipeAction(env, session, body, url.origin, nowOf(env));
+      if (r.ok && body.action === "planRecipe") {
+        await syncNotionMeals(env);
+        Object.assign(r, await hubGet(env, session, "all", false), { groceries: await listGroceries(env) });
+      }
+      return reply(r);
+    }
     const data = await hubPost(env, session, body, p => { if (ctx && ctx.waitUntil) ctx.waitUntil(p); });
     if (data.tasks) data.groceries = await listGroceries(env); // after a save the Hub is sent the whole state
     return reply(data);

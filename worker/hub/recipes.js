@@ -1,7 +1,11 @@
 /**
  * HARPER FAMILY HUB — Recipes, read from Notion's Recipes database
  *
- * Read-only: nothing here writes to Notion.
+ * Reading, for everyone signed in; three writes, for a parent only (Stage 7c):
+ *   rateRecipe      "How was it?": the stars, Family Favorite, the kids liked it, and the night it was made
+ *   favoriteRecipe  the heart: Status Family Favorite (or back to Tried)
+ *   planRecipe      a night in the Notion meal plan, linked to the recipe
+ * A write changes only the columns it's about, never the page's text.
  *
  *   The list   Every 6 hours the timer reads all the recipes' columns (about five
  *              requests of 100) and keeps them as one copy in the database.
@@ -24,6 +28,7 @@
  */
 
 import { notion, notionOn, NOTION_PROPS, plainText, selectName } from "./notion.js";
+import { today, isoAdd } from "./time.js";
 
 const LIST_EVERY_MS = 6 * 3600 * 1000;
 export const PAGE_REQUESTS = 15;            // Notion requests for recipe pages per timer run
@@ -375,4 +380,74 @@ export async function recipePhoto(env, url, now) {
     if (kept) return new Response(kept.data, { headers: headers(kept.type) }); // an older copy beats none
     return new Response("photo unavailable", { status: 404 });
   }
+}
+
+// ---------- writing to Notion (a parent only) ----------
+
+export const RECIPE_ACTIONS = ["rateRecipe", "favoriteRecipe", "planRecipe"];
+const WHO_COOKS = ["Jon", "Maggie", "Together"];
+const isDate = d => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ""));
+
+/** Saves a recipe's new columns, and keeps the list's copy in step (the page itself didn't change, so it isn't read again). */
+async function patchRecipe(env, list, info, props) {
+  const page = await notion(env, "PATCH", "/pages/" + info.id, { properties: props });
+  const fresh = page && page.properties ? recipeInfo(page) : Object.assign({}, info);
+  const i = list.findIndex(r => r.id === info.id);
+  if (i >= 0) list[i] = fresh;
+  await putStore(env, "list", JSON.stringify(list));
+  if (fresh.edited && fresh.edited !== info.edited) {
+    await env.DB.prepare("UPDATE recipe_bodies SET edited = ? WHERE id = ? AND edited = ?").bind(fresh.edited, info.id, info.edited).run();
+  }
+  return fresh;
+}
+
+/** POST { action: rateRecipe | favoriteRecipe | planRecipe, id, … }. Gives { ok, recipe } or { ok: false, error }. */
+export async function recipeAction(env, session, body, origin, now) {
+  if (!notionOn(env)) return { ok: false, error: "no_recipes" };
+  if (!session.parent) return { ok: false, error: "parents_only" };
+  await tables(env);
+  const list = parse(await getStore(env, "list"), []);
+  const info = list.find(r => r.id === String(body.id || ""));
+  if (!info) return { ok: false, error: "not_found" };
+  const home = today(now);
+  try {
+    if (body.action === "rateRecipe") {
+      const stars = Math.round(Number(body.stars) || 0), date = isDate(body.date) ? body.date : isoAdd(home, -1);
+      if (stars < 1 || stars > 5) return { ok: false, error: "bad_stars" };
+      if (date > home) return { ok: false, error: "bad_date" };
+      const props = {};
+      props[P.rating] = { select: { name: stars + " ⭐" } };
+      const status = body.favorite ? "Family Favorite" : !info.status || info.status === "To Try" ? "Tried" : info.status;
+      if (status !== info.status) props[P.status] = { select: { name: status } };
+      if (body.kids === true && !info.kid) props[P.kid] = { checkbox: true }; // a "no" never un-ticks it
+      if (!info.lastMade || date > info.lastMade) props[P.lastMade] = { date: { start: date } };
+      const fresh = await patchRecipe(env, list, info, props);
+      return { ok: true, recipe: await shown(fresh, await photoKey(env), origin, now.getTime()) };
+    }
+    if (body.action === "favoriteRecipe") {
+      const want = body.on === true ? "Family Favorite" : info.status === "Family Favorite" ? "Tried" : info.status;
+      if (want === info.status) return { ok: true, recipe: await shown(info, await photoKey(env), origin, now.getTime()) };
+      const props = {};
+      props[P.status] = { select: { name: want } };
+      const fresh = await patchRecipe(env, list, info, props);
+      return { ok: true, recipe: await shown(fresh, await photoKey(env), origin, now.getTime()) };
+    }
+    if (body.action === "planRecipe") {
+      const date = String(body.date || ""), who = WHO_COOKS.indexOf(body.who) >= 0 ? body.who : "";
+      if (!isDate(date) || date < home || date > isoAdd(home, 20)) return { ok: false, error: "bad_date" };
+      const M = NOTION_PROPS, props = {};
+      props[M.meal] = { title: [{ type: "text", text: { content: info.name.slice(0, 2000) } }] };
+      props[M.date] = { date: { start: date } };
+      props[M.type] = { select: { name: "Dinner" } };
+      props[M.status] = { select: { name: "Planned" } };
+      props[M.recipe] = { relation: [{ id: info.id }] };
+      if (who) props[M.who] = { select: { name: who } };
+      await notion(env, "POST", "/pages", { parent: { type: "data_source_id", data_source_id: String(env.NOTION_MEALS_SOURCE || "").trim() }, properties: props });
+      return { ok: true, planned: date };
+    }
+  } catch (err) {
+    // Notion's own words, e.g. when the connection isn't allowed to edit: shown so it can be fixed
+    return { ok: false, error: "notion", message: String(err && err.message || err).slice(0, 200) };
+  }
+  return { ok: false, error: "unknown_action" };
 }
