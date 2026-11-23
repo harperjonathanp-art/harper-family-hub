@@ -64,7 +64,7 @@ const SYNC_ERRORS = {
   no_database: "The Hub's Worker isn't set up yet",
 };
 
-async function refresh(quiet) {
+async function refresh(quiet, asked) {
   if (!cfg.signedIn) { showSetup(); return; }
   if (!quiet) note("Syncing…");
   try {
@@ -79,7 +79,7 @@ async function refresh(quiet) {
              mealsFrom: d.mealsFrom, // set when the dinners come from the Notion meal plan
              reminders: REM.show ? keepGoodReminders(d.reminders) : undefined }; // never kept on a device that hides them
     localStorage.setItem("fd_cache", JSON.stringify(DATA));
-    note("Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+    note(asked ? "Updated just now" : "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
     if (hasUnsavedEdits()) { note("Synced — your unsaved edits are kept"); return; }
     render();
   } catch (e) {
@@ -103,7 +103,31 @@ async function send(body) {
   render();
 }
 
-function note(t) { document.getElementById("syncNote").textContent = t; }
+/* The sync pill in the header. Every message about saving and syncing comes through here, and the
+   pill shows what it means: busy ("Syncing…", "Saving…"), fine ("Up to date"), or a problem, which
+   says so in words. The time of the last good sync stays in its label. Tapping it syncs now. */
+const SYNC = { at: 0, glow: 0 };
+function note(t) {
+  const pill = document.getElementById("syncNote");
+  if (!pill) return;
+  const busy = /…$/.test(t), bad = !busy && /fail|offline|error|isn't set up|signed out/i.test(t);
+  let text = t;
+  if (!busy && !bad) {
+    SYNC.at = Date.now();
+    text = /just now/.test(t) ? "Updated just now" : "Up to date";
+    clearTimeout(SYNC.glow);
+    if (/just now/.test(t)) SYNC.glow = setTimeout(() => {
+      if (pill.dataset.state !== "fresh") return;
+      pill.dataset.state = "ok"; pill.querySelector(".txt").textContent = "Up to date";
+    }, 4000);
+  } else if (/^offline/i.test(t) && SYNC.at) {
+    text = "Offline · showing " + new Date(SYNC.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+  pill.dataset.state = busy ? "busy" : bad ? "bad" : /just now/.test(text) ? "fresh" : "ok";
+  pill.querySelector(".txt").textContent = text;
+  const at = SYNC.at ? " Last synced " + new Date(SYNC.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + "." : "";
+  pill.setAttribute("aria-label", `${text}.${at} Tap to sync now.`);
+}
 
 /* ============ drafts (survive refreshes & app switches) ============ */
 function draftKey() {

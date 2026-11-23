@@ -24,7 +24,14 @@ const TYPES = { ".html": "text/html", ".css": "text/css", ".js": "text/javascrip
 
 // ---- sample data: a believable Monday ----
 function sample() {
-  const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
+  const t12 = d => `${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")} ${d.getHours() < 12 ? "AM" : "PM"}`;
+  // an event starting `from` minutes from now and lasting `len` minutes (so Up next always has something)
+  const ev = (from, len, title, cal, color) => {
+    const a = new Date(Date.now() + from * 60000), b = new Date(a.getTime() + len * 60000);
+    return { date: iso(a), start: t12(a), end: t12(b), title, cal, color };
+  };
   return {
     ok: true,
     tasks: [
@@ -49,9 +56,9 @@ function sample() {
     },
     mealsFrom: { source: "notion", syncedAt: Date.now(), weekStarts: "Sat" },
     events: [
-      { date: day(0), start: "7:30 AM", title: "School drop-off", cal: "Family", color: "#46647b" },
-      { date: day(0), start: "4:15 PM", title: "Soccer practice", cal: "Clayton", color: "#2f5d46" },
-      { date: day(0), start: "6:30 PM", title: "Small group", cal: "Jon & Maggie", color: "#856224" },
+      ev(-180, 30, "School drop-off", "Family", "#46647b"),
+      ev(35, 75, "Soccer practice", "MCHS", "#2f5d46"),
+      ev(165, 120, "Small group", "Jon", "#856224"),
       { date: day(1), allDay: true, title: "Picture day", cal: "Heidi", color: "#b0452a" },
       { date: day(2), start: "5:00 PM", title: "Piano lesson", cal: "Heidi", color: "#b0452a" },
     ],
@@ -86,6 +93,7 @@ const PAIRS = [
   ["p-jon-ink", "p-jon"], ["p-maggie-ink", "p-maggie"], ["p-clayton-ink", "p-clayton"],
   ["p-heidi-ink", "p-heidi"], ["p-family-ink", "p-family"],
   ["nav-active-ink", "nav-active-bg"], ["nav-muted", "nav-bg", 3], // resting tab icons: 3:1, as for any icon
+  ["warm", "bg"], ["warm", "card"], ["cool", "card"], ["gold", "card"],
 ];
 function contrast(a, b) {
   const lum = hex => {
@@ -149,10 +157,23 @@ function contrast(a, b) {
           if (blank) problems.push(`${tag}: ${v} drew nothing`);
           await shot(v);
         }
+        // Today: a greeting, the day in a sentence, Up next, and the pill once synced
+        await page.evaluate(() => go("today"));
+        await page.waitForTimeout(650);
+        const today = await page.evaluate(() => ({
+          title: document.getElementById("viewTitle").textContent,
+          sentence: (document.querySelector(".daysentence") || {}).textContent || "",
+          upnext: !!document.querySelector("#main .upnext"),
+          pill: [document.getElementById("syncNote").dataset.state, document.querySelector("#syncNote .txt").textContent],
+        }));
+        if (!/^(Good (morning|afternoon|evening)|Still up), Jon[.?]$/.test(today.title)) problems.push(`${tag}: greeting is "${today.title}"`);
+        if (!/Soccer practice at /.test(today.sentence)) problems.push(`${tag}: day sentence is "${today.sentence}"`);
+        if (!today.upnext) problems.push(`${tag}: no Up next card`);
+        if (today.pill.join() !== "ok,Up to date") problems.push(`${tag}: sync pill shows ${today.pill.join(" / ")}`);
         // the tab bar: five tabs, the open one marked
         const tabs = await page.evaluate(() => [...document.querySelectorAll("#nav button")].map(b => [b.dataset.view, b.getAttribute("aria-current")]));
         if (tabs.length !== 5) problems.push(`${tag}: the tab bar has ${tabs.length} tabs`);
-        if (!tabs.some(([v, cur]) => v === "checkins" && cur === "page")) problems.push(`${tag}: the open tab isn't marked`);
+        if (!tabs.some(([v, cur]) => v === "today" && cur === "page")) problems.push(`${tag}: the open tab isn't marked`);
         // the panel: rises, closes with Escape, and is gone after its slide
         await page.evaluate(() => openSettings());
         await page.waitForTimeout(500);

@@ -296,6 +296,7 @@ async function tickReminder(key, on) {
   r.ticked = on; r.tickedBy = on ? cfg.user : "";
   localStorage.setItem("fd_cache", JSON.stringify(DATA));
   if (on) FLASH = key; // redrawn at once, so its tick pops on the new row
+  LAST_TICK = on ? "rem:" + key : null;
   render();
   note("Saving…");
   try {
@@ -456,6 +457,7 @@ function toggleTask(id) {
   if (id.startsWith("tmp")) { render(); return; } // still saving
   const t = DATA.tasks.find(x => x.id === id);
   if (t) { t.completed = !t.completed; t.completedBy = t.completed ? cfg.user : null; }
+  LAST_TICK = t && t.completed ? id : null; // for the all-clear's Undo
   const row = document.querySelector(`#main [data-tid="${CSS.escape(id)}"]`);
   if (row && t) row.classList.toggle("done", t.completed);
   // Ticking a task ticks its open subtasks too (the server does the same); unticking leaves them.

@@ -39,9 +39,9 @@ function chip(name) {
   const initial = (name || "?").slice(0, 1);
   return name ? `<span class="chip ${esc(name)}" title="${esc(name)}">${initial}</span>` : "";
 }
-function eventRow(e) {
+function eventRow(e, past) {
   const time = e.allDay ? "All day" : e.start;
-  return `<div class="ev"><span class="dot" style="background:${esc(e.color)}"></span>
+  return `<div class="ev${past === true ? " past" : ""}"><span class="dot" style="background:${esc(e.color)}"></span>
     <span class="time">${esc(time)}</span>
     <span class="etitle">${esc(e.title)}<span class="cal">${esc(e.cal)}</span></span></div>`;
 }
@@ -52,7 +52,7 @@ const GRIP_SVG = `<svg width="12" height="18" viewBox="0 0 12 18" aria-hidden="t
 /* ============ views ============ */
 // Each screen's renderer is looked up when it's drawn, so the screen files can load after this one.
 const VIEWS = {
-  today: { label: "Today", title: () => "Today", render: () => renderToday(),
+  today: { label: "Today", title: () => greeting(), render: () => renderToday(),
     icon: "M12 8a4 4 0 1 1 0 8a4 4 0 1 1 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" },
   calendar: { label: "Calendar", title: () => "Calendar", render: () => renderCalendar(),
     icon: "M6 5h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3zM3 10h18M8 3v4M16 3v4" },
@@ -72,6 +72,7 @@ const CALM = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: red
 const calm = () => !!(CALM && CALM.matches);
 let ENTER = null; // the rows on screen just before an add: rows not among them slide in on the next draw
 let FLASH = null; // a checkbox to pop on the next draw (one that's redrawn the moment it's ticked)
+const COUNTS = {}; // counts as last drawn (data-count), so a change can be marked
 function expectNewRows() {
   ENTER = new Set([...document.querySelectorAll("#main [data-tid], #main [data-gid]")].map(el => el.dataset.tid || el.dataset.gid));
 }
@@ -109,6 +110,12 @@ function render() {
     });
     ENTER = null;
   }
+  // A count that changed since the last draw gives a small bump, so the change is seen.
+  document.querySelectorAll("#main [data-count]").forEach(el => {
+    const k = el.dataset.count, v = el.textContent;
+    if (k in COUNTS && COUNTS[k] !== v) el.classList.add("bump");
+    COUNTS[k] = v;
+  });
   if (FLASH) {
     const box = document.querySelector(`#main input[data-key="${CSS.escape(FLASH)}"]`);
     if (box) box.classList.add("pop");
@@ -205,3 +212,53 @@ document.addEventListener("keydown", e => {
   if (e.shiftKey && (document.activeElement === first || document.activeElement === panel)) { e.preventDefault(); last.focus(); }
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 });
+
+/* ============ pull down to refresh ============
+   At the top of a screen, pull down: an arrow follows, flips once it's far enough, and letting go
+   syncs (a spinner, then a tick). The app on the home screen has no pull-to-refresh of its own. */
+const PULL = { y0: null, dy: 0, busy: false };
+const PULL_AT = 70;
+function pullPaint() {
+  const el = document.getElementById("pull"), app = document.getElementById("app");
+  el.style.transform = `translate(-50%, ${Math.min(PULL.dy, 96) - 56}px)`;
+  el.style.opacity = PULL.dy > 6 || PULL.busy ? 1 : 0;
+  el.classList.toggle("ready", PULL.dy >= PULL_AT);
+  el.querySelector(".pull-arrow").style.transform = `rotate(${PULL.dy >= PULL_AT ? 180 : Math.min(PULL.dy * 1.6, 150)}deg)`;
+  app.style.transform = PULL.dy ? `translateY(${PULL.dy}px)` : "";
+}
+function pullReset() {
+  PULL.dy = 0;
+  document.documentElement.classList.remove("pulling");
+  pullPaint();
+  setTimeout(() => { const el = document.getElementById("pull"); el.classList.remove("spin", "done", "ready"); }, 350);
+}
+document.addEventListener("touchstart", e => {
+  PULL.y0 = null;
+  if (PULL.busy || window.scrollY > 0 || e.touches.length !== 1 || panelUp() || TD || DRAG || !cfg.signedIn) return;
+  if (e.target.closest && e.target.closest("input, textarea, select, .grip, nav")) return;
+  PULL.y0 = e.touches[0].clientY;
+}, { passive: true });
+document.addEventListener("touchmove", e => {
+  if (PULL.y0 == null) return;
+  const dy = e.touches[0].clientY - PULL.y0;
+  if (dy <= 0 || window.scrollY > 0) { if (PULL.dy) pullReset(); if (dy < -4) PULL.y0 = null; return; }
+  e.preventDefault(); // this pull is ours, not a scroll
+  document.documentElement.classList.add("pulling");
+  PULL.dy = Math.min(130, dy * 0.5);
+  pullPaint();
+}, { passive: false });
+async function pullRelease() {
+  if (PULL.y0 == null) return;
+  PULL.y0 = null;
+  document.documentElement.classList.remove("pulling");
+  if (PULL.dy < PULL_AT) { pullReset(); return; }
+  const el = document.getElementById("pull");
+  PULL.busy = true; PULL.dy = 64; el.classList.add("spin"); pullPaint();
+  await refresh(false, true);
+  el.classList.remove("spin"); el.classList.add("done");
+  await new Promise(r => setTimeout(r, calm() ? 0 : 650));
+  PULL.busy = false;
+  pullReset();
+}
+document.addEventListener("touchend", pullRelease);
+document.addEventListener("touchcancel", pullRelease);

@@ -9,5 +9,5 @@ function renderCalendar() {
   const t = todayStr();
   return Object.keys(byDay).sort().map(d =>
     `<div class="dayhead">${dayLabel(d)}${d === t ? '<span class="marker now">Today</span>' : ""}</div>
-     <div class="block">${byDay[d].map(eventRow).join("")}</div>`).join("");
+     <div class="block">${byDay[d].map(e => eventRow(e)).join("")}</div>`).join("");
 }
