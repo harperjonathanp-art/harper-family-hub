@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Harper Family Hub</title>
+<!-- The redesign's preview (see the build plan). The live Hub is ../index.html; both share sign-in and data. -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<meta name="description" content="What today asks of four people.">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f3f0e8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Every file carries the release number, so a new page never runs with an old file. -->
+<script src="js/theme.js?v=14"></script>
+<link rel="stylesheet" href="css/themes.css?v=14">
+<link rel="stylesheet" href="css/app.css?v=14">
+</head>
+<body>
+
+<div class="page" id="app">
+  <header>
+    <div class="header-row">
+      <span class="eyebrow" id="todayEyebrow">Harper Family Hub</span>
+      <button class="icon-btn" onclick="openSettings()" aria-label="Settings">⚙</button>
+    </div>
+    <h1 id="viewTitle">Today</h1>
+    <div class="sync-note" id="syncNote"></div>
+  </header>
+  <main id="main"></main>
+</div>
+
+<nav id="nav"></nav>
+
+<div class="overlay hidden" id="overlay">
+  <div class="page" id="overlayPage"></div>
+</div>
+
+<!-- In order: data and helpers first, each screen, Settings, then the start. -->
+<script src="js/data.js?v=14" defer></script>
+<script src="js/shell.js?v=14" defer></script>
+<script src="js/today.js?v=14" defer></script>
+<script src="js/calendar.js?v=14" defer></script>
+<script src="js/dinner.js?v=14" defer></script>
+<script src="js/tasks.js?v=14" defer></script>
+<script src="js/checkins.js?v=14" defer></script>
+<script src="js/settings.js?v=14" defer></script>
+<script src="js/boot.js?v=14" defer></script>
+</body>
+</html>
