@@ -279,7 +279,7 @@ function reminderRow(r, asSub) {
     const late = due.days < 0 && !r.ticked;
     parts.push(`<span class="${late ? "overdue" : ""}">${esc(due.text)}${r.time ? " · " + esc(r.time) : ""}${late ? " · overdue" : ""}</span>`);
   } else if (r.dueText) parts.push(`<span>${esc(r.dueText)}</span>`);
-  if (r.recurring) parts.push(`<span>↻ ${esc(r.repeat || "repeats")}</span>`);
+  if (r.recurring) parts.push(`<span>↻ ${esc(r.repeat ? tidyRepeat(r.repeat) : "Repeats")}</span>`);
   if (r.priority && r.priority !== "P4") parts.push(`<span>${esc(r.priority)}</span>`);
   if (r.notes) parts.push(`<span>${esc(r.notes.length > 120 ? r.notes.slice(0, 117) + "…" : r.notes)}</span>`);
   if (r.ticked) parts.push(`<span>Ticked here${r.tickedBy ? " by " + esc(r.tickedBy) : ""} — tick it in Todoist too</span>`);
@@ -921,4 +921,12 @@ function tdKey(e, id) {
   note(plan.hint);
   commitPlan(t, plan).then(refocus);
   refocus();
+}
+
+/* A Todoist repeat as typed there ("every thursday", "Every Saturday") in the Hub's own style:
+   "Every Thursday", with days and months capitalized, like the Hub's own repeats. */
+const NAMED = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun|january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\b/gi;
+function tidyRepeat(text) {
+  const s = String(text).trim().replace(NAMED, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

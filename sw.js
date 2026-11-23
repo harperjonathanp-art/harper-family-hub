@@ -6,7 +6,7 @@
 // what lets the whole app open offline. Live data (the Hub's Worker, fonts, photos) is never kept.
 // Raise CACHE when this file changes; that also clears the files of older releases.
 const CACHE = "family-hub-v15"; // v15: the Evergreen icon (icons/ have no ?v=, so a new icon needs a new cache)
-const RELEASE = "25"; // the ?v= in index.html, so the first install can open offline straight away
+const RELEASE = "26"; // the ?v= in index.html, so the first install can open offline straight away
 const SHELL = ["./index.html", "./manifest.json", "./icons/favicon.svg", "./icons/favicon-32.png",
   "./icons/apple-touch-icon.png", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-512-maskable.png"]
   .concat(["css/themes.css", "css/app.css"].concat(["theme", "data", "shell", "today", "calendar", "dinner", "recipes",
