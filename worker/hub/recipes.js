@@ -175,6 +175,9 @@ function opener(rich) {
 export function parseRecipe(blocks) {
   const out = { about: [], facts: "", ingredients: [], steps: [], notes: [], raw: [] };
   let section = null;
+  // Before any known heading, checkboxes (and the headings over them) may be ingredients on a page with no
+  // "Ingredients" heading ("## Fries" with its checkboxes, "## Gravy" with its, then "## Steps").
+  const loose = [], looseAbout = [];
   for (const b of blocks || []) {
     const rich = richOf(b), text = textOf(rich);
     if (/^heading_[123]$/.test(b.type)) {
@@ -183,7 +186,7 @@ export function parseRecipe(blocks) {
       out.raw.push({ h: name });
       if (hit) { section = hit[0]; continue; }
       if (section) out[section].push({ h: name }); // a sub-heading ("For the sauce") inside a section
-      else out.about.push(name);
+      else { out.about.push(name); looseAbout.push(true); loose.push({ h: name }); }
       continue;
     }
     if (!text) continue;
@@ -192,7 +195,8 @@ export function parseRecipe(blocks) {
     if (b.type !== "paragraph" && !listed && b.type !== "quote" && b.type !== "callout") continue;
     if (!section) {
       if (rich[0] && rich[0].annotations && rich[0].annotations.bold && /:\s*$/.test(rich[0].plain_text || "")) out.facts = text;
-      else out.about.push(text);
+      else if (b.type === "to_do") { out.about.push(text); looseAbout.push(true); loose.push({ t: text }); }
+      else { out.about.push(text); looseAbout.push(false); }
     } else if (section === "steps") {
       if (b.type === "paragraph" && allBold(rich)) out.steps.push({ h: text.replace(/[:：]\s*$/, "") });
       else out.steps.push(opener(rich));
@@ -201,11 +205,20 @@ export function parseRecipe(blocks) {
       else out[section].push({ t: text });
     }
   }
+  // Steps but no Ingredients heading: those early checkboxes were the ingredients, grouped by the headings above them.
+  if (!out.ingredients.some(x => x.t) && out.steps.some(x => x.t) && loose.some(x => x.t)) {
+    out.ingredients = loose.filter((x, i) => x.t || (loose[i + 1] && loose[i + 1].t));
+    out.about = out.about.filter((_, i) => !looseAbout[i]);
+  }
   const followed = out.ingredients.some(x => x.t) || out.steps.some(x => x.t);
   if (followed) delete out.raw;
   else out.raw = out.raw.filter(x => x.h || x.t).map(x => (x.h ? { h: x.h } : x.list ? { t: x.t, list: x.list } : { t: x.t }));
   return out;
 }
+
+/* A page as kept: its edit time and the version of the reading above, so a better reading reads every page again. */
+const PARSE_VERSION = "2"; // 2: checkbox ingredients under their own headings, with no "Ingredients" heading
+const stamp = edited => String(edited || "") + "#" + PARSE_VERSION;
 
 // What isn't worth searching for in an ingredient line.
 const NOT_WORDS = new Set(("cup cups tbsp tsp teaspoon teaspoons tablespoon tablespoons oz ounce ounces lb lbs pound pounds can cans " +
@@ -230,7 +243,7 @@ async function readPage(env, info) {
   const body = parseRecipe(blocks);
   await env.DB.prepare("INSERT INTO recipe_bodies (id, edited, body, words) VALUES (?, ?, ?, ?) " +
     "ON CONFLICT(id) DO UPDATE SET edited = excluded.edited, body = excluded.body, words = excluded.words")
-    .bind(info.id, info.edited, JSON.stringify(body), ingredientWords(body)).run();
+    .bind(info.id, stamp(info.edited), JSON.stringify(body), ingredientWords(body)).run();
   return { body, requests };
 }
 
@@ -261,7 +274,7 @@ export async function syncRecipes(env, now) {
   const have = {};
   (await env.DB.prepare("SELECT id, edited FROM recipe_bodies").all()).results.forEach(r => { have[r.id] = r.edited; });
   // The ones made most lately first: the likeliest to be opened.
-  const stale = list.filter(r => have[r.id] !== r.edited)
+  const stale = list.filter(r => have[r.id] !== stamp(r.edited))
     .sort((a, b) => String(b.lastMade).localeCompare(String(a.lastMade)));
   let read = 0;
   const errors = [];
@@ -336,7 +349,7 @@ export async function recipeOne(env, origin, now, id) {
   if (!info) return { ok: false, error: "not_found" };
   const row = await env.DB.prepare("SELECT edited, body FROM recipe_bodies WHERE id = ?").bind(id).first();
   let body = row ? parse(row.body, null) : null;
-  if (!body || row.edited !== info.edited) {
+  if (!body || row.edited !== stamp(info.edited)) {
     try { body = (await readPage(env, info)).body; }
     catch (err) { if (!body) return { ok: false, error: "notion", message: String(err && err.message || err).slice(0, 200) }; }
   }
@@ -396,7 +409,7 @@ async function patchRecipe(env, list, info, props) {
   if (i >= 0) list[i] = fresh;
   await putStore(env, "list", JSON.stringify(list));
   if (fresh.edited && fresh.edited !== info.edited) {
-    await env.DB.prepare("UPDATE recipe_bodies SET edited = ? WHERE id = ? AND edited = ?").bind(fresh.edited, info.id, info.edited).run();
+    await env.DB.prepare("UPDATE recipe_bodies SET edited = ? WHERE id = ? AND edited = ?").bind(stamp(fresh.edited), info.id, stamp(info.edited)).run();
   }
   return fresh;
 }
